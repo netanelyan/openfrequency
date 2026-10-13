@@ -101,7 +101,7 @@ model's thinking. Those rows are marked `estimated`.
 | Pack | Per post | Calls |
 |---|---|---|
 | Demo (fictional) | $0.044 to $0.048 | outline, slides |
-| The three real packs (private) | $0.059 to $0.069 | outline, slides |
+| The three real packs (private) | $0.057 to $0.069 | outline, slides |
 
 Real packs cost more than the demo because their documents are longer: release
 notes, sports articles and benefit pages against the demo's short invented pages.
