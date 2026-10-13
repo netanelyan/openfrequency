@@ -9,6 +9,7 @@ import { relative, postScore } from '../formats/rotation.js';
 import { engineMode } from '../engine.js';
 import { publisherFor } from '../publish/index.js';
 import { zernioConfigured } from '../publish/zernio.js';
+import { resolveFormat } from '../trends/index.js';
 
 // What each page shows, as plain queries. Pages never touch the database
 // themselves, so what a page can see is listed here.
@@ -101,12 +102,13 @@ export function results(ctx, t = now()) {
         const avg = mine.length ? mine.reduce((s, x) => s + x.rel, 0) / mine.length : null;
         const last = mine.slice(-3);
         const atRisk = f.status === 'active' && last.length >= 2 && last.slice(-2).every((x) => x.rel < 0.7);
-        const def = pack.formats.formats.find((x) => x.id === f.format_key);
+        const def = resolveFormat(ctx.db, pack, f.format_key);
         return { ...f, name: def?.name || f.format_key, avg, last, atRisk, n: mine.length };
       }),
     };
   });
-  return { posts, scored, winners, losers, formats, medians, demo };
+  const trends = ctx.db.all('SELECT * FROM trend_formats ORDER BY found_at DESC LIMIT 30').map((x) => ({ ...x, card: j(x.card_json, null) }));
+  return { posts, scored, winners, losers, formats, medians, demo, trends };
 }
 
 export function sourcesFor(ctx, accountId) {

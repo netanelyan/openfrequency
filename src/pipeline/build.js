@@ -8,6 +8,7 @@ import { askJson } from '../llm/index.js';
 import { NoRecording } from '../llm/recorded.js';
 import { refreshSource } from '../sources/index.js';
 import { ensureFormats, pickFormat } from '../formats/rotation.js';
+import { resolveFormat } from '../trends/index.js';
 import { tellsIn } from '../voice/tells.js';
 import { BLOCK_AT, REWRITE_AT, reviewTexts } from '../voice/review.js';
 import { checkRules } from '../rules/check.js';
@@ -109,11 +110,12 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
 
   ensureFormats(db, pack);
   const fkey = formatKey || pickFormat(db, pack.id) || pack.formats.formats[0].id;
-  let format = pack.formats.formats.find((f) => f.id === fkey) || pack.formats.formats[0];
+  const resolve = (k) => resolveFormat(db, pack, k);
+  let format = resolve(fkey) || pack.formats.formats[0];
   // When no fresh document fits the format the rotation picked, the others are
   // tried in turn rather than skipping the slot; a format asked for by name is not.
   const active = new Set(db.all("SELECT format_key FROM formats WHERE account_id = ? AND status = 'active'", pack.id).map((r) => r.format_key));
-  const formatsToTry = formatKey ? [format] : [format, ...pack.formats.formats.filter((f) => f.id !== format.id && active.has(f.id))];
+  const formatsToTry = formatKey ? [format] : [format, ...[...active].filter((k) => k !== format.id).map(resolve).filter(Boolean)];
   const postId = newId('p');
   const at = nowIso();
   db.insert('posts', { id: postId, account_id: pack.id, format_id: format.id, status: 'drafting', sample: sample ? 1 : 0, slot_at: slotAt, created_at: at, updated_at: at });
@@ -149,7 +151,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
         try {
           const res = await askJson(pctx, {
             task: 'outline', role: 'draft', system: p.system, user: outlineUser([ref], { avoid: recent }), schema: p.schema, effort: 'medium', maxTokens: 12000, expectOut: 3000,
-            meta: { recordingsDir: pack.recordingsDir, docKey: d.key, format: f.id, attempt: 0 },
+            meta: { recordingsDir: pack.recordingsDir, docKey: d.key, format: f.base || f.id, attempt: 0 },
           });
           if (!res.data.usable) {
             step(db, postId, 'outline', 'skipped', { format: f.id, document: d.id, url: d.url, why: res.data.why }, res.usd);
@@ -200,7 +202,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
       try {
         res = await askJson(pctx, {
           task: 'slides', role: 'draft', system: sp.system, user: slidesUser({ outline: { ...outline, items }, facts: verifiedFacts, edits, problems: lastProblems.map(say) }), schema: sp.schema,
-          effort: 'medium', maxTokens: 12000, expectOut: 2500, meta: { recordingsDir: pack.recordingsDir, docKey: doc.key, format: format.id, attempt },
+          effort: 'medium', maxTokens: 12000, expectOut: 2500, meta: { recordingsDir: pack.recordingsDir, docKey: doc.key, format: format.base || format.id, attempt },
         });
       } catch (e) {
         if (e instanceof NoRecording && attempt > 0) break;

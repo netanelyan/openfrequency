@@ -9,6 +9,7 @@ import { publishPost } from '../publish/index.js';
 import { REWRITE_AT } from '../voice/review.js';
 import { collectMetrics, learn } from '../metrics/collect.js';
 import { canRun, liftBudgetPauses, pauseAccount } from './rails.js';
+import { runTrends, youtubeConfigured } from '../trends/index.js';
 
 // The engine running on its own: one tick a minute.
 //
@@ -101,6 +102,21 @@ export async function tick(ctx, { t = now() } = {}) {
     setSetting(db, 'metrics:last', new Date(t).toISOString());
     report.metrics = await collectMetrics(ctx, { t });
     report.formats = learn(ctx, { t });
+  }
+
+  // ---- 5b. formats that work now, once a week per account, when YouTube is connected
+  if (youtubeConfigured()) {
+    for (const pack of ctx.packs) {
+      const key = `trends:${pack.id}`;
+      const last = getSetting(db, key);
+      if (last && t - Date.parse(last) < 7 * 86_400_000) continue;
+      setSetting(db, key, new Date(t).toISOString());
+      try {
+        report.trends = { ...(report.trends || {}), [pack.id]: await runTrends(ctx, pack, { t }) };
+      } catch (e) {
+        report.errors.push({ account: pack.id, step: 'trends', error: e.message });
+      }
+    }
   }
 
   // ---- 6. yesterday's summary
