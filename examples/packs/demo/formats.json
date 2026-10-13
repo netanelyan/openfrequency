@@ -1,0 +1,49 @@
+{
+  "formats": [
+    {
+      "id": "care-guide",
+      "name": "מדריך טיפול",
+      "about": "How to keep one plant alive and growing, a step per slide, from the source's care instructions.",
+      "weight": 3,
+      "items": [3, 5],
+      "hooks": ["{plant} במרפסת: {n} דברים שקובעים אם הוא ישרוד", "ככה {plant} נשאר ירוק כל העונה", "{n} דברים ש{plant} צריך מכם"],
+      "closers": [
+        { "title": "שמרו את זה לעונה הבאה", "body": "ותשלחו למי שגם מגדל משהו על אדן החלון" },
+        { "title": "שמרו לפני שקונים שתיל", "body": "זה הרבה יותר קל כשיודעים מה הוא צריך" }
+      ]
+    },
+    {
+      "id": "mistakes",
+      "name": "טעויות נפוצות",
+      "about": "The common mistakes that kill a plant, each with what to do instead, all from the source.",
+      "weight": 2,
+      "items": [3, 5],
+      "hooks": ["{n} טעויות שהורגות צמחים בעציץ", "הצמח לא מת מצמא. הוא מת מזה", "לפני ההשקיה הבאה, תבדקו את זה"],
+      "closers": [
+        { "title": "איזו מהן הכי מוכרת לכם?", "body": "שמרו את הרשימה לפני ההשקיה הבאה" }
+      ]
+    },
+    {
+      "id": "quick-facts",
+      "name": "עובדות קצרות",
+      "about": "A few short, surprising and useful facts about one plant or one season, one per slide.",
+      "weight": 2,
+      "items": [3, 5],
+      "hooks": ["{n} דברים שלא ידעתם על {plant}", "מה {plant} עושה כשאף אחד לא מסתכל", "{season} במרפסת: מה משתנה"],
+      "closers": [
+        { "title": "עוד צמח, עוד רשימה", "body": "שמרו ותחזרו כשהעציץ הבא מגיע" }
+      ]
+    }
+  ],
+  "caption": {
+    "questions": ["מה גדל אצלכם במרפסת?", "איזה צמח הכי קשה לכם לשמור בחיים?", "לאיזה צמח תרצו רשימה כזו?"]
+  },
+  "hashtags": {
+    "broad": ["#גינון", "#צמחים", "#צמחיבית"],
+    "niche": ["#גינהבמרפסת", "#צמחיתבלין", "#עציצים", "#גינהעירונית"]
+  },
+  "trends": {
+    "queries": { "he": ["טיפים לצמחי בית", "גינה במרפסת"], "en": ["houseplant care tips", "balcony herb garden"] },
+    "minViews": { "he": 1000, "en": 20000 }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "template": "editorial",
+  "variant": "a",
+  "colors": {
+    "bg": "#EEF1E4",
+    "surface": "#FFFFFF",
+    "ink": "#1F2A1B",
+    "muted": "#4C5A46",
+    "accent": "#B4512A",
+    "accent2": "#6E8F3D",
+    "onAccent": "#FFFFFF"
+  },
+  "fonts": { "display": "Suez One", "text": "Varela Round" },
+  "options": { "radius": 30, "coverPhoto": false }
+}

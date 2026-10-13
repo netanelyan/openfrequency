@@ -1,0 +1,17 @@
+{
+  "id": "your-pack-id",
+  "displayName": "שם החשבון",
+  "handle": "your.handle",
+  "language": "he",
+  "description": "One or two sentences: what this account is about and for whom.",
+  "topics": ["נושא ראשון", "נושא שני"],
+  "audience": "who reads it, in a sentence",
+  "platforms": ["tiktok", "instagram"],
+  "publisher": "dry",
+  "zernio": { "profileId": "", "accounts": { "tiktok": "", "instagram": "" }, "tiktokPrivacy": "SELF_ONLY" },
+  "schedule": { "postsPerDay": 1, "windows": [[12, 14], [19, 22]], "slots": ["19:30"], "slotsByDay": { "5": ["12:30"], "6": ["21:00"] } },
+  "autonomy": { "mode": "approve" },
+  "budget": { "monthlyUsd": 15 },
+  "compliance": [],
+  "imagery": { "providers": ["pexels", "unsplash", "commons"] }
+}

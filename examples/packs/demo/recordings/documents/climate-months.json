@@ -1,0 +1,7 @@
+{
+  "source": "climate-api",
+  "url": "https://api.example.net/climate/monthly",
+  "title": "ממוצעים חודשיים בעיר לדוגמה",
+  "fetchedAt": "2026-10-12T09:00:00Z",
+  "text": "month: 1 | name: ינואר | avg_high_c: 18 | avg_low_c: 9 | sun_hours: 6\nmonth: 4 | name: אפריל | avg_high_c: 24 | avg_low_c: 13 | sun_hours: 9\nmonth: 7 | name: יולי | avg_high_c: 31 | avg_low_c: 23 | sun_hours: 12\nmonth: 10 | name: אוקטובר | avg_high_c: 28 | avg_low_c: 18 | sun_hours: 9\nmonth: 12 | name: דצמבר | avg_high_c: 19 | avg_low_c: 11 | sun_hours: 6"
+}

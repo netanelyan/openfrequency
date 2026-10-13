@@ -1,0 +1,7 @@
+{
+  "template": "poster",
+  "variant": "a",
+  "colors": { "bg": "#F7F4EE", "surface": "#FFFFFF", "ink": "#1A1A1A", "muted": "#555555", "accent": "#1F5FBF", "accent2": "#E0A100", "onAccent": "#FFFFFF" },
+  "fonts": { "display": "Secular One", "text": "Assistant" },
+  "options": { "radius": 24, "coverPhoto": false }
+}

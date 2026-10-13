@@ -1,0 +1,6 @@
+{
+  "maxQuoteWords": 40,
+  "bannedPhrases": [],
+  "patterns": [],
+  "imageQueryBlock": ["logo"]
+}

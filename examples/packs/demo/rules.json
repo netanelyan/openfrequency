@@ -1,0 +1,8 @@
+{
+  "maxQuoteWords": 40,
+  "bannedPhrases": ["אגודל ירוק", "חובה לכל בית"],
+  "patterns": [
+    { "id": "no-pesticide-brands", "regex": "(?:קנו|תקנו)\\s+\\S*(?:ריסוס|קוטל)", "message": "the account never tells people to buy a pesticide" }
+  ],
+  "imageQueryBlock": ["logo", "brand", "store"]
+}

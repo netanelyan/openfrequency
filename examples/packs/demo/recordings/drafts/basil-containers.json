@@ -1,0 +1,125 @@
+{
+  "document": "basil-containers",
+  "format": "care-guide",
+  "outline": {
+    "usable": true,
+    "why": "the page gives care rules with numbers for every step",
+    "topic": "בזיליקום בעציץ",
+    "imageQuery": "basil plant pot balcony",
+    "facts": [
+      {
+        "id": "f1",
+        "claim": "בזיליקום צריך לפחות 6 שעות שמש ישירה ביום, ועם פחות אור העלים קטנים וחיוורים",
+        "quote": "Basil needs at least 6 hours of direct sunlight a day. With less light, the stems stretch and the leaves become small and pale.",
+        "doc": "D1"
+      },
+      {
+        "id": "f2",
+        "claim": "כשהלילות יורדים מתחת ל-10 מעלות הצמיחה מאטה, ומתחת ל-5 העלים יכולים להשחיר",
+        "quote": "Growth slows when night temperatures drop below 10°C, and leaves can blacken below 5°C.",
+        "doc": "D1"
+      },
+      {
+        "id": "f3",
+        "claim": "משקים כשה-2 סנטימטרים העליונים של האדמה יבשים",
+        "quote": "Water when the top 2 cm of soil feel dry to the touch.",
+        "doc": "D1"
+      },
+      {
+        "id": "f4",
+        "claim": "צובטים את קצה הגבעול כשיש לצמח 3 זוגות עלים, וכך הוא מסתעף",
+        "quote": "Pinch off the tip of each stem above a pair of leaves once the plant has 3 pairs of true leaves. This makes the plant branch and grow bushier.",
+        "doc": "D1"
+      },
+      {
+        "id": "f5",
+        "claim": "מורידים ניצני פרחים, כי אחרי הפריחה העלים מתמעטים ונעשים מרים",
+        "quote": "Remove flower buds as soon as they appear. Once basil flowers, the leaves become fewer and more bitter.",
+        "doc": "D1"
+      },
+      {
+        "id": "f6",
+        "claim": "עציץ ברוחב 20 ס״מ לפחות עם חורי ניקוז",
+        "quote": "Use a pot at least 20 cm wide with drainage holes in the bottom.",
+        "doc": "D1"
+      }
+    ],
+    "items": [
+      {
+        "point": "שמש",
+        "facts": [
+          "f1"
+        ]
+      },
+      {
+        "point": "השקיה ועציץ",
+        "facts": [
+          "f3",
+          "f6"
+        ]
+      },
+      {
+        "point": "צביטה",
+        "facts": [
+          "f4"
+        ]
+      },
+      {
+        "point": "פרחים",
+        "facts": [
+          "f5"
+        ]
+      },
+      {
+        "point": "קור",
+        "facts": [
+          "f2"
+        ]
+      }
+    ]
+  },
+  "slides": {
+    "hook": "בזיליקום במרפסת: 5 דברים שקובעים אם הוא ישרוד",
+    "sub": "ההבדל בין עציץ עייף לשיח מלא",
+    "slides": [
+      {
+        "title": "שמש, והרבה ממנה",
+        "body": "בזיליקום צריך לפחות 6 שעות שמש ישירה ביום. עם פחות אור הגבעולים מתארכים והעלים נהיים קטנים וחיוורים.",
+        "facts": [
+          "f1"
+        ]
+      },
+      {
+        "title": "משקים לפי האצבע, לא לפי השעון",
+        "body": "כשה-2 סנטימטרים העליונים של האדמה יבשים למגע, משקים. והעציץ ברוחב 20 ס״מ לפחות, עם חורים בתחתית.",
+        "facts": [
+          "f3",
+          "f6"
+        ]
+      },
+      {
+        "title": "צובטים את הקצה",
+        "body": "כשיש לצמח 3 זוגות עלים, צובטים את קצה כל גבעול מעל זוג עלים. ככה הוא מתפצל ונהיה שיח מלא.",
+        "facts": [
+          "f4"
+        ]
+      },
+      {
+        "title": "פרחים? מורידים מיד",
+        "body": "ברגע שבזיליקום פורח, העלים מתמעטים ונעשים מרים יותר. אז מורידים כל ניצן ברגע שהוא מופיע.",
+        "facts": [
+          "f5"
+        ]
+      },
+      {
+        "title": "קר לו מתחת ל-10 מעלות",
+        "body": "כשהלילות יורדים מתחת ל-10 מעלות הצמיחה מאטה, ומתחת ל-5 מעלות העלים עלולים להשחיר.",
+        "facts": [
+          "f2"
+        ]
+      }
+    ],
+    "caption": "בזיליקום הוא צמח של קיץ, וכל אחד מהדברים האלה משפיע על כמה עלים תקטפו.",
+    "question": "באיזה מהם אתם הכי מתקשים?"
+  }
+}

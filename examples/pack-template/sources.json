@@ -1,0 +1,5 @@
+{
+  "sources": [
+    { "id": "first-source", "type": "rss", "url": "https://www.example.org/feed.xml", "name": "Source name", "lang": "he", "why": "Why this publisher is trusted for this niche, in a sentence.", "approvedAt": "2026-01-01" }
+  ]
+}

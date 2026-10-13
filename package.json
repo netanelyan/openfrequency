@@ -1,0 +1,30 @@
+{
+  "name": "open-frequency",
+  "version": "0.1.0",
+  "description": "One engine that runs several niche Hebrew content accounts: sourced facts, rendered slideshows, an approval website, publishing through Zernio.",
+  "type": "module",
+  "private": true,
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "test": "node --test --test-concurrency=1 \"test/*.test.js\" && node scripts/check-public.js",
+    "check:public": "node scripts/check-public.js",
+    "dry": "node scripts/dry.js",
+    "web": "node scripts/web.js",
+    "start": "node scripts/web.js --runner",
+    "demo": "node scripts/demo.js",
+    "init-private": "node scripts/init-private.js",
+    "record": "node scripts/record.js",
+    "screenshots": "node scripts/screenshots.js",
+    "user:add": "node scripts/user-add.js",
+    "backup": "node scripts/backup.js",
+    "prepare": "node scripts/hooks.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.120.0",
+    "fast-xml-parser": "^5.2.0",
+    "playwright": "^1.56.0"
+  }
+}

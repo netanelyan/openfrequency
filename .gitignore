@@ -1,0 +1,42 @@
+# The private folder: real packs, the database, rendered media, recordings, keys.
+# Never tracked. `npm run check:public` fails if anything under it ever is.
+/private/
+
+# The throwaway home `npm run demo` builds for the fictional demo pack.
+/.demo/
+
+# Keys, wherever they are.
+.env
+.env.*
+!.env.example
+
+# Packs live in $OF_HOME/packs. The only tracked pack is examples/packs/demo.
+/packs/
+
+# Databases and state.
+/data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Rendered and downloaded media. docs/screenshots/ is the one exception.
+/out/
+*.jpg
+*.jpeg
+*.png
+*.webp
+*.gif
+*.mp4
+*.mov
+*.webm
+!docs/screenshots/*.jpg
+!docs/screenshots/*.png
+!src/web/static/*.png
+
+node_modules/
+npm-debug.log*
+.DS_Store
+Thumbs.db

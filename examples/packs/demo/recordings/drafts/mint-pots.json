@@ -1,0 +1,106 @@
+{
+  "document": "mint-pots",
+  "format": "care-guide",
+  "outline": {
+    "usable": true,
+    "why": "care rules for one plant, with numbers",
+    "topic": "נענע בעציץ",
+    "imageQuery": "mint plant pot",
+    "facts": [
+      {
+        "id": "f1",
+        "claim": "נענע מתפשטת מתחת לאדמה ויכולה להשתלט על אדנית משותפת בעונה אחת",
+        "quote": "Mint spreads quickly through underground runners and can take over a shared planter within one season.",
+        "doc": "D1"
+      },
+      {
+        "id": "f2",
+        "claim": "מגדלים נענע בעציץ משלה, ברוחב 25 ס״מ לפחות",
+        "quote": "Grow mint in its own pot, at least 25 cm wide, rather than with other herbs.",
+        "doc": "D1"
+      },
+      {
+        "id": "f3",
+        "claim": "נענע אוהבת אדמה לחה ומסתדרת בצל חלקי, ו-4 שעות שמש ביום מספיקות",
+        "quote": "Mint prefers moist soil and tolerates partial shade; 4 hours of sun a day is enough.",
+        "doc": "D1"
+      },
+      {
+        "id": "f4",
+        "claim": "קוטפים הרבה וחותכים את הגבעולים בשליש, וזה שומר על הצמח קומפקטי",
+        "quote": "Harvest regularly by cutting stems back by a third; frequent cutting keeps the plant compact.",
+        "doc": "D1"
+      },
+      {
+        "id": "f5",
+        "claim": "בקור נענע נכנסת לתרדמה וחוזרת מהשורשים באביב",
+        "quote": "Mint goes dormant in cold weather in many climates and regrows from the roots in spring.",
+        "doc": "D1"
+      }
+    ],
+    "items": [
+      {
+        "point": "עציץ משלה",
+        "facts": [
+          "f1",
+          "f2"
+        ]
+      },
+      {
+        "point": "אור ומים",
+        "facts": [
+          "f3"
+        ]
+      },
+      {
+        "point": "קטיף",
+        "facts": [
+          "f4"
+        ]
+      },
+      {
+        "point": "חורף",
+        "facts": [
+          "f5"
+        ]
+      }
+    ]
+  },
+  "slides": {
+    "hook": "נענע בעציץ: 4 דברים שהיא צריכה מכם",
+    "sub": "צמח קל, שאוהב להשתלט",
+    "slides": [
+      {
+        "title": "עציץ משלה",
+        "body": "נענע מתפשטת מתחת לאדמה ויכולה להשתלט על אדנית משותפת בעונה אחת. לכן היא מקבלת עציץ משלה, ברוחב 25 ס״מ לפחות.",
+        "facts": [
+          "f1",
+          "f2"
+        ]
+      },
+      {
+        "title": "חצי צל זה בסדר",
+        "body": "היא אוהבת אדמה לחה ומסתדרת בצל חלקי. 4 שעות שמש ביום מספיקות לה.",
+        "facts": [
+          "f3"
+        ]
+      },
+      {
+        "title": "קוטפים בלי לחשוש",
+        "body": "חותכים את הגבעולים בשליש, ועושים את זה הרבה. ככה הצמח נשאר קומפקטי ולא מתפזר.",
+        "facts": [
+          "f4"
+        ]
+      },
+      {
+        "title": "בחורף היא לא מתה",
+        "body": "בקור הנענע נכנסת לתרדמה, ובאביב היא חוזרת מהשורשים. אל תזרקו את העציץ.",
+        "facts": [
+          "f5"
+        ]
+      }
+    ],
+    "caption": "מכל הכללים, העציץ הנפרד הוא זה שחוסך הכי הרבה בלגן.",
+    "question": "מה גדל אצלכם במרפסת?"
+  }
+}

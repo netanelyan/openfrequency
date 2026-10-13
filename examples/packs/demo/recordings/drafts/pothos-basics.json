@@ -1,0 +1,117 @@
+{
+  "document": "pothos-basics",
+  "format": "quick-facts",
+  "outline": {
+    "usable": true,
+    "why": "five specific facts, two of them with numbers",
+    "topic": "פותוס",
+    "imageQuery": "pothos houseplant shelf",
+    "facts": [
+      {
+        "id": "f1",
+        "claim": "פותוס סובל אור חלש, אבל עלים מגוונים שומרים על הדוגמה הכי טוב באור בהיר ועקיף",
+        "quote": "It tolerates low light, but variegated leaves keep their yellow or white patterns best in bright, indirect light.",
+        "doc": "D1"
+      },
+      {
+        "id": "f2",
+        "claim": "נותנים לחצי העליון של האדמה להתייבש, ועלים צונחים הם בדרך כלל סימן שהוא צריך מים",
+        "quote": "Allow the top half of the soil to dry out between waterings. Drooping leaves are usually a sign the plant needs water.",
+        "doc": "D1"
+      },
+      {
+        "id": "f3",
+        "claim": "ייחור בכוס מים מוציא שורשים בדרך כלל בתוך 2 עד 4 שבועות",
+        "quote": "cut a stem just below a node, and roots usually appear within 2 to 4 weeks.",
+        "doc": "D1"
+      },
+      {
+        "id": "f4",
+        "claim": "העלים רעילים לחתולים ולכלבים אם הם לועסים אותם",
+        "quote": "Its leaves are toxic to cats and dogs if chewed, so keep it out of reach of pets.",
+        "doc": "D1"
+      },
+      {
+        "id": "f5",
+        "claim": "בבית גבעולים יכולים לגדול ליותר מ-2 מטרים, וגיזום עוזר לצמח להיות מלא יותר",
+        "quote": "Trailing stems can grow more than 2 meters long indoors; trimming them encourages fuller growth near the pot.",
+        "doc": "D1"
+      }
+    ],
+    "items": [
+      {
+        "point": "אור",
+        "facts": [
+          "f1"
+        ]
+      },
+      {
+        "point": "מתי משקים",
+        "facts": [
+          "f2"
+        ]
+      },
+      {
+        "point": "ייחור במים",
+        "facts": [
+          "f3"
+        ]
+      },
+      {
+        "point": "חיות מחמד",
+        "facts": [
+          "f4"
+        ]
+      },
+      {
+        "point": "אורך",
+        "facts": [
+          "f5"
+        ]
+      }
+    ]
+  },
+  "slides": {
+    "hook": "5 דברים שלא ידעתם על הפותוס",
+    "sub": "צמח שסולח על הרבה, אבל לא על הכל",
+    "slides": [
+      {
+        "title": "אור חלש? הוא יסתדר",
+        "body": "פותוס סובל אור חלש. אבל אם יש לו עלים מגוונים, הצהוב או הלבן נשמרים הכי טוב באור בהיר ועקיף.",
+        "facts": [
+          "f1"
+        ]
+      },
+      {
+        "title": "הוא אומר לכם מתי להשקות",
+        "body": "נותנים לחצי העליון של האדמה להתייבש בין השקיה להשקיה. עלים צונחים הם בדרך כלל הסימן שהגיע הזמן.",
+        "facts": [
+          "f2"
+        ]
+      },
+      {
+        "title": "צמח חדש מכוס מים",
+        "body": "חותכים גבעול ממש מתחת לפרק ושמים בכוס מים. בדרך כלל אחרי 2 עד 4 שבועות מופיעים שורשים.",
+        "facts": [
+          "f3"
+        ]
+      },
+      {
+        "title": "רחוק מחתולים וכלבים",
+        "body": "העלים שלו רעילים לחתולים ולכלבים אם הם לועסים אותם. אז מדף גבוה, לא רצפה.",
+        "facts": [
+          "f4"
+        ]
+      },
+      {
+        "title": "יותר מ-2 מטרים של גבעול",
+        "body": "בתוך הבית גבעולים יכולים לגדול ליותר מ-2 מטרים. גיזום עוזר לצמח להיות מלא יותר ליד העציץ.",
+        "facts": [
+          "f5"
+        ]
+      }
+    ],
+    "caption": "פותוס מתאים כמעט לכל פינה בדירה, רק לא לפינה של החתול.",
+    "question": "לאיזה צמח תרצו רשימה כזו?"
+  }
+}
