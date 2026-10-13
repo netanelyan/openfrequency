@@ -5,7 +5,7 @@
 // platform, the caption, every fact with its quote and source (sources.md), and
 // the full trace with its cost (post.json). Publishes nothing.
 //
-// It uses its own database, $OF_HOME/data/dry.db, recreated on every run, so a
+// It uses its own database, $OF_HOME/data/dry-<pack>.db, recreated on every run, so a
 // dry run never touches the queue the website shows. The fictional demo pack
 // works in a fresh clone: with no private folder, the run uses ./.demo instead.
 
@@ -53,14 +53,15 @@ const pack = loadPack(dir);
 // The other packs are loaded too, so the brand checks (no cross-promotion,
 // distinct themes) see the whole set.
 const others = loadAll().filter((p) => p.id !== pack.id);
-const dbFile = path.join(dataDir(), 'dry.db');
+// One database and one media folder per pack, so two dry runs can go at once.
+const dbFile = path.join(dataDir(), `dry-${pack.id}.db`);
 for (const f of [dbFile, `${dbFile}-wal`, `${dbFile}-shm`]) rmSync(f, { force: true });
 const db = new Db(dbFile);
 const runOut = path.join(outDir(), 'dry', pack.id);
 rmSync(runOut, { recursive: true, force: true });
 
 const ctx = makeContext({ db, packs: [pack, ...others], log: () => {} });
-ctx.mediaDir = path.join(dataDir(), 'dry-media');
+ctx.mediaDir = path.join(dataDir(), 'dry-media', pack.id);
 rmSync(ctx.mediaDir, { recursive: true, force: true });
 console.log(`dry run: ${pack.meta.displayName} (${pack.id}), ${count} posts, mode ${ctx.mode}${ctx.mode === 'recorded' ? ' (recorded sources and drafts, no network)' : ''}`);
 

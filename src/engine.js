@@ -38,7 +38,13 @@ export function makeContext({ db = null, packs = null, mode = null, log = (m) =>
       return recorded.get(pack.id);
     },
     pack(id) {
-      return all.find((p) => p.id === id) || null;
+      return this.packs.find((p) => p.id === id) || null;
+    },
+    /** Read the packs again (a new account from onboarding) and sync the database. */
+    reloadPacks() {
+      this.packs = loadAll();
+      syncAccounts(this.db, this.packs);
+      return this.packs;
     },
   };
 }

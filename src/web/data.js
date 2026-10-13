@@ -33,7 +33,7 @@ export function accountRows(ctx) {
 export function today(ctx, t = now()) {
   const day = israelDate(t);
   const from = israelInstant(day, '00:00').toISOString();
-  const groups = accountRows(ctx).map((row) => {
+  const groups = accountRows(ctx).filter((row) => row.acc?.status !== 'onboarding').map((row) => {
     const id = row.pack.id;
     const ids = (sql, ...a) => ctx.db.all(sql, ...a).map((r) => loadPost(ctx.db, r.id));
     return {
