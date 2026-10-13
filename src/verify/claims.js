@@ -39,17 +39,34 @@ const WORDS = {
   thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19, twenty: 20, thirty: 30,
   forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90, hundred: 100, thousand: 1000, million: 1e6, billion: 1e9,
 };
-const WORD_RE = new RegExp(`\\b(${Object.keys(WORDS).join('|')})\\b`, 'gi');
+const ORDINALS = { third: 3, fourth: 4, fifth: 5, sixth: 6, seventh: 7, eighth: 8, ninth: 9, tenth: 10, eleventh: 11, twelfth: 12, thirteenth: 13, fourteenth: 14, fifteenth: 15, sixteenth: 16, seventeenth: 17, eighteenth: 18, nineteenth: 19, twentieth: 20 };
+const WORD_RE = new RegExp(`\\b(${[...Object.keys(WORDS), ...Object.keys(ORDINALS)].join('|')})\\b`, 'gi');
 
-/** The numbers a text states, normalised: "1,000" and "1000" are the same number. */
-export function numbersIn(text, { words = false } = {}) {
+// Hebrew counting words, three and up. One and two (אחד, שני, שתי) are left out on
+// purpose: "אחד הצמחים" and "יום שני" are not numbers, and a guard that refuses
+// correct Hebrew is a broken guard. Up to two prefix letters are allowed ("ובשלושת").
+const HE_NUM = {
+  שלוש: 3, שלושה: 3, שלושת: 3, ארבע: 4, ארבעה: 4, ארבעת: 4, חמש: 5, חמישה: 5, חמשת: 5, שש: 6, שישה: 6, ששת: 6,
+  שבע: 7, שבעה: 7, שבעת: 7, שמונה: 8, שמונת: 8, תשע: 9, תשעה: 9, תשעת: 9, עשר: 10, עשרה: 10, עשרת: 10,
+  עשרים: 20, שלושים: 30, ארבעים: 40, חמישים: 50, שישים: 60, שבעים: 70, שמונים: 80, תשעים: 90,
+};
+const HE_RE = new RegExp(`(?<![\\p{L}])[ובלהמש]{0,2}(${Object.keys(HE_NUM).sort((a, b) => b.length - a.length).join('|')})(?![\\p{L}])`, 'gu');
+
+/**
+ * The numbers a text states, normalised: "1,000" and "1000" are the same number.
+ * words: also English number words and ordinals ("five", "fourteenth"), for quotes.
+ * hebrew: also Hebrew counting words ("חמש", "שלושה"), for slide text.
+ */
+export function numbersIn(text, { words = false, hebrew = false } = {}) {
   const s = String(text || '');
   const out = new Set();
   for (const m of s.matchAll(/\d+(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?/g)) {
     const n = Number(m[0].replace(/,/g, ''));
     if (Number.isFinite(n)) out.add(String(n));
   }
-  if (words) for (const m of s.matchAll(WORD_RE)) out.add(String(WORDS[m[1].toLowerCase()]));
+  if (words) for (const m of s.matchAll(WORD_RE)) out.add(String(WORDS[m[1].toLowerCase()] ?? ORDINALS[m[1].toLowerCase()]));
+  // "באר שבע" is a city, not the number seven.
+  if (hebrew) for (const m of s.matchAll(HE_RE)) if (!(m[1] === 'שבע' && /באר\s*$/.test(s.slice(0, m.index)))) out.add(String(HE_NUM[m[1]]));
   return out;
 }
 
@@ -78,8 +95,8 @@ export function verifyFact(db, fact, { accountId, maxQuoteWords = 40 } = {}) {
   if (n < MIN_QUOTE_WORDS) return fail(`the quote is ${n} words, too short to be evidence of anything`);
   if (n > maxQuoteWords) return fail(`the quote is ${n} words, more than ${maxQuoteWords}: a short fact, not a copied passage`);
   if (!normalise(doc.text).includes(normalise(quote))) return fail('the quote is not in the source document, word for word');
-  const inQuote = numbersIn(quote, { words: true });
-  const missing = [...numbersIn(fact.claim)].filter((x) => !inQuote.has(x));
+  const inQuote = numbersIn(quote, { words: true, hebrew: true });
+  const missing = [...numbersIn(fact.claim, { hebrew: true })].filter((x) => !inQuote.has(x));
   if (missing.length) return fail(`the claim states ${missing.join(', ')}, which the quote does not`);
   if (!String(fact.claim || '').trim()) return fail('no claim');
   return { ok: true, error: null };
@@ -97,7 +114,7 @@ export function gate({ slides, facts, caption = '', hook = '', sub = '' }) {
   const problems = [];
   const byKey = new Map(facts.map((f) => [f.key, f]));
   const items = slides.filter((s) => s.kind === 'item');
-  const allQuoteNums = new Set(facts.filter((f) => f.verified).flatMap((f) => [...numbersIn(f.quote, { words: true })]));
+  const allQuoteNums = new Set(facts.filter((f) => f.verified).flatMap((f) => [...numbersIn(f.quote, { words: true, hebrew: true })]));
   const count = String(items.length);
 
   items.forEach((s, i) => {
@@ -109,8 +126,9 @@ export function gate({ slides, facts, caption = '', hook = '', sub = '' }) {
       if (!cited[x]) problems.push(`${where}: cites "${k}", which is not one of the post's facts`);
       else if (!cited[x].verified) problems.push(`${where}: cites "${k}", which failed verification (${cited[x].error || 'unverified'})`);
     });
-    const nums = new Set(cited.filter((f) => f?.verified).flatMap((f) => [...numbersIn(f.quote, { words: true })]));
-    for (const x of numbersIn(`${s.title} ${s.body}`)) if (!nums.has(x)) problems.push(`${where}: the number ${x} is not in the quotes it cites`);
+    const nums = new Set(cited.filter((f) => f?.verified).flatMap((f) => [...numbersIn(f.quote, { words: true, hebrew: true })]));
+    // A count written in Hebrew words ("חמש") is held to its quotes like one written in digits.
+    for (const x of numbersIn(`${s.title} ${s.body}`, { hebrew: true })) if (!nums.has(x)) problems.push(`${where}: the number ${x} is not in the quotes it cites`);
   });
   for (const [where, text] of [
     ['the cover', `${hook} ${sub}`],

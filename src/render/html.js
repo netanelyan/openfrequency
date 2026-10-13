@@ -25,9 +25,18 @@ export const esc = (s) =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 
-/** Escape, and isolate every Latin or numeric run so bidi cannot reorder punctuation around it. */
+const LATIN_RUN = /([A-Za-z][A-Za-z0-9 .+#&:/_-]*[A-Za-z0-9+#]|[A-Za-z])/;
+
+/**
+ * Escape, and isolate every Latin run so bidi cannot reorder punctuation around it.
+ * The runs are found in the raw text and each piece escaped after: finding them in
+ * escaped text would wrap the "quot" of &quot; and break ש"ח, צה"ל or AT&T.
+ */
 export function he(text) {
-  return esc(text).replace(/([A-Za-z][A-Za-z0-9 .+#&;:/_-]*[A-Za-z0-9+#]|[A-Za-z])/g, '<bdi>$1</bdi>');
+  return String(text ?? '')
+    .split(LATIN_RUN)
+    .map((part, i) => (i % 2 ? `<bdi>${esc(part)}</bdi>` : esc(part)))
+    .join('');
 }
 
 /** The first number in a text with its unit, for templates that set one large. */
@@ -100,7 +109,9 @@ ${parts.html}
 /** "מקור: X" under a slide, from its facts' sources. */
 export function sourceLine(slide) {
   const names = [...new Set((slide.sources || []).filter(Boolean))];
-  return names.length ? `<div class="src">מקור: ${names.map(he).join(' · ')}</div>` : '';
+  // Each name is one isolated run with its own direction: "Wikipedia (English)"
+  // must not have its parenthesis pulled across a Latin word by the Hebrew line.
+  return names.length ? `<div class="src">מקור: ${names.map((n) => `<bdi dir="auto">${esc(n)}</bdi>`).join(' · ')}</div>` : '';
 }
 
 /** The counter on a content slide: "2/5". */

@@ -15,10 +15,15 @@ export function htmlToText(html) {
   s = s.replace(/<!--[\s\S]*?-->/g, ' ');
   s = s.replace(/<(script|style|noscript|svg|template|iframe)\b[^>]*>[\s\S]*?<\/\1>/gi, ' ');
   s = s.replace(/<(nav|header|footer|aside)\b[^>]*>[\s\S]*?<\/\1>/gi, ' ');
-  s = s.replace(new RegExp(`</?(?:${BLOCK})\\b[^>]*>`, 'gi'), '\n');
+  // A tag ends at the first ">" outside quotes: some sites (Wikipedia's data-mw)
+  // put ">" inside attribute values, and a naive [^>]* leaves tag pieces behind.
+  const ATTRS = `(?:"[^"]*"|'[^']*'|[^'">])*`;
+  s = s.replace(new RegExp(`</?(?:${BLOCK})\\b${ATTRS}>`, 'gi'), '\n');
   // Inline tags collapse to nothing, not to a space: "From <b>October</b>." must
   // stay "From October." or an exact quote of it fails.
-  s = s.replace(/<[^>]+>/g, '');
+  s = s.replace(new RegExp(`<${ATTRS}>`, 'g'), '');
+  // Wiki furniture that survives as text: citation markers, "[update]", template remnants.
+  s = s.replace(/\[(?:\d{1,3}|update|citation needed|note \d+|[a-z])\]/gi, '').replace(/\{\{[^{}]*\}\}/g, '');
   s = decodeEntities(s);
   s = s.replace(/[ \t ​]+/g, ' ');
   return stripBoilerplate(

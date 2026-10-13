@@ -4,6 +4,8 @@ import { Db } from '../src/db/index.js';
 import { gate, numbersIn, verifyFact, tokenOf } from '../src/verify/claims.js';
 import { renderPost } from '../src/render/render.js';
 import { tempHome } from './helpers.js';
+import { htmlToText } from '../src/sources/text.js';
+import { he } from '../src/render/html.js';
 import { loadPack } from '../src/packs/load.js';
 import path from 'node:path';
 
@@ -65,6 +67,24 @@ test('numbers are compared as numbers: "1,000" is 1000', () => {
   assert.deepEqual([...numbersIn('עלה ל-1,000 ₪ ואז 2.5%')], ['1000', '2.5']);
 });
 
+test('a count written in Hebrew words is a number too, and ordinary Hebrew is not', () => {
+  assert.deepEqual([...numbersIn('ניצחה חמש פעמים, ובשלושת המשחקים', { hebrew: true })], ['5', '3']);
+  assert.deepEqual([...numbersIn('the fourteenth title, five goals', { words: true })], ['14', '5']);
+  // "One of", "Monday" and a city that ends in "seven" state no number.
+  assert.deepEqual([...numbersIn('אחד הצמחים, ביום שני, בבאר שבע', { hebrew: true })], []);
+  const facts = [{ key: 'f1', quote: 'Basil needs at least 6 hours of direct sunlight a day.', verified: true }];
+  const cover = { kind: 'cover', title: '', body: '', factKeys: [] };
+  const words = gate({ slides: [cover, { kind: 'item', title: 'שמונה שעות שמש', body: '', factKeys: ['f1'] }], facts });
+  assert.match(words.problems.join(), /number 8/);
+  const right = gate({ slides: [cover, { kind: 'item', title: 'שש שעות שמש', body: '', factKeys: ['f1'] }], facts });
+  assert.equal(right.ok, true, right.problems.join('; '));
+});
+
+test('page text keeps quotes intact: tags with ">" in attributes and wiki markers leave nothing behind', () => {
+  const html = '<p data-mw=\'{"a":"<b>x</b>"}\'>From <b>October</b> 2025 it ships.[3][citation needed]</p><span title="a > b">Second</span> line{{cite}}';
+  assert.equal(htmlToText(html), 'From October 2025 it ships.\nSecond line');
+});
+
 test('the gate refuses a slide with no fact, an unverified fact, or a number its facts do not hold', () => {
   const facts = [
     { key: 'f1', quote: 'Basil needs at least 6 hours of direct sunlight a day.', verified: true },
@@ -94,4 +114,9 @@ test('the renderer refuses text that did not pass the gate', async () => {
   } finally {
     cleanup();
   }
+});
+
+test('slide text keeps Hebrew quote marks and isolates Latin runs (hard rule 8)', () => {
+  assert.equal(he('עד 1,200 ש"ח, צה"ל ו-AT&T'), 'עד 1,200 ש&quot;ח, צה&quot;ל ו-<bdi>AT&amp;T</bdi>');
+  assert.equal(he('<b> ב-Gemini 2.5'), '&lt;<bdi>b</bdi>&gt; ב-<bdi>Gemini 2.5</bdi>');
 });

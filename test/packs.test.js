@@ -78,6 +78,8 @@ test('investment advice: recommending is refused, explaining is not', () => {
     'המניה הזו צפויה לזנק בחודש הבא',
     'תשואה מובטחת של 8% בשנה',
     'כדאי לקנות VOO ולשכוח מזה',
+    'תעבירו את קרן ההשתלמות למגדל',
+    'כדאי להשקיע עם מיטב דש',
   ]) assert.ok(investmentAdvice(bad).length, bad);
   for (const ok of [
     'קרן השתלמות פטורה ממס רווחי הון אחרי 6 שנים',
@@ -85,5 +87,8 @@ test('investment advice: recommending is refused, explaining is not', () => {
     'בדקו בתלוש כמה מופרש לפנסיה',
     'מסלול מניות הוא מסלול שבו רוב הכסף מושקע במניות',
     'מדד המחירים לצרכן עלה ב-0.3% בספטמבר',
+    // provider names that are also ordinary words
+    'כדאי לבדוק את זה, כי בדרך כלל זה עובד',
+    'מומלץ לבחור קופה, ככלל עם דמי ניהול נמוכים, כך אומרים גם המורים',
   ]) assert.deepEqual(investmentAdvice(ok), [], ok);
 });

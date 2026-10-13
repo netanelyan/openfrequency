@@ -38,8 +38,15 @@ const RECOMMEND = word(
   ].join('|')
 );
 
+// Provider names that are also ordinary Hebrew ("כלל" is a rule and "בדרך כלל",
+// "מגדל" a tower, "מנורה" a lamp, "מיטב" the best of) count only next to a company
+// word, or where money is being moved to them; anywhere else the check would
+// refuse correct Hebrew. The other names count on their own.
+const AMBIGUOUS = 'כלל|מור|מגדל|מנורה|מיטב|הראל|אנליסט';
+const COMPANY = '(?:ביטוח|פנסיה|גמל|השקעות|פיננסים|מבטחים|מקפת|דש|טרייד|בית\\s+השקעות)';
 const PROVIDERS = [
-  'מיטב', 'אלטשולר', 'הראל', 'מגדל', 'כלל', 'הפניקס', 'מנורה', 'מור', 'ילין\\s+לפידות', 'אנליסט', 'פסגות', 'IBI', 'אינפיניטי',
+  `(?:${AMBIGUOUS})\\s+${COMPANY}`, `(?:חברת|קבוצת|בית\\s+ה?השקעות)\\s+(?:${AMBIGUOUS})`,
+  'אלטשולר', 'הפניקס', 'ילין\\s+לפידות', 'פסגות', 'IBI', 'אינפיניטי',
   'ואנגארד', 'Vanguard', 'בלקרוק', 'BlackRock', 'iShares', 'אינווסקו', 'Invesco', 'רובינהוד', 'אינטראקטיב', 'Interactive\\s+Brokers', 'eToro', 'איטורו',
 ];
 const SPECIFIC = [
@@ -49,7 +56,13 @@ const SPECIFIC = [
   'ביטקוין', 'Bitcoin', 'את\'ריום', 'קריפטו', 'מטבע\\s+דיגיטלי', 'זהב', 'דירה\\s+להשקעה', 'נדל"?ן\\s+להשקעה',
   '(?<![A-Za-z])[A-Z]{2,5}(?![A-Za-z])(?=\\s|$|[,.])', // a ticker: SPY, VOO, QQQ, TSLA
 ];
-const SPECIFIC_RE = new RegExp(`(?:${SPECIFIC.join('|')})`, 'u');
+const SPECIFIC_RE = new RegExp(word(SPECIFIC.join('|')), 'u');
+
+// "תעבירו את קרן ההשתלמות למגדל": moving money to a provider, by any of its names.
+const MOVE_TO = new RegExp(
+  word('(?:לעבור|תעברו|עברו|להעביר|תעבירו|העבירו|לנייד|תניידו|ניידו)') + `\\s+(?:\\S+\\s+){0,3}?(?:ל|אל\\s+)(?:${AMBIGUOUS})(?![${L}])`,
+  'u'
+);
 
 const SUPERLATIVE_PICK = new RegExp(
   word('(?:קרן|קופה|מסלול|מני(?:ה|ית)|תעודת\\s+סל|השקעה|פוליסה|קופת\\s+גמל)\\s+(?:\\S+\\s+){0,2}(?:הכי\\s+(?:טוב|טובה|משתלם|משתלמת|רווחי|רווחית|כדאי|כדאית)|מומלצ(?:ת|ים|ות)|מנצח(?:ת|))'),
@@ -92,7 +105,7 @@ function nearby(text, a, b, within = 8) {
 export function investmentAdvice(text) {
   const s = String(text || '').replace(/[״]/g, '"').replace(/[׳]/g, "'");
   const out = [];
-  if (nearby(s, RECOMMEND_RE, SPECIFIC_RE)) out.push('ממליץ על מוצר, מסלול, מדד או נכס מסוים');
+  if (nearby(s, RECOMMEND_RE, SPECIFIC_RE) || MOVE_TO.test(s)) out.push('ממליץ על מוצר, מסלול, מדד או נכס מסוים');
   if (SUPERLATIVE_PICK.test(s)) out.push('בוחר "הכי טוב" מבין מוצרי השקעה');
   if (RETURN_PROMISE.test(s)) out.push('מבטיח או חוזה תשואה');
   if (BUY_SELL.test(s)) out.push('קורא לקנות או למכור השקעה');

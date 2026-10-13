@@ -9,6 +9,7 @@
 //   data/               the database, rendered media, dry-run output, backups
 //   .env                keys (copied from .env.example, empty, mode 600)
 //   .gitignore          for the private repo: data/ and .env stay out of it
+//   .gitattributes      LF line endings, so Windows and the VPS see the same files
 //   public-denylist.txt words check:public refuses in the public repo
 //   README.md           what this folder is
 //
@@ -46,6 +47,7 @@ if (!existsSync(path.join(home, '.env'))) {
   made.push('.env');
 }
 write('.gitignore', '# The private repo tracks packs and recordings. Never keys or state.\n.env\ndata/\n*.db\n*.db-*\n');
+write('.gitattributes', '* text=auto eol=lf\n*.jpg binary\n*.png binary\n');
 write(
   'public-denylist.txt',
   '# Words that must never appear in the public repository, one per line.\n# check:public already refuses every pack id, handle, display name and Zernio id\n# found in packs/. Add anything else private: a real source, a person, a project.\n'
