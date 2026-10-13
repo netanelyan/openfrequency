@@ -76,7 +76,7 @@ export async function renderHtml(html, { size, file }) {
       await Promise.all(faces.map((f) => f.load().catch(() => null)));
       const measure = (family) => {
         const el = document.createElement('span');
-        el.textContent = 'שאלה טובה במספרים';
+        el.textContent = 'בדיקת גופן בעברית 123';
         el.style.cssText = `position:absolute;visibility:hidden;white-space:nowrap;font:700 100px ${family}`;
         document.body.appendChild(el);
         const w = el.getBoundingClientRect().width;

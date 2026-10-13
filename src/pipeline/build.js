@@ -51,7 +51,11 @@ export function hashtagsFor(pack, format, seed) {
   return [...new Set(tags)].slice(0, 5);
 }
 
-/** The documents this account could post from now: fresh from its approved sources, not used lately. */
+/**
+ * The documents this account could post from now: fresh from its approved
+ * sources, not used lately. A document a blocked or rejected post was drafted
+ * from counts as used too, or the next post would draft the same failure again.
+ */
 export async function candidateDocs(ctx, pack, { usedWithinDays = 45 } = {}) {
   const sources = ctx.db.all("SELECT * FROM sources WHERE account_id = ? AND status = 'approved' ORDER BY id", pack.id);
   const docs = [];
@@ -59,7 +63,7 @@ export async function candidateDocs(ctx, pack, { usedWithinDays = 45 } = {}) {
   const since = new Date(now() - usedWithinDays * DAY).toISOString();
   const used = new Set(
     ctx.db
-      .all("SELECT DISTINCT f.document_id FROM facts f JOIN posts p ON p.id = f.post_id WHERE p.account_id = ? AND p.status NOT IN ('blocked','rejected') AND p.created_at >= ?", pack.id, since)
+      .all("SELECT DISTINCT f.document_id FROM facts f JOIN posts p ON p.id = f.post_id WHERE p.account_id = ? AND p.created_at >= ?", pack.id, since)
       .map((r) => r.document_id)
   );
   const fresh = docs.filter((d) => !used.has(d.id));

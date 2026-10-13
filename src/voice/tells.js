@@ -39,9 +39,12 @@ export const FILLER = group('filler adjective', [
 ]);
 
 // Second-person singular forms. Posts address the audience in the plural.
+// Only unambiguous ones: the masculine future (תוכל, תרצה, תבדוק) is spelled
+// exactly like the third person feminine ("Google תוכל"), so it cannot be told
+// apart without parsing the sentence, and a guard that refuses correct Hebrew is
+// a broken guard. The live reviewer reads for register on top of this.
 export const GENDERED = group('singular "you" (the audience is addressed in the plural)', [
-  'אתה', 'תרצה', 'תרצי', 'תגיד', 'תגידי', 'מוזמן', 'מוזמנת', 'תשלח', 'תשלחי', 'תבדוק', 'תבדקי', 'תשמור', 'תשמרי', 'תוכל', 'תוכלי',
-  'בא לך', 'שלך', 'אותך', 'עשית', 'כתבת', 'תדע', 'תדעי',
+  'אתה', 'תרצי', 'תגידי', 'תשלחי', 'תבדקי', 'תשמרי', 'תוכלי', 'תדעי', 'בא לך', 'שלך', 'אותך', 'עשית', 'כתבת', 'צילמת',
 ]);
 
 const MORAL = /^(?:בקיצור|בסופו של דבר|בשורה התחתונה|השורה התחתונה|וזה מה ש|כי בסוף|אז כן|ובקיצור|המסקנה)/;
@@ -59,11 +62,17 @@ export function sentencesOf(text) {
     .filter((s) => /[\p{L}\p{N}]/u.test(s));
 }
 
-/** Share of letters that are Hebrew. A product name in Latin letters is fine; a Latin sentence is not. */
+/**
+ * Share of words that carry Hebrew. Counted by word, not by letter: a product or
+ * button name in Latin letters inside a Hebrew sentence ("Projects \u05D1-Claude") is
+ * how people actually write, while a Latin sentence is not Hebrew however short.
+ */
 export function hebrewShare(text) {
-  const letters = String(text || '').match(/\p{L}/gu) || [];
-  if (!letters.length) return 1;
-  return letters.filter((c) => /[\u05D0-\u05EA]/.test(c)).length / letters.length;
+  const words = String(text || '')
+    .split(/\s+/)
+    .filter((w) => /\p{L}/u.test(w));
+  if (!words.length) return 1;
+  return words.filter((w) => /[\u05D0-\u05EA]/.test(w)).length / words.length;
 }
 
 export const LIMITS = {
@@ -121,9 +130,10 @@ export function tellsIn(text, { kind = 'slideBody', extra = [] } = {}) {
   if (len > lim.maxChars) add('length', `${len} characters, ${lim.maxChars} at most`);
   if (sentences.length > lim.sentences) add('length', `${sentences.length} sentences, ${lim.sentences} at most`);
   if (kind === 'cover') {
-    const words = norm.split(' ').filter(Boolean).length;
+    // Words as a reader counts them: ש-Gemini is one word, not a prefix and a name.
+    const words = raw.split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length;
     if (words < lim.minWords || words > lim.maxWords) add('length', `${words} words on the cover, ${lim.minWords} to ${lim.maxWords}`);
   }
-  if (hebrewShare(raw) < 0.6) add('language', 'mostly not Hebrew');
+  if (hebrewShare(raw) < 0.5) add('language', 'mostly not Hebrew');
   return out;
 }
