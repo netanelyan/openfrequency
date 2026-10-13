@@ -1,6 +1,7 @@
 import { isSet, loadEnv } from './core/env.js';
 import { openDb } from './db/index.js';
 import { makeLlm } from './llm/index.js';
+import { claudeBatchApi } from './llm/claude.js';
 import { liveSources, recordedSources } from './sources/index.js';
 import { loadAll, syncAccounts } from './packs/load.js';
 
@@ -26,12 +27,15 @@ export function makeContext({ db = null, packs = null, mode = null, log = (m) =>
   syncAccounts(database, all);
   const live = liveSources();
   const recorded = new Map();
+  const llm = makeLlm({ ...env, OF_LLM: m === 'recorded' ? 'recorded' : env.OF_LLM });
   return {
     db: database,
     packs: all,
     mode: m,
     log,
-    llm: makeLlm({ ...env, OF_LLM: m === 'recorded' ? 'recorded' : env.OF_LLM }),
+    llm,
+    // The day's drafts go through the Message Batches API when Claude is live.
+    batchApi: llm.kind === 'claude' ? claudeBatchApi({ apiKey: env.ANTHROPIC_API_KEY, workspaceId: env.ANTHROPIC_WORKSPACE_ID }) : null,
     sourcesFor(pack) {
       if (m === 'live') return live;
       if (!recorded.has(pack.id)) recorded.set(pack.id, recordedSources(pack));

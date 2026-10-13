@@ -41,14 +41,12 @@ const { israelDate, israelInstant, addDays } = await import('../src/schedule/isr
 const { slotsFor } = await import('../src/schedule/slots.js');
 const { closeBrowser } = await import('../src/render/render.js');
 const { writeSummaries } = await import('../src/autonomy/runner.js');
-const { setSetting } = await import('../src/core/store.js');
 
 const ctx = makeContext({ log: () => {} });
 const db = ctx.db;
 const pack = ctx.pack('demo');
 const PASSWORD = 'demo-password-2026';
 addUser(db, 'demo', PASSWORD, 'owner');
-setSetting(db, 'globalBudgetUsd', 40);
 
 const now = Date.now();
 const today = israelDate(now);

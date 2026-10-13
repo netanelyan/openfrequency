@@ -137,3 +137,41 @@ export function tellsIn(text, { kind = 'slideBody', extra = [] } = {}) {
   if (hebrewShare(raw) < 0.5) add('language', 'mostly not Hebrew');
   return out;
 }
+
+/**
+ * The tells a redraft would only fix mechanically, fixed in code instead: an
+ * exclamation mark becomes a full stop, a long dash a comma (a hyphen between
+ * two numbers, so a range stays a range), a semicolon a full stop, an ellipsis
+ * a full stop, and markdown bold is dropped. No word changes, so no fact and no
+ * number can. Returns { text, fixed: [what changed] }.
+ */
+export function mechanicalFix(text) {
+  const before = String(text || '');
+  const fixed = [];
+  let t = before;
+  const sub = (re, to, what) => {
+    const next = t.replace(re, to);
+    if (next !== t) fixed.push(what);
+    t = next;
+  };
+  sub(/(\d)\s*[—–]\s*(\d)/g, '$1-$2', 'a dash between numbers');
+  sub(/\s*[—–]\s*/g, ', ', 'a long dash');
+  sub(/\?!+|!+\?/g, '?', 'an exclamation mark');
+  sub(/!+/g, '.', 'an exclamation mark');
+  sub(/\s*;\s*/g, '. ', 'a semicolon');
+  sub(/\s*(?:\.\.\.|…)/g, '.', 'an ellipsis');
+  sub(/\*\*/g, '', 'markdown');
+  t = t.replace(/\s+([,.?])/g, '$1').replace(/,\s*([.?])/g, '$1').replace(/\.{2,}/g, '.').replace(/^[,\s]+/, '').replace(/ {2,}/g, ' ').trim();
+  return { text: t, fixed: [...new Set(fixed)] };
+}
+
+// The closing questions every engagement-bait post ends with. A strong reviewer
+// scores a caption that ends with one at 8 out of 10 (the cost comparison,
+// docs/costs.md), and the post then needs a rewrite it may not have left.
+const GENERIC_QUESTIONS = ['ידעתם את זה', 'ידעתם', 'הידעתם', 'מה דעתכם', 'מה אתם חושבים', 'למי זה יכול לעזור', 'כבר ניסיתם את זה', 'ניסיתם את זה', 'זוכרים את זה', 'מי לדעתכם', 'איזה מספר הכי הפתיע אתכם', 'מה הפתיע אתכם', 'שמרו את הפוסט', 'תייגו חבר', 'מסכימים'];
+
+/** Is this closing question a generic engagement line, the same under any post? */
+export function isGenericQuestion(q) {
+  const n = normHe(q);
+  return GENERIC_QUESTIONS.some((g) => n === normHe(g));
+}

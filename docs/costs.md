@@ -1,0 +1,155 @@
+# Costs: live on $15 a month
+
+2026-10-13. What the engine costs to run, what each service gives for free, what
+every phase 2 change did to the cost of a post, and the month at the planned
+volume.
+
+## The rule
+
+**$15 a month, hard, for every metered service except Zernio** (Anthropic, Brave,
+image APIs, anything else that bills). The VPS is already paid for. Zernio is
+billed per connected account and is shown on its own line below.
+
+The planned volume is 3 accounts at 2 posts a day: about **180 posts a month**,
+so about **$0.083 a post** for AI and everything else. Before phase 2 a post was
+estimated at $0.08 to $0.13 on Claude Opus 5.5: it did not fit.
+
+The cap is `OF_BUDGET_MONTHLY_USD=15` in `private/.env`. How the code enforces it
+is in the README ([The budget](../README.md#the-budget)) and
+[decisions.md](decisions.md); in short, every paid call reserves its worst case
+before it is made, so nothing can spend past it.
+
+## Every service the engine calls
+
+Checked on 2026-10-13 on each provider's own pages.
+
+| Service | Free tier and limits | What the engine uses | Cost a month | Source |
+|---|---|---|---|---|
+| Anthropic API | none | drafting, review, rewrites, judging | the variable part: see below | [pricing](https://platform.claude.com/docs/en/about-claude/pricing) |
+| Brave Search API | $5 of credit every month (about 1,000 queries at $5 per 1,000); 50 queries a second. The old free plan ended in Feb 2026; a card is required | only when a new account is onboarded: 5 queries, cached 30 days | $0 (the ledger still counts each query at the list price, $0.005, so a cap can never be undercut by the credit) | [brave.com/search/api](https://brave.com/search/api/), [credit terms](https://api-dashboard.search.brave.com/terms-of-service/credit-terms) |
+| YouTube Data API v3 | free, quota only: since 2026-06-01, 100 `search.list` calls a day in their own bucket, and 10,000 units for everything else (`videos.list` is 1) | weekly trend search: a handful of queries per account a week, cached 7 days | $0 | [quota costs](https://developers.google.com/youtube/v3/determine_quota_cost) |
+| Pexels | free; 200 requests an hour, 20,000 a month | cover photos when a theme asks for one | $0 | [docs](https://www.pexels.com/api/documentation/) |
+| Unsplash | free; 50 an hour (demo), 1,000 an hour (production) | same | $0 | [docs](https://unsplash.com/documentation) |
+| Wikimedia Commons | free; 200 requests a minute with an identifying User-Agent (10 without) | same | $0 | [rate limits](https://www.mediawiki.org/wiki/Wikimedia_APIs/Rate_limits) |
+| Meta Graph API (Instagram) | free; 100 API posts per account per rolling 24 hours (some reference pages still say 50: the engine reads the live quota); "4800 times impressions" calls a day per app and account | 2 posts a day per account, their insights | $0 | [content publishing](https://developers.facebook.com/docs/instagram-platform/content-publishing), [rate limits](https://developers.facebook.com/docs/graph-api/overview/rate-limiting) |
+| data.gov.il (CKAN) | free; no documented limit; licence per dataset | the money pack's datasets, read once a day | $0 | [CKAN API](https://data.gov.il/api/3/action/license_list) |
+| Bank of Israel (SDMX) | free; no documented limit; the terms page is behind bot protection and could not be read | the policy rate and exchange rates | $0 | [edge.boi.gov.il](https://edge.boi.gov.il/) |
+| CBS (Lamas) | free under a royalty-free licence that asks for a credit line; User-Agent required | the price indices and the average wage | $0 | [API](https://www.cbs.gov.il/en/Pages/API-interface.aspx), [licence](https://www.cbs.gov.il/en/Pages/Enduser-license.aspx) |
+
+**Fixed costs inside the $15: $0.** Every service but Anthropic is free at this
+volume. 5% of the cap ($0.75) is kept back for onboarding a new account, so the
+three accounts share **$14.25 a month for Claude**.
+
+## Zernio, outside the cap
+
+Zernio bills per connected social account: **the first 2 are free, then $6 a
+month each** for accounts 3 to 10 (then $3, then $1), every feature and
+unlimited posts included ([pricing](https://zernio.com/pricing)). Instagram now
+goes direct, so only TikTok uses Zernio here.
+
+| Zernio accounts connected in all | Billed | Cost a month |
+|---|---|---|
+| 3 (the three TikTok accounts here, nothing else) | 1 | **$6** |
+| 3 + 1 from another project | 2 | $12 |
+| 3 + 2 from other projects | 3 | $18 |
+| 3 + k | 1 + k (up to 10 accounts) | $6 × (1 + k) |
+
+Before phase 2 this project would have connected 6 accounts (TikTok and
+Instagram for three packs): $24 a month on its own. Run `npm run zernio:check`
+to see the count Zernio really bills.
+
+## Per post: before and after each change
+
+### How it was measured
+
+The project's key was not used (the owner's instruction: nothing Claude Code can
+do goes on the key). Instead, `npm run compare` builds the exact request the
+engine sends at each step, for 15 fixed topics (5 recorded documents per pack,
+each with a format), and a Claude Code subagent on the matching model answers it
+once. The script plays the engine: it verifies each fact against the stored
+document, runs every check, asks for a redraft or a review or a rewrite exactly
+when the engine would, and prices every call from its token counts at the
+published rates. Every version is in `private/cost-compare/`, one file per topic,
+side by side.
+
+Limits of the method, all of which `npm run live-day` removes:
+
+- **Tokens are estimated**, from character counts (Hebrew about 2.2 characters a
+  token). The newer tokenizer may count Hebrew higher.
+- **Thinking is not visible** in an answer. Each call is priced with thinking
+  between half and twice its answer: the ranges below.
+- **A subagent is not byte for byte the API model**: the `haiku` alias may be
+  Haiku 4.5, not 5.5, and a subagent carries context from one topic to the next
+  (one agent applied a lesson from one refusal to a later topic).
+- **Batch and cache** are priced from the rules, not observed: cache hits inside
+  a batch are best effort.
+
+### The steps
+
+Each row adds one change to the row above. "Per post" is per attempted post,
+blocked ones included; "queued" is how many of the 15 passed every check.
+
+| | Change | Config | Per post | Queued | What happened to quality |
+|---|---|---|---|---|---|
+| 0 | **Before**: Opus 5.5 everywhere, the old prompts | A | **$0.081 to $0.131** | 15 of 15 | every fact verified; but the Opus review found two posts with a wrong sentence (a correct number, a false claim around it) that the engine ignored and queued |
+| 1 | **Model routing**: Sonnet 5.5 drafts, Haiku reviews | B | $0.025 to $0.039 | 13 of 15 | Sonnet lost one topic (dates in claims, not in quotes) and one more on facts |
+| 2 | **Smaller context and cache order**: documents narrowed to content (37% fewer characters), at most 5 voice examples a side and 3 owner edits, the pack as one stable first block; code fixes for punctuation tells; one redraft | C | $0.027 to $0.040 | 13 of 15 | same as B. Input per call went *up* before caching (the pack block now opens the outline call too) and down after it |
+| 3 | **Message Batches API**, a day ahead | C | $0.014 to $0.020 | | none: same model, same prompt |
+| 4 | **Prompt caching** (the pack block, 1-hour TTL) | C | $0.011 to $0.018 | | none |
+| 5 | **The review on Sonnet**, not Haiku; a fact problem rewritten or blocked; generic closing questions dropped in code; the flagged lines rewritten once | G | **$0.017 to $0.027** | 11 of 15 | the review now works (below); the 4 lost are a dates topic (fixed, below), a document that cannot carry its format (the engine tries the next one), and 2 posts rightly stopped |
+| 6 | **"A date is a number too"** in the outline prompt | E | | the dates topic: 0 of 5 facts became 6 of 6 | |
+
+**Per published post** with everything on: $0.017 to $0.027 over 11 to 12 of
+every 15 attempts, about **$0.021 to $0.036**.
+
+Per step, with everything on (config G, average per call, batched and cached):
+outline $0.007 to $0.011, slides $0.005 to $0.008, review $0.003 to $0.005, a
+rewrite $0.005 to $0.007. The full table is in `private/cost-compare/summary.md`.
+
+### Where Opus was needed: nowhere. Where Haiku was not enough: the review.
+
+- **Drafting on Sonnet.** Opus verified every fact it quoted; Sonnet lost one
+  topic by putting release dates into claims whose quotes lacked them. One
+  sentence in the outline prompt fixed it on re-measure. Every queued post passes
+  the same fact gate either way.
+- **The review.** On the very same drafts, Haiku scored nearly every text 1 out
+  of 10 and found no fact problems; Opus scored the stock captions 8 to 9 and
+  found unsupported claims in 9 of 13 posts (a rate "in effect from October" that
+  changed on 3 September; "Israel's only World Cup", which no fact said); Sonnet
+  found the same ones, at half Opus's price. The review is the only check of the
+  sentence around a quoted number, so it runs on **Sonnet**. Haiku stays for
+  scoring sources and reading trends (`judge`), which was not measured.
+- **A caution:** two Sonnet review runs on nearly the same drafts disagreed a lot
+  on slide titles (one flagged almost every title as "template"). The captions
+  and the fact problems were consistent. The live run will show which is typical;
+  the threshold (rewrite at 4, block at 6) is unchanged.
+
+## The month at 180 posts
+
+| Case | Per published post | 180 posts | Inside $15? |
+|---|---|---|---|
+| Expected: batched, cached, thinking low to high | $0.021 to $0.036 | **$3.80 to $6.50** | yes |
+| The newer tokenizer counts Hebrew 35% higher | $0.029 to $0.049 | $5.10 to $8.80 | yes |
+| No batch and no cache at all (direct calls) | $0.055 to $0.082 | $9.90 to $14.80 | yes, barely |
+| Onboarding, trends (Haiku), Brave | | under $0.50 | |
+
+**The forecast is at or under $15 without Zernio** in every case above, and the
+expected case leaves room for a fourth account. If the live numbers come in
+higher, the planner cuts the weakest account to one post a day before anything
+else, and the cap holds regardless.
+
+One cost of a provable cap: each call reserves its worst case while in flight
+(a batched outline about $0.11, slides about $0.08, a review about $0.04), so the
+last dollar or two of a month can go unused when no call's ceiling fits.
+
+## Measuring the real thing
+
+`npm run live-day -- --confirm` drafts one day of the planned volume (6 posts)
+for all three accounts on real calls, through the Message Batches API, into the
+live database in Approve mode, and prints what each post really cost, from the
+usage blocks the API returned (input, cache writes, cache reads, output). It
+spends a few tens of cents against the month's cap. It needs
+`ANTHROPIC_WORKSPACE_ID` in `private/.env`: the key there is not scoped to a
+workspace, and the API refuses it without one. After it, every call the engine
+makes is recorded the same way, and the Settings page shows the measured cost
+per post per account, which the planner uses instead of the estimate.

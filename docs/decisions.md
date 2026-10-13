@@ -158,3 +158,167 @@ CC BY and CC BY-SA require the author and the licence. The credit line goes into
 the caption when it is published or exported, after the fact gate: "CC BY-SA 4.0"
 is not a claim, and its 4 is not a number to trace. A Commons photo whose licence
 asks for credit and that names no author is not used.
+
+## Phase 2 (2026-10-13): live on $15 a month
+
+### The cap is enforced by reserving the worst case
+
+`OF_BUDGET_MONTHLY_USD` ($15 by default) covers every metered service but Zernio.
+A guard that compares an *estimate* with the cap can be crossed by a call that
+costs more than its estimate, and a day's drafts in one batch are many calls in
+flight at once. So every paid call reserves its ceiling first: its prompt's bytes
+(no token is shorter than a byte) plus framing, every token billed at the dearest
+input rate it can be (a 1-hour cache write), and all of `max_tokens` at the output
+rate; with a server-side fallback, at the dearest model there is. The reservation
+and the check are one transaction. The real cost from the usage block replaces it.
+A call can cost less than its ceiling and never more, so the sum of real costs
+cannot cross the cap. The price is that the last few dollars of a month can sit
+unused when no call's ceiling fits in them. The website can lower the cap for a
+month, never raise it: the cap belongs to the private `.env`.
+
+Alternatives: counting tokens exactly with the API's `count_tokens` (one more
+call per call, and the owner asked for the key not to be spent on anything that
+does not need it); keeping a margin (a guess, not a proof).
+
+### Shares, and cutting volume rather than quality
+
+Each account's share is the cap by `budget.share` weights, after 5% kept for
+onboarding. Every day, before drafting, the month is forecast: what was spent
+and held, plus the slots still to draft this month (Shabbat and festivals
+excluded) times the measured cost per produced post (blocked attempts included).
+If it does not fit, the weakest account drops to one post a day, then the next.
+"Weakest": by its own 72-hour results against the median of its platform; with
+none yet, by how often the owner approved its posts; with neither, the one whose
+posts cost most. The money a cut frees goes to the accounts that keep their
+volume, and the allocations become each account's cap for the month. A budget
+pause now lifts as soon as the plan gives the account room again, not only at the
+month's turn. 80% spent warns on every page; 100% stops all drafting.
+
+### Drafting through the Message Batches API, a day ahead
+
+The pipeline stays a plain sequence of `askJson` calls. The batcher is a model
+client whose answers are held until every post being built in the run is
+waiting on the model; then all their requests go as one batch. A day's posts
+cost one batch per step (outlines, slides, reviews) rather than one call each,
+at half price. Results are read and recorded in full before any post resumes,
+or the first to resume would send its next request alone (the test caught this).
+Every batch is written to the `batches` table with what each request was for;
+after a restart the runner reads the results of any batch not yet recorded and
+records their cost, and closes the posts that lost their builder. Generation
+moved to the day before: tomorrow's slots, plus today's empty ones that are at
+least three hours away. `OF_BATCH=off` goes back to direct calls. Server-side
+fallbacks stay on direct calls (the Batches API does not take them).
+
+### Prompts built for the cache
+
+Each request is the pack (voice guide with at most five examples a side, every
+format, the Hebrew rules, the law) as the first system block, then the task's
+fixed instructions, then a user turn with only what changes per post. The pack
+block is the same for the outline, slides and rewrite calls of an account, so
+they share one cached prefix: a 1-hour cache in batches (rounds can be more than
+five minutes apart), 5 minutes for direct calls. Before, the format and the
+slide count sat inside the system prompt and broke the cache on every post.
+
+### Documents narrowed in code before the model sees them
+
+`focusText` drops runs of three or more short lines with no number and no
+punctuation (menus), a page's own buttons and repeated lines, and stops at 7,000
+characters. On the 25 recorded documents it sends 37% fewer characters and loses
+2 of the 115 quotes the recorded drafts used. The stored text is untouched, so
+quotes are still checked against all of it. Bituach Leumi pages also get
+`hints.selector: mainContent`.
+
+### Measured by Claude Code, not by the project's key
+
+The owner's instruction mid-session: never spend the project's Anthropic key on
+what Claude Code can do. The before-and-after comparison (`npm run compare`) is
+answered by Claude Code subagents on the matching models, each answering the
+exact request the engine would send, once; the harness plays the engine (fact
+verification, checks, redraft and review decisions) and prices every call from
+token counts at the published rates. Its limits, in docs/costs.md: token counts
+are estimated, thinking is unseen (priced as a range), a subagent is not
+byte-for-byte the API model (the `haiku` alias may not be Haiku 5.5), and a
+subagent carries context from one topic to the next where an API call cannot.
+The one thing only the key can measure, the billed cost, is `npm run live-day`,
+for the owner to run.
+
+### Claude Haiku 5.5 exists
+
+Released 2026-10-07, after the API reference this session started from: $0.10 in
+and $0.50 out per million tokens, adaptive thinking with effort, a 512-token
+cache minimum. It is the `judge` model (scoring sources, reading a trend's
+format). Its long-prompt tier (over 100,000 tokens, five times the price) is in
+the ledger.
+
+### Instagram directly, TikTok through Zernio, per pack
+
+Zernio bills per connected account; Meta's Graph API is free. Each pack names a
+publisher per platform (`publishers`), so this can change without code.
+Instagram uses the Facebook Login path by default (a business or creator
+account linked to a Page; the Page token does not expire) and also supports
+Instagram Login (60-day tokens, refreshed daily by the runner when 20 days or
+fewer are left). A token comes from `.env`; a refreshed one is kept in the
+database and wins until `.env` holds a different one. The network door gains
+exactly two Graph writes (create a media container, publish it) and reads of
+numeric objects, their insights, the quota and our own token; it refuses every
+edge and field expansion for comments, replies, mentions, tags, messages,
+hashtags and `business_discovery`, in the path or in `fields`. A post publishes
+platform by platform and never re-sends a platform that is already out. An
+Instagram throttle, or a container still processing, waits for the next tick
+(three attempts), because Instagram publishes only at `media_publish` and the
+retry first asks whether the last container went out; a Zernio error is never
+retried blind, since a lost answer to a create can be a post that exists.
+
+### The festivals, from the Hebrew calendar
+
+Ported from the Hebrew calendar of an earlier project of the owner (read only): the molad and
+the four dechiyot, Israel's yom tov days only (Rosh Hashana two days, the rest
+one). A rest day runs from candle lighting on the evening before to nightfall on
+the day, so a festival next to Shabbat is one window. Tested against Hebcal's
+Israel dates for October 2026 to October 2028 and against ICU's Hebrew calendar
+for every day in between.
+
+### The money pack's official sources
+
+data.gov.il's CKAN API, the Bank of Israel's SDMX series API (CSV) and the CBS
+APIs answer a plain client; the HTML sites in front of them do not, and the
+engine still does not get past bot protection. New: the Bank of Israel rate as
+the dates it changed (`changesOnly`), exchange rates, the dwelling price index,
+the average wage per employee job, the maximum prices of controlled products,
+the Accountant General's rates, the excise on fuel. Coded columns carry Hebrew
+labels so a line reads, and quotes, as written. Pension and provident fund
+yields (also on data.gov.il) are left out: a post comparing funds is a step from
+recommending one. The Bank of Israel's terms page is behind its bot protection;
+a search snippet suggests republishing site content needs consent. Facts (a rate,
+a date) are not content, but the owner should know.
+
+CBS `percentYear` is the change from the same month a year earlier: CBS's own
+pages do not define it, and computed from the index values it matches 33 of 33
+months, where a since-January reading matches 4. The recorded price-index slide
+already read it that way; the field now carries a Hebrew label saying so.
+
+### Hand-checked facts
+
+A pack's `facts/` folder holds what the owner read on sites the engine may not
+read: each sentence word for word, its page, the day it was checked and the day
+it expires (at most two years later). Each topic is one document of a `facts`
+source, holding only valid facts, and the document stops being evidence on its
+earliest expiry: `verifyFact` refuses it, so a post drafted before a fact expired
+is blocked before it is published after. Facts are added, rechecked with a new
+expiry and removed on the website. Two topics are seeded from Bituach Leumi pages,
+copied word for word by Claude and marked "checked by Claude": the owner should
+confirm or delete them.
+
+### Discovery from cache
+
+Brave searches are kept 30 days and YouTube searches 7 (`lookups`), so a weekly
+trend run or a second onboarding of a similar niche does not pay again or use the
+100-a-day search quota.
+
+### The deploy steps, tested in a clean container
+
+`deploy/test/run.sh` builds a plain Ubuntu 24.04 with systemd and runs the
+README's steps in it with podman. The container runs privileged because the
+unit's hardening needs mount namespaces, which a VM has and an unprivileged
+container does not ("Failed to keep CAP_SYS_ADMIN"); under WSL it also needs the
+host's network (`NET=host`), since WSL has no nftables.

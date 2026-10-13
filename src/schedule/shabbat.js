@@ -1,7 +1,12 @@
-import { israelDate, wallClock, addDays } from './israel.js';
+import { israelDate, wallClock, addDays, weekday } from './israel.js';
 import { sunset, JERUSALEM } from './sun.js';
+import { yomTovOn } from './hebrew.js';
 
-// HARD RULE 9: nothing posts from Friday sunset to Saturday night, Israel time.
+// HARD RULE 9: nothing posts from Friday sunset to Saturday night, Israel time,
+// nor on a yom tov (Rosh Hashana, Yom Kippur, the first and last days of Sukkot
+// and Pesach, Shavuot), from the evening before. The festival dates come from
+// the Hebrew calendar, computed (hebrew.js). A run of rest days (a yom tov next
+// to Shabbat, the two days of Rosh Hashana) is one window.
 //
 // The window is computed from the real sunset for that week rather than fixed
 // hours, with a margin on both sides:
@@ -36,6 +41,50 @@ export function shabbatWindow(t, { candle = CANDLE_MINUTES, havdalah = HAVDALAH_
   };
 }
 
+/** Why an Israel date (YYYY-MM-DD) is a rest day: the festival's name, "שבת", or null. */
+export function restDay(date) {
+  return yomTovOn(date) || (weekday(date) === 6 ? 'שבת' : null);
+}
+
+const margins = ({ candle = CANDLE_MINUTES, havdalah = HAVDALAH_MINUTES } = {}) => ({
+  c: Math.max(MIN_CANDLE, Number(candle) || CANDLE_MINUTES) * 60_000,
+  h: Math.max(MIN_HAVDALAH, Number(havdalah) || HAVDALAH_MINUTES) * 60_000,
+});
+
+/**
+ * The rest day this instant belongs to, with the margins, or null. A rest day D
+ * runs from candle lighting on the evening before to nightfall on D, so an
+ * instant on Israel date d is inside one when d is a rest day and it is before
+ * d's nightfall, or d+1 is one and it is after d's candle lighting.
+ */
+export function restAt(t, { place = JERUSALEM, ...opts } = {}) {
+  const at = new Date(t).getTime();
+  const { c, h } = margins(opts);
+  const date = israelDate(at);
+  const today = restDay(date);
+  if (today && at < sunset(date, place).getTime() + h) return today;
+  const tomorrow = restDay(addDays(date, 1));
+  if (tomorrow && at >= sunset(date, place).getTime() - c) return tomorrow;
+  return null;
+}
+
+/** Is this instant inside Shabbat or a yom tov (with the margins)? */
+export const inRest = (t, opts) => restAt(t, opts) != null;
+
+/** The whole rest window that contains `t`, as { from, to, days: [names] }, or null. */
+export function restWindow(t, { place = JERUSALEM, ...opts } = {}) {
+  if (!inRest(t, { place, ...opts })) return null;
+  const { c, h } = margins(opts);
+  const date = israelDate(t);
+  let first = restDay(date) && new Date(t).getTime() < sunset(date, place).getTime() + h ? date : addDays(date, 1);
+  while (restDay(addDays(first, -1))) first = addDays(first, -1);
+  let last = first;
+  while (restDay(addDays(last, 1))) last = addDays(last, 1);
+  const days = [];
+  for (let d = first; d <= last; d = addDays(d, 1)) days.push(restDay(d));
+  return { from: new Date(sunset(addDays(first, -1), place).getTime() - c), to: new Date(sunset(last, place).getTime() + h), days: [...new Set(days)] };
+}
+
 /** Is this instant inside Shabbat (with the margins)? */
 export function inShabbat(t, opts = {}) {
   const at = new Date(t).getTime();
@@ -44,14 +93,15 @@ export function inShabbat(t, opts = {}) {
 }
 
 export class ShabbatError extends Error {
-  constructor(at) {
-    super(`refused: ${new Date(at).toISOString()} is inside Shabbat (Israel time)`);
+  constructor(at, day = 'שבת') {
+    super(`refused: ${new Date(at).toISOString()} is inside ${day === 'שבת' ? 'Shabbat' : `a yom tov (${day})`} (Israel time)`);
     this.name = 'ShabbatError';
     this.code = 'shabbat';
   }
 }
 
-/** Throw if a post would go out on Shabbat. Called by the scheduler and again by every publisher. */
+/** Throw if a post would go out on Shabbat or a yom tov. Called by the scheduler and again by every publisher. */
 export function assertNotShabbat(t, opts) {
-  if (inShabbat(t, opts)) throw new ShabbatError(t);
+  const day = restAt(t, opts);
+  if (day) throw new ShabbatError(t, day);
 }

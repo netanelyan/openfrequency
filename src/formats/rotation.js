@@ -18,9 +18,12 @@ import { j } from '../db/index.js';
 
 export const RULES = { provenShare: 0.7, dropAfter: 3, lossBelow: 0.7, minPosts: 3, keepProven: 2, restDays: 14, windowDays: 30 };
 
-/** One post's score on one platform, or null when there are no views to divide by. */
+/**
+ * One post's score on one platform, or null when there is nothing to divide by.
+ * Instagram divides by views where Meta reports them, else by reach.
+ */
 export function postScore(platform, m) {
-  const views = Number(m?.views) || 0;
+  const views = Number(m?.views) || (platform === 'instagram' ? Number(m?.reach) || 0 : 0);
   if (views <= 0) return null;
   if (platform === 'tiktok') return ((Number(m.shares) || 0) + (Number(m.likes) || 0)) / views;
   if (platform === 'instagram') return m.saves == null ? null : (Number(m.saves) || 0) / views;

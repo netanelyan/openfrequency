@@ -13,6 +13,8 @@ import { COMPLIANCE, FINANCIAL, isCompliance } from '../rules/compliance.js';
 export const MODES = ['approve', 'digest', 'auto'];
 export const PLATFORMS = ['tiktok', 'instagram'];
 export const PUBLISHERS = ['dry', 'zernio'];
+/** Who can publish to each platform. Instagram also directly, through Meta's own Graph API. */
+export const PLATFORM_PUBLISHERS = { tiktok: ['dry', 'zernio'], instagram: ['dry', 'zernio', 'instagram'] };
 export const SOURCE_TYPES = ['rss', 'web', 'api'];
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 const ID = /^[a-z0-9][a-z0-9-]{1,39}$/;
@@ -34,7 +36,16 @@ export function validatePack(pack) {
     p.push(`pack.json: platforms must be a non-empty list of ${PLATFORMS.join(', ')}`);
   }
   if (!PUBLISHERS.includes(meta.publisher || 'dry')) p.push(`pack.json: publisher must be one of ${PUBLISHERS.join(', ')}`);
-  if (meta.publisher === 'zernio' && !String(meta.zernio?.profileId || '').trim()) p.push('pack.json: publisher "zernio" needs zernio.profileId');
+  for (const [plat, via] of Object.entries(meta.publishers || {})) {
+    if (!PLATFORM_PUBLISHERS[plat]) p.push(`pack.json: publishers.${plat}: not a platform (${PLATFORMS.join(', ')})`);
+    else if (!PLATFORM_PUBLISHERS[plat].includes(via)) p.push(`pack.json: publishers.${plat} must be one of ${PLATFORM_PUBLISHERS[plat].join(', ')}`);
+  }
+  // Account ids are filled in once the accounts exist; until then the platform publishes dry,
+  // and npm run zernio:check / instagram:check say what is missing.
+  if (meta.instagram && !isObj(meta.instagram)) p.push('pack.json: instagram must be an object { userId, auth, tokenEnv }');
+  if (meta.instagram?.auth && !['facebook', 'instagram'].includes(meta.instagram.auth)) p.push('pack.json: instagram.auth must be "facebook" (an account linked to a Facebook Page) or "instagram" (Instagram Login)');
+  if (meta.instagram?.userId && !/^\d{5,25}$/.test(String(meta.instagram.userId))) p.push('pack.json: instagram.userId is the numeric Instagram account id');
+  if (meta.instagram?.tokenEnv && !/^[A-Z][A-Z0-9_]{2,60}$/.test(meta.instagram.tokenEnv)) p.push('pack.json: instagram.tokenEnv is the name of a variable in .env, like IG_TOKEN_MYPACK');
   const s = meta.schedule || {};
   if (!Array.isArray(s.slots) || !s.slots.length || s.slots.some((x) => !HHMM.test(x))) p.push('pack.json: schedule.slots must be a list of "HH:MM"');
   if (s.windows && (!Array.isArray(s.windows) || s.windows.some((w) => !Array.isArray(w) || w.length !== 2 || !(w[0] < w[1])))) p.push('pack.json: schedule.windows must be [[from, to], ...] hours');
@@ -42,8 +53,9 @@ export function validatePack(pack) {
     if (!/^[0-6]$/.test(d) || !Array.isArray(list) || list.some((x) => !HHMM.test(x))) p.push(`pack.json: schedule.slotsByDay.${d} must be a list of "HH:MM"`);
   }
   if (!MODES.includes(meta.autonomy?.mode || 'approve')) p.push(`pack.json: autonomy.mode must be one of ${MODES.join(', ')}`);
-  const budget = Number(meta.budget?.monthlyUsd);
-  if (!(budget > 0 && budget <= 2000)) p.push('pack.json: budget.monthlyUsd must be a number between 0 and 2000');
+  // The money is the global cap's (OF_BUDGET_MONTHLY_USD); a pack only weighs its share, and may cap itself lower.
+  if (meta.budget?.monthlyUsd != null && !(Number(meta.budget.monthlyUsd) > 0 && Number(meta.budget.monthlyUsd) <= 2000)) p.push('pack.json: budget.monthlyUsd, when set, must be a number between 0 and 2000');
+  if (meta.budget?.share != null && !(Number(meta.budget.share) > 0 && Number(meta.budget.share) <= 10)) p.push('pack.json: budget.share, when set, must be a weight between 0 and 10');
   for (const c of meta.compliance || []) if (!isCompliance(c)) p.push(`pack.json: unknown compliance check "${c}" (have: ${Object.keys(COMPLIANCE).join(', ')})`);
   const about = [meta.displayName, meta.audience, meta.description, ...(meta.topics || [])].join(' ');
   if (FINANCIAL.test(about) && !(meta.compliance || []).includes('il-investment-advice')) {

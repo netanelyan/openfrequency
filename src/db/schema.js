@@ -259,4 +259,51 @@ export const MIGRATIONS = [
     UNIQUE (day, account_id)
   );
   `,
+  `
+  -- Money held for calls still in flight. guard() counts it with what was spent,
+  -- so concurrent and batched calls cannot together cross a cap.
+  CREATE TABLE reservations (
+    id            INTEGER PRIMARY KEY,
+    account_id    TEXT,
+    post_id       TEXT,
+    usd           REAL NOT NULL,
+    tag           TEXT,
+    month         TEXT NOT NULL,
+    at            TEXT NOT NULL
+  );
+  CREATE INDEX reservations_month ON reservations(month, account_id);
+
+  -- What each Claude call really used, as the API reported it, and whether it
+  -- went through the Message Batches API (half price).
+  ALTER TABLE spend ADD COLUMN batch INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE spend ADD COLUMN usage_json TEXT;
+
+  -- Message batches sent to Anthropic, kept until every request in them is
+  -- recorded, so a restart in the middle of a batch still records what it cost.
+  CREATE TABLE batches (
+    id            TEXT PRIMARY KEY,              -- Anthropic's batch id
+    status        TEXT NOT NULL,                 -- in_progress | ended | recorded
+    requests_json TEXT NOT NULL,                 -- custom_id -> { account_id, post_id, model, tag, reservation }
+    counts_json   TEXT,
+    created_at    TEXT NOT NULL,
+    ended_at      TEXT,
+    recorded_at   TEXT
+  );
+
+  -- Answers from paid or quota-limited lookups (Brave, YouTube search), reused
+  -- until they expire: discovery runs weekly and reads the cache first.
+  CREATE TABLE lookups (
+    key           TEXT PRIMARY KEY,
+    value_json    TEXT NOT NULL,
+    at            TEXT NOT NULL,
+    expires_at    TEXT NOT NULL
+  );
+
+  -- Instagram reports reach as well as views.
+  ALTER TABLE metrics ADD COLUMN reach INTEGER;
+
+  -- A document built from hand-checked facts stops being evidence after the
+  -- earliest expiry date of the facts in it.
+  ALTER TABLE documents ADD COLUMN expires_at TEXT;
+  `,
 ];

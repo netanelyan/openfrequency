@@ -47,7 +47,9 @@ if (opt('url')) {
   for (const s of sources) {
     try {
       const docs = await live.read({ ...s, key: s.id, config_json: JSON.stringify({ api: s.api || null, hints: s.hints || null }) });
-      for (const d of docs.slice(0, Number(opt('max', 3)))) save(`${s.id}--${slug(d.url).slice(-40)}`, { source: s.id, url: d.url, title: d.title, text: d.text, publishedAt: d.publishedAt || null });
+      // One document (an API, one page): the source's own id. Several (a feed): the id and a short slug of each URL.
+      const kept = docs.slice(0, Number(opt('max', 3)));
+      for (const d of kept) save(kept.length === 1 ? s.id : `${s.id}--${slug(d.url).slice(-24)}`, { source: s.id, url: d.url, title: d.title, text: d.text, publishedAt: d.publishedAt || null });
     } catch (e) {
       console.log(`${s.id}: ${e.message}`);
     }

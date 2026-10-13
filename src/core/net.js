@@ -5,15 +5,21 @@
 // keep it true is to give every request one door and write down, here, every
 // place the door opens onto:
 //
-//   - WRITES (anything but GET) are allowed to exactly two endpoints: Claude's
-//     messages endpoint, and Zernio's create-post endpoint. Nothing else.
+//   - WRITES (anything but GET) are allowed to exactly these endpoints: Claude's
+//     messages and batches endpoints, Zernio's create-post endpoint, and Meta's
+//     two publishing endpoints for an Instagram account (create a media
+//     container, publish it). Nothing else.
 //   - READS from a social platform are allowed only through the official read
-//     APIs listed below (YouTube Data API search/videos). A social host is never
-//     fetched as a web page, so nothing here can scrape a profile or a feed.
+//     APIs listed below (YouTube Data API search/videos; Meta's Graph API for a
+//     container's status, our own account and media, their insights, the
+//     publishing quota and our own token). A social host is never fetched as a
+//     web page, so nothing here can scrape a profile or a feed.
 //   - READS from the open web (approved sources, feed discovery, image libraries)
 //     are allowed for any https host that is not a social platform.
 //   - Zernio paths that touch an inbox, messages, comments, likes or follows are
-//     refused by name, even as reads.
+//     refused by name, even as reads. So is any Graph request that asks for
+//     comments, mentions, tags, hashtags, messages or another account
+//     (business_discovery), in its path or in its fields.
 //
 // The test suite refuses any `fetch(` outside this file, and any rule that
 // would let a write reach a social host. The Anthropic SDK is handed doorFetch
@@ -31,10 +37,29 @@ export const isSocial = (host) => SOCIAL.some((d) => onHost(String(host).toLower
 // Zernio is a publishing gateway, and it also has an inbox. Only these paths.
 const ZERNIO_FORBIDDEN = /inbox|message|comment|conversation|reply|repl(y|ies)|like|follow|dm\b|direct/i;
 
+// Meta's Graph API also reaches comments, DMs, mentions, hashtags and other
+// accounts. None of it, by name: not as an edge in the path, not as a field
+// expansion. Counts on our own posts (like_count, the "comments" insight metric)
+// are numbers, not the comments, and stay readable.
+const GRAPH = new Set(['graph.facebook.com', 'graph.instagram.com']);
+const GRAPH_EDGE = /^(comments|replies|mentions|mentioned_media|mentioned_comment|tags|conversations|messages|likes|subscribed_apps|live_media|stories|ig_hashtag_search|recently_searched_hashtags|top_media|recent_media|business_discovery|private_replies)$/i;
+const V = String.raw`\/v\d+\.\d+`;
+
+/** What a Graph request asks for that the engine never reads, or null. */
+export function graphRefusal(u) {
+  for (const seg of u.pathname.split('/')) if (GRAPH_EDGE.test(seg)) return seg;
+  for (const f of (u.searchParams.get('fields') || '').split(/[,{}().\s]/)) if (GRAPH_EDGE.test(f.trim())) return f.trim();
+  if (/business_discovery|mentioned_/i.test(decodeURIComponent(u.search))) return 'another account';
+  return null;
+}
+
 /** Every non-GET request the engine can make. Read top to bottom: that is all of it. */
 export const WRITE_RULES = [
   { method: 'POST', host: 'api.anthropic.com', path: /^\/v1\/messages$/, why: 'Claude: drafting, review, scoring' },
+  { method: 'POST', host: 'api.anthropic.com', path: /^\/v1\/messages\/batches$/, why: "Claude: the day's drafts as one batch, at half price" },
   { method: 'POST', host: 'zernio.com', path: /^\/api\/v1\/posts$/, why: 'Zernio: create a post on our own account' },
+  { method: 'POST', host: 'graph.facebook.com', path: new RegExp(`^${V}\\/\\d+\\/(media|media_publish)$`), why: 'Instagram (Facebook Login): a media container on our own account, and publishing it' },
+  { method: 'POST', host: 'graph.instagram.com', path: new RegExp(`^${V}\\/\\d+\\/(media|media_publish)$`), why: 'Instagram (Instagram Login): a media container on our own account, and publishing it' },
 ];
 
 /** Reads that are allowed even though the host is special. */
@@ -42,6 +67,9 @@ export const READ_RULES = [
   { host: 'www.googleapis.com', path: /^\/youtube\/v3\/(search|videos)$/, why: 'YouTube Data API: Shorts and their public counts, read only' },
   { host: 'zernio.com', path: /^\/api\/v1\/(posts\/[A-Za-z0-9_-]+|accounts|analytics)$/, why: 'Zernio: our own posts, accounts and analytics' },
   { host: 'i.ytimg.com', why: 'YouTube thumbnails' },
+  // A token reads only what it was granted: our own account, our own media.
+  { host: 'graph.facebook.com', path: new RegExp(`^${V}\\/(\\d+|\\d+\\/(insights|content_publishing_limit|media)|me|me\\/accounts|debug_token|oauth\\/access_token)$`), why: 'Instagram (Facebook Login): our account, our media and their insights, the quota, our token' },
+  { host: 'graph.instagram.com', path: new RegExp(`^(${V})?\\/(\\d+|\\d+\\/(insights|content_publishing_limit|media)|me|refresh_access_token|access_token)$`), why: 'Instagram (Instagram Login): our account, our media and their insights, the quota, refreshing our token' },
 ];
 
 export class NetError extends Error {
@@ -68,6 +96,8 @@ export function assertAllowed(method, url) {
   if (onHost(host, 'zernio.com') && ZERNIO_FORBIDDEN.test(u.pathname)) {
     throw new NetError(`refused ${m} ${host}${u.pathname}: the engine never touches an inbox, comments or messages`, { code: 'refused' });
   }
+  const asked = GRAPH.has(host) ? graphRefusal(u) : null;
+  if (asked) throw new NetError(`refused ${m} ${host}${u.pathname} (${asked}): the engine never reads comments, mentions, messages, hashtags or other accounts`, { code: 'refused' });
 
   if (m !== 'GET' && m !== 'HEAD') {
     const rule = WRITE_RULES.find((r) => r.method === m && r.host === host && r.path.test(u.pathname));
@@ -120,12 +150,14 @@ export async function doorFetch(input, init = {}) {
   throw new NetError(`too many redirects: ${url}`, { code: 'redirects' });
 }
 
-export async function getText(url, { accept, timeoutMs, headers = {}, maxBytes = 5_000_000 } = {}) {
+/** A text body. `encoding` reads a file that is not UTF-8 (some government CSVs are windows-1255). */
+export async function getText(url, { accept, timeoutMs, headers = {}, maxBytes = 5_000_000, encoding = null } = {}) {
   const res = await doorFetch(url, { headers: { accept: accept || 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8', ...headers }, timeoutMs });
   if (!res.ok) throw new NetError(`HTTP ${res.status}: ${url}`, { status: res.status, code: 'http' });
   const len = Number(res.headers.get('content-length') || 0);
   if (len > maxBytes) throw new NetError(`too large (${len} bytes): ${url}`, { code: 'too_large' });
-  return { body: await res.text(), finalUrl: res.finalUrl || url, contentType: res.headers.get('content-type') || '' };
+  const body = encoding ? new TextDecoder(encoding).decode(await res.arrayBuffer()) : await res.text();
+  return { body, finalUrl: res.finalUrl || url, contentType: res.headers.get('content-type') || '' };
 }
 
 export async function getJson(url, { headers = {}, timeoutMs } = {}) {
@@ -173,4 +205,26 @@ export async function getBytes(url, { maxBytes = 12_000_000, timeoutMs, headers 
   const buf = Buffer.from(await res.arrayBuffer());
   if (buf.length > maxBytes) throw new NetError(`too large (${buf.length} bytes): ${url}`, { code: 'too_large' });
   return { buf, type };
+}
+
+/** POST form-encoded parameters (Meta's Graph API takes them this way). Throws like postJson, with the body attached. */
+export async function postForm(url, params, { headers = {}, timeoutMs } = {}) {
+  const res = await doorFetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json', ...headers },
+    body: new URLSearchParams(params).toString(),
+    timeoutMs,
+  });
+  const text = await res.text();
+  let body = null;
+  try {
+    body = text ? JSON.parse(text) : null;
+  } catch {
+    /* the status says enough */
+  }
+  if (!res.ok || body?.error) {
+    const err = body?.error && typeof body.error === 'object' ? body.error : body;
+    throw Object.assign(new NetError(String(err?.message || `HTTP ${res.status}`).slice(0, 300), { status: res.status, code: err?.code ?? 'http' }), { body });
+  }
+  return body;
 }

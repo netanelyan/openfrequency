@@ -3,8 +3,9 @@
 One engine that runs several Hebrew social accounts, each in its own niche and
 each its own brand, mostly on its own. It reads approved sources, drafts
 slideshows grounded in quotes it can prove, checks them in code, renders them,
-and publishes them through Zernio after the approval each account's mode asks
-for. Its website, **Teder** (תדר), is where the owner approves, edits and steers.
+and publishes them after the approval each account's mode asks for: to TikTok
+through Zernio, to Instagram directly through Meta's own Graph API. It runs on a
+hard budget of $15 a month for every metered service but Zernio. Its website, **Teder** (תדר), is where the owner approves, edits and steers.
 
 <p align="center">
   <img src="docs/screenshots/today-phone.png" width="250" alt="Today, on a phone">
@@ -42,6 +43,11 @@ Nothing in it is real, and the Results page says so.
 | `npm run user:add -- <name>` | adds a website user (asks for the password) |
 | `npm run backup` | a consistent copy of the database into `$OF_HOME/data/backups` |
 | `npm run check:public` | fails if anything committed looks private (also a pre-commit hook) |
+| `npm run zernio:check [-- --pack <id> --send-private --confirm]` | checks the Zernio key and every pack's TikTok account id, and what Zernio will bill; with the flags, sends one private (SELF_ONLY) test post and reports whether the AI flag and the analytics work |
+| `npm run instagram:token -- --pack <id> --short <token>` | turns a short-lived Meta token into the pack's lasting one (see [Instagram](#instagram)) |
+| `npm run instagram:check [-- --pack <id> --publish --confirm]` | checks each Instagram pack's token, account, token expiry, quota and insights; publishes only with the flags |
+| `npm run live-day -- --confirm` | the one measurement that needs the Anthropic key: one day of posts for every account on real calls, in Approve mode, and what each really cost |
+| `npm run compare -- next|status|score` | the cost and quality comparison behind [docs/costs.md](docs/costs.md), answered by Claude Code, never the project's key |
 
 Requires Node 22.13 or newer (for `node:sqlite`); developed on 24.
 
@@ -52,10 +58,18 @@ Requires Node 22.13 or newer (for `node:sqlite`); developed on 24.
   website run exactly as they would live; a post's cost is an estimate and says so.
 - **Live** (`OF_MODE=live`, the default with a key): real sources, real Claude.
 
-Publishing is a separate, deliberate switch: a post leaves through Zernio only when
-`PUBLISH_MODE=live`, `ZERNIO_API_KEY` is set, and the pack's own `pack.json` says
-`"publisher": "zernio"`. Anything less writes the post and the exact Zernio request
-to disk with the dry publisher.
+Publishing is a separate, deliberate switch, per platform. Each pack names its
+publisher for each platform in `pack.json`:
+
+```json
+"publishers": { "tiktok": "zernio", "instagram": "instagram" }
+```
+
+A platform's post leaves only when `PUBLISH_MODE=live` and that publisher has
+what it needs (`ZERNIO_API_KEY` and the pack's Zernio account id; or the pack's
+Instagram token and account id). Anything less writes the post and the exact
+request to disk with the dry publisher. Changing a platform's publisher is a
+line in `pack.json`, no code.
 
 ## The private folder
 
@@ -101,12 +115,13 @@ A pack is a folder:
 
 | File | Holds |
 |---|---|
-| `pack.json` | id, display name, handle, platforms, Zernio profile and account ids, schedule (windows, slots, posts per day), autonomy mode, monthly budget, compliance checks, topics |
+| `pack.json` | id, display name, handle, platforms, the publisher per platform, Zernio profile and account ids, the Instagram account (`instagram.userId`, `auth`, `tokenEnv`), schedule (windows, slots, posts per day), autonomy mode, its weight in the budget (`budget.share`), compliance checks, topics |
 | `voice.md` | who is talking, to whom, how it sounds; `## שורות טובות` and `## שורות רעות` with examples |
 | `theme.json` | a template and variant from the engine's library, colours, fonts |
 | `sources.json` | approved sources only: type (`rss`, `web`, `api`), url, name, why it is trusted, when approved |
 | `formats.json` | post formats, hook patterns, closing lines, caption questions, hashtags, trend queries |
 | `rules.json` | banned phrases, regex checks, blocked image words, the maximum quote length |
+| `facts/` (optional) | hand-checked facts, one file per topic: each sentence exactly as on its page, the page, the day it was checked and the day it expires. For official sites the engine may not read; added and rechecked on the website (*Sources* > *עובדות שנבדקו ביד*) |
 
 Validation refuses a pack with weak contrast, a source without https or a reason to trust it, a money
 niche without the investment-advice check, and any two packs sharing a template, a
@@ -128,15 +143,15 @@ the whole trace.
 
 | Rule | Where |
 |---|---|
-| 1. Official APIs only; no likes, follows, comments, DMs or logged-in reading | `src/core/net.js` is the only `fetch`; its allowlist has two write endpoints (Claude, Zernio's create-post) and refuses Zernio's inbox by name. Tests scan the code for any other `fetch`, engagement functions and endpoints |
+| 1. Official APIs only; no likes, follows, comments, DMs or logged-in reading | `src/core/net.js` is the only `fetch`; its write allowlist is Claude (messages, batches), Zernio's create-post, and Meta's two publishing endpoints for an Instagram account; it refuses Zernio's inbox and every Graph edge for comments, mentions, tags, messages, hashtags and other accounts by name. Tests scan the code for any other `fetch`, engagement functions and endpoints |
 | 2. Each account a distinct brand | `src/packs/validate.js` (`validateAll`), and a cross-promotion check on every post |
 | 3. Honest by construction | `src/verify/claims.js`: every quote verbatim in a stored document of an approved source of that account; every number on a slide in its quotes; the renderer refuses text without the gate's token; `src/voice/honesty.js` refuses invented experience and fake badges or metrics |
-| 4. AI disclosure | `src/publish/zernio.js` sets TikTok's `video_made_with_ai` (as a draft for photo posts) and adds a caption line on Instagram |
+| 4. AI disclosure | `src/publish/zernio.js` sets TikTok's `video_made_with_ai` (as a draft for photo posts); `src/publish/instagram.js` adds a caption line on Instagram |
 | 5. Rights | `src/images/index.js`: Pexels, Unsplash, Commons only, licence stored, Commons licences on an allowlist, logos and crests refused; quotes are short facts (4 to 40 words) |
 | 6. No investment advice | `src/rules/compliance.js`, required for any money niche |
-| 7. Cost caps | `src/budget/ledger.js` guards every paid call against the account's and the global monthly cap |
+| 7. Cost caps | `src/budget/ledger.js`: every paid call reserves its worst case against `OF_BUDGET_MONTHLY_USD` and the account's share before it is made, and records its real cost from the API's usage after; `src/budget/plan.js` cuts volume, never quality, when the month runs short |
 | 8. Hebrew RTL | slides and every page are `lang="he" dir="rtl"` (tested) |
-| 9. Shabbat | `src/schedule/shabbat.js`, from the real sunset; the scheduler never plans a Shabbat slot and every publisher refuses one |
+| 9. Shabbat and the festivals | `src/schedule/shabbat.js` and `src/schedule/hebrew.js`: Shabbat and every yom tov (Rosh Hashana, Yom Kippur, the first and last days of Sukkot and Pesach, Shavuot) from candle lighting the evening before to nightfall, from the real sunset and the Hebrew calendar; the scheduler never plans such a slot and every publisher refuses one |
 | 10. Secrets | `.gitignore`, `check:public`, the pre-commit hook; `.env.example` lists every variable (tested) |
 
 ## Autonomy
@@ -152,31 +167,116 @@ on a failed fact check, a platform strike, a streak of publish errors, or an
 exhausted budget. A paused account says why. In Digest and Auto, a post the
 reviewer scored as sounding a little like a bot waits for the owner instead.
 
-The runner also reads each post's numbers through Zernio at 72 hours (TikTok:
-shares and likes per view; Instagram: saves per view; never a number the API did
-not give), keeps 70% of posts on proven formats and 30% on trials, drops a format
+The runner also reads each post's numbers at 72 hours (TikTok through Zernio:
+shares and likes per view; Instagram from Meta's own insights: saves per view, or
+per reach where Meta gives no views; never a number the API did not give), keeps 70% of posts on proven formats and 30% on trials, drops a format
 after three results in a row under 70% of the median, and once a week looks for
 formats that work on YouTube Shorts, copying the format and never the content.
 
+## The budget
+
+`OF_BUDGET_MONTHLY_USD` in `$OF_HOME/.env` ($15 by default) is a hard cap on every
+metered service the engine calls: Claude, Brave, the image APIs. Zernio is billed
+per connected account and is outside it (see [docs/costs.md](docs/costs.md)).
+
+- **Nothing can spend past it.** Every paid call first reserves the most it could
+  possibly cost (its prompt's bytes and its `max_tokens`, at the dearest rate it can
+  be billed at), against the cap and the account's share. When the answer comes
+  back, the reservation is replaced by the real cost from the usage the API
+  returned. Tested with worst-case bills, one at a time, at once and in batches.
+- **Each account has a share**, by its `budget.share` weight, after a small reserve
+  for onboarding.
+- **Volume, never quality.** Each day before drafting, the month is forecast at the
+  planned volume and the measured cost per post. If it does not fit, the weakest
+  account (by its results, else by how often you approved it) drops to one post a
+  day first, then the next. The money freed goes to the others. Every page says so.
+- **80%** spent: a warning on every page. **100%**: nothing is drafted until the
+  next month. Settings shows the spend, the forecast and the posts left.
+- **Cheap by design**: drafting on Claude Sonnet 5.5 through the Message Batches
+  API (half price) a day ahead, the pack's voice and rules as a cached prefix,
+  documents narrowed to their content, punctuation tells fixed in code, one
+  redraft at most, the review on Sonnet and a rewrite only for what it flags.
+  [docs/costs.md](docs/costs.md) has the measurements.
+
+## Instagram
+
+Instagram posts go out directly through Meta's official Graph API, free, as a
+carousel. Set it up once per account:
+
+1. **The account.** In the Instagram app, switch the account to a professional
+   account (business or creator), and link it to a Facebook Page you manage
+   (Settings > Account type and tools, or the Page's *Linked accounts*).
+2. **A Meta app.** At developers.facebook.com, create an app of type *Business*
+   and add the Instagram API with Facebook Login. As long as only people with a
+   role on the app (you) use it, Standard Access is enough: no App Review, no
+   business verification. Copy the app's id and secret (App settings > Basic) into
+   `$OF_HOME/.env` as `META_APP_ID` and `META_APP_SECRET`.
+3. **A short-lived token.** In the Graph API Explorer, pick the app, *Get User
+   Access Token*, and grant `instagram_basic`, `instagram_content_publish`,
+   `instagram_manage_insights`, `pages_show_list` and `pages_read_engagement`
+   (and `business_management` if the Page sits in a business portfolio).
+4. **The lasting token.** `npm run instagram:token -- --pack <id> --short <token>`.
+   The first time it lists your Pages and their Instagram accounts: put the
+   account's id in `pack.json` as `instagram.userId` and run it again. It
+   exchanges the token for a 60-day user token and from it takes the Page's token,
+   which does not expire, stores it for the pack, and prints the line for
+   `$OF_HOME/.env` (`IG_TOKEN_<PACK>`, or the name in `instagram.tokenEnv`).
+5. **The pack.** In `pack.json`: `"publishers": { "instagram": "instagram" }` and
+   `"instagram": { "userId": "...", "auth": "facebook" }`.
+6. **Check it.** `npm run instagram:check` says whether the token reaches the
+   account, when the token and Meta's data access expire, how much of the
+   publishing quota is left, and whether insights can be read. It publishes only
+   with `--publish --confirm`, and that post is public.
+
+**Refresh.** A Page token does not expire, but Meta ends a token's data access
+after 90 days without use; publishing and reading insights use it daily, and
+`instagram:check` shows the date. If it ever lapses, repeat steps 3 and 4. An
+account on *Instagram Login* instead (`"auth": "instagram"`, no Facebook Page) has a
+60-day token: the runner refreshes it once a day when 20 days or fewer are left,
+and keeps the new one in the database.
+
+Instagram fetches each slide from `MEDIA_PUBLIC_BASE_URL` (JPEG, 1080x1350), so
+that address must be live before the first post.
+
 ## Deploying
 
-On the VPS, behind Caddy, like any small Node service:
+On the VPS (Ubuntu 24.04 here), behind Caddy, like any small Node service. These
+steps are tested end to end in a clean container by `deploy/test/run.sh`.
 
-1. Clone this repo to `/opt/open-frequency` and your private repo into
-   `/opt/open-frequency/private`; `npm ci --omit=dev`;
-   `PLAYWRIGHT_BROWSERS_PATH=/opt/open-frequency/.browsers npx playwright install --with-deps chromium`.
-2. Fill `private/.env` (mode 600): at least `SESSION_SECRET`, `OF_ADMIN_USER`,
-   `OF_ADMIN_PASSWORD` (remove it after the first start), `PUBLIC_HOST`, and the keys
-   you have.
-3. `deploy/openfrequency.service` to `/etc/systemd/system/`, then
-   `systemctl enable --now openfrequency`. The daily backup:
-   `deploy/openfrequency-backup.{service,timer}`.
-4. Append `deploy/Caddyfile.example` to the Caddyfile (two names: the website, and
-   a media host that serves `private/data/public` for Zernio to fetch slides from;
-   set `MEDIA_PUBLIC_BASE_URL` to it), `caddy validate`, `systemctl reload caddy`.
+1. **Node 24 and Caddy**, from their own repositories:
+   ```bash
+   curl -fsSL https://deb.nodesource.com/setup_24.x | sudo bash - && sudo apt-get install -y nodejs
+   sudo apt-get install -y debian-keyring debian-archive-keyring apt-transport-https
+   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+   sudo apt-get update && sudo apt-get install -y caddy
+   ```
+2. **The service user, the two repositories, Chromium:**
+   ```bash
+   sudo useradd --system --create-home --home-dir /var/lib/openfrequency --shell /usr/sbin/nologin openfrequency
+   sudo git clone <this repo> /opt/open-frequency
+   sudo git clone <your private repo> /opt/open-frequency/private
+   cd /opt/open-frequency && sudo npm ci --omit=dev
+   sudo PLAYWRIGHT_BROWSERS_PATH=/opt/open-frequency/.browsers npx playwright install --with-deps chromium
+   sudo mkdir -p private/data && sudo chown -R openfrequency:openfrequency private
+   ```
+3. **`private/.env`**, owned by `openfrequency`, mode 600: at least
+   `SESSION_SECRET` (`openssl rand -hex 32`), `OF_ADMIN_USER`, `OF_ADMIN_PASSWORD`
+   (remove it after the first start), `PUBLIC_HOST`, `MEDIA_PUBLIC_BASE_URL`,
+   `OF_BUDGET_MONTHLY_USD`, and the keys you have.
+4. **The service:** `sudo cp deploy/openfrequency.service /etc/systemd/system/`,
+   `sudo systemctl daemon-reload`, `sudo systemctl enable --now openfrequency`.
+   `curl -H 'Host: 127.0.0.1:4700' http://127.0.0.1:4700/healthz` says `ok`.
+5. **Caddy:** append `deploy/Caddyfile.example` to `/etc/caddy/Caddyfile` with your
+   two names (the website, and the media host that serves `private/data/public`
+   for Zernio and Instagram to fetch slides from; `MEDIA_PUBLIC_BASE_URL` is that
+   one), `caddy validate --config /etc/caddy/Caddyfile`, `sudo systemctl reload caddy`.
+6. **The nightly backup:** copy `deploy/openfrequency-backup.{service,timer}` to
+   `/etc/systemd/system/`, `sudo systemctl daemon-reload`,
+   `sudo systemctl enable --now openfrequency-backup.timer`.
 
 Updating: `git pull` in both checkouts, `npm ci --omit=dev`,
-`systemctl restart openfrequency`.
+`sudo systemctl restart openfrequency`.
 
 ## Configuration
 
@@ -190,17 +290,17 @@ never their values.
 src/core        paths ($OF_HOME), env, clock, the network door, settings and audit
 src/db          SQLite (node:sqlite), the schema
 src/packs       loading and validating packs
-src/schedule    Israel's clock, sunset, Shabbat, slots
-src/sources     RSS/Atom, web pages, JSON and Wikidata APIs, recordings
-src/llm         Claude (official SDK, through the network door), recorded client, cost
-src/budget      the monthly ledger and its guard
+src/schedule    Israel's clock, sunset, Shabbat, the Hebrew calendar and its festivals, slots
+src/sources     RSS/Atom, web pages, JSON, CSV, CKAN (data.gov.il) and Wikidata APIs, hand-checked facts, recordings
+src/llm         Claude (official SDK, through the network door), the batcher, recorded client, cost
+src/budget      the monthly ledger, its reservations and guard, the month's plan
 src/voice       Hebrew tells, honesty, the bot-score reviewer
 src/verify      facts against stored documents, the pre-render gate
 src/rules       pack rules, cross-promotion, Israeli investment-advice compliance
 src/images      licensed photographs
 src/render      fonts, five templates with two variants each, Chromium
 src/pipeline    one post from topic to queue; export to disk
-src/publish     dry and Zernio
+src/publish     dry, Zernio (TikTok), Instagram (Meta's Graph API)
 src/metrics     reading numbers, crediting formats
 src/formats     the 70/30 rotation and the judge
 src/trends      YouTube Shorts formats
@@ -210,7 +310,7 @@ src/web         the website: server, login, pages, actions, one stylesheet, one 
 examples/       the fictional demo pack, and the blank pack template
 scripts/        dry, web, demo, record, screenshots, init-private, check-public, backup
 test/           node:test, one file per area
-deploy/         systemd units, Caddyfile example
+deploy/         systemd units, Caddyfile example, deploy/test: the steps in a clean container
 docs/           PLAN, decisions, session log, screenshots, REPORT
 ```
 

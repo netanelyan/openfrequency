@@ -8,7 +8,7 @@ import { PAUSE_REASONS } from '../autonomy/rails.js';
 
 const REJECT_REASONS = ['לא מעניין', 'טעות בעובדה', 'הקול לא נכון', 'נושא שכבר היה', 'העיצוב לא עובד'];
 const STEP_HE = {
-  format: 'פורמט', topic: 'בחירת נושא', outline: 'מתווה ועובדות', facts: 'אימות עובדות', slides: 'כתיבת שקפים', redraft: 'כתיבה מחדש', review: 'בדיקת "נשמע כמו בוט"', verify: 'שער העובדות',
+  format: 'פורמט', topic: 'בחירת נושא', outline: 'מתווה ועובדות', facts: 'אימות עובדות', slides: 'כתיבת שקפים', redraft: 'כתיבה מחדש', rewrite: 'שכתוב מה שנשמע כמו בוט', review: 'בדיקת "נשמע כמו בוט"', verify: 'שער העובדות',
   image: 'תמונה', render: 'רינדור', queue: 'לתור', publish: 'פרסום', blocked: 'נחסם', error: 'שגיאה', edit: 'עריכה',
 };
 const PLATFORM_HE = { tiktok: 'טיקטוק', instagram: 'אינסטגרם' };
@@ -17,7 +17,7 @@ const AUDIT_HE = {
   login: 'כניסה', approve: 'אישור פוסט', unapprove: 'ביטול אישור', reject: 'דחיית פוסט', edit: 'עריכה', publish_now: 'פרסום ידני', published: 'פורסם', publish_failed: 'פרסום נכשל',
   auto_approved: 'אושר אוטומטית', mode: 'שינוי מצב', pause: 'השהיה', resume: 'חידוש', global_kill_on: 'כיבוי כללי', global_kill_off: 'הפעלה מחדש', global_budget: 'תקציב כללי',
   generate_at: 'שעת ייצור', source_approved: 'מקור אושר', source_removed: 'מקור הוסר', source_added: 'מקור נוסף', user_added: 'משתמש נוסף',
-  format_dropped: 'פורמט נשר', format_promoted: 'פורמט הוכח', format_returned: 'פורמט חזר', onboarding: 'חשבון חדש', went_live: 'חשבון עלה לאוויר',
+  publish_retry: 'פרסום יחזור על עצמו', fact_added: 'עובדה נוספה', fact_confirmed: 'עובדה נבדקה שוב', fact_removed: 'עובדה הוסרה', format_dropped: 'פורמט נשר', format_promoted: 'פורמט הוכח', format_returned: 'פורמט חזר', onboarding: 'חשבון חדש', went_live: 'חשבון עלה לאוויר',
 };
 
 const media = (post, platform, i) => `/media/${encodeURIComponent(post.id)}/${platform}/${i}?v=${encodeURIComponent(String(post.updated_at || '').replace(/D/g, '').slice(-10))}`;
@@ -101,7 +101,7 @@ export function todayPage(ctx, d) {
   if (ctx.globalKill) banners.push(`<div class="banner bad">${icon('power')}<div><b>מתג הכיבוי הכללי מופעל.</b><p>שום חשבון לא מייצר ולא מפרסם.</p></div>${postButton(ctx, '/settings/kill', 'הפעל מחדש', { cls: 'btn sm', fields: { on: '0' } })}</div>`);
   for (const g of d.groups) {
     if (g.acc?.status === 'paused') banners.push(`<div class="banner warn">${icon('alert')}<div><b>${esc(g.pack.meta.displayName)} מושהה: ${esc(PAUSE_REASONS[g.acc.paused_reason] || g.acc.paused_reason)}</b>${g.acc.paused_detail ? `<p>${esc(g.acc.paused_detail)}</p>` : ''}</div><a class="btn sm" href="/accounts#acc-${esc(g.pack.id)}">לחשבון</a></div>`);
-    else if (g.reached) banners.push(`<div class="banner warn">${icon('alert')}<div><b>${esc(g.pack.meta.displayName)}: התקציב החודשי נגמר.</b><p>לא נכתבים פוסטים חדשים עד החודש הבא או עד שהתקציב יוגדל.</p></div></div>`);
+    else if (g.reached) banners.push(`<div class="banner warn">${icon('alert')}<div><b>${esc(g.pack.meta.displayName)}: הנתח שלו מהתקציב נגמר.</b><p>לא נכתבים בו פוסטים חדשים עד שהתוכנית החודשית מפנה לו כסף, או עד החודש הבא.</p></div></div>`);
   }
   const body = `<div class="head"><h1>היום</h1><span class="sub">${esc(dayHe(Date.now()))}</span></div>
 ${banners.join('')}
@@ -110,7 +110,7 @@ ${d.groups
   .map((g) => {
     const mode = MODE_HE[g.acc?.mode || 'approve'];
     const posts = [...g.waiting, ...g.scheduled];
-    return `<section class="group" aria-labelledby="g-${esc(g.pack.id)}"><header>${accDot(g.pack.id)}<h2 id="g-${esc(g.pack.id)}">${esc(g.pack.meta.displayName)}</h2><span class="handle ltr">@${esc(g.pack.meta.handle)}</span><span class="end"><span class="chip ghost">${esc(mode[0])}</span></span></header>
+    return `<section class="group" aria-labelledby="g-${esc(g.pack.id)}"><header>${accDot(g.pack.id)}<h2 id="g-${esc(g.pack.id)}">${esc(g.pack.meta.displayName)}</h2><span class="handle ltr">@${esc(g.pack.meta.handle)}</span><span class="end">${g.plan?.cut ? `<span class="chip warn" title="התקציב קצר החודש">${g.plan.perDay} ביום</span> ` : ''}<span class="chip ghost">${esc(mode[0])}</span></span></header>
 ${posts.length ? `<div class="posts">${posts.map((p) => postCard(ctx, p, g.pack)).join('')}</div>` : `<div class="empty">${icon('inbox')}<b>אין כאן מה לאשר</b>${g.acc?.status === 'paused' ? 'החשבון מושהה.' : 'הפוסטים של היום ייווצרו בשעת הייצור, או שכבר טופלו.'}</div>`}
 ${g.blocked.length ? `<details class="facts"><summary>${icon('shield')}נחסמו היום בבדיקות <span class="chip bad">${g.blocked.length}</span><span class="chev">${icon('chev')}</span></summary><ul class="factlist">${g.blocked.map((b) => `<li><a href="/post/${esc(b.id)}"><b>${esc(b.hook || b.topic || 'בלי כותרת')}</b></a><div class="muted small">${esc(b.reason)}</div></li>`).join('')}</ul></details>` : ''}
 ${g.published.length ? `<details class="facts"><summary>${icon('check')}פורסמו היום <span class="chip ok">${g.published.length}</span><span class="chev">${icon('chev')}</span></summary><ul class="factlist">${g.published.map((b) => `<li><a href="/post/${esc(b.id)}">${esc(b.hook)}</a> <span class="muted small num">${esc(timeHe(b.published_at))}</span></li>`).join('')}</ul></details>` : ''}
@@ -192,7 +192,7 @@ ${d.metrics.length ? d.metrics.slice(0, 2).map((m) => `<dt>${esc(PLATFORM_HE[m.p
 export function accountsPage(ctx, rows) {
   const body = `<div class="head"><h1>חשבונות</h1><span class="sub">${rows.length} חשבונות, כל אחד מותג משלו</span><span class="end"><a class="btn sm" href="/new">${icon('plus')}חשבון חדש</a></span></div>
 <div class="accounts">${rows
-    .map(({ pack, acc, spend, cap, week }) => {
+    .map(({ pack, acc, spend, cap, plan, publishers, week }) => {
       const paused = acc.status === 'paused';
       const max = Math.max(1, ...week.days.map((x) => x.n));
       const h = (n) => (n === 0 ? 'h0' : `h${Math.max(1, Math.min(4, Math.ceil((n / max) * 4)))}`);
@@ -202,10 +202,10 @@ ${paused ? `<div class="paused${acc.paused_reason === 'kill' ? ' kill' : ''}">${
 <form method="post" action="/accounts/${esc(pack.id)}/mode" data-autosubmit>${csrfField(ctx)}<div class="seg" role="radiogroup" aria-label="מצב אוטונומיה">${['approve', 'digest', 'auto']
         .map((m) => `<input type="radio" name="mode" value="${m}" id="m-${esc(pack.id)}-${m}"${acc.mode === m ? ' checked' : ''}><label for="m-${esc(pack.id)}-${m}">${MODE_HE[m][0]}<small>${MODE_HE[m][1]}</small></label>`)
         .join('')}</div><noscript><button class="btn sm" type="submit">שמור</button></noscript></form>
-<div><div class="row"><span>תקציב החודש</span><b class="ltr">$${spend.toFixed(2)} / $${cap}</b></div><meter min="0" max="${cap || 1}" low="${(cap || 1) * 0.7}" high="${(cap || 1) * 0.9}" optimum="0" value="${Math.min(spend, cap || 1)}"></meter></div>
+<div><div class="row"><span>הנתח מהתקציב</span><b class="ltr">$${spend.toFixed(2)} / $${cap.toFixed(2)}</b></div><meter min="0" max="${cap || 1}" low="${(cap || 1) * 0.7}" high="${(cap || 1) * 0.9}" optimum="0" value="${Math.min(spend, cap || 1)}"></meter>${plan?.cut ? `<p class="small m4"><span class="chip warn">פוסט ${plan.perDay === 1 ? 'אחד' : plan.perDay} ביום במקום ${plan.planned}</span> התקציב קצר החודש, וזה החשבון שמצמצם ראשון.</p>` : ''}</div>
 <div><div class="row"><span>7 הימים האחרונים</span><b>${week.days.reduce((s, x) => s + x.n, 0)} פורסמו${week.views != null ? ` · ${k(week.views)} צפיות` : ''}</b></div>
 <div class="week" aria-label="פוסטים שפורסמו בכל יום">${week.days.map((x) => `<span title="${esc(shortDate(x.at))}: ${x.n}"><i class="${h(x.n)}"></i>${esc(weekdayNarrow(x.at))}</span>`).join('')}</div></div>
-<dl class="kv"><dt>בתור</dt><dd>${week.counts.queued || 0} ממתינים · ${week.counts.approved || 0} מאושרים</dd><dt>נחסמו השבוע</dt><dd>${week.counts.blocked || 0}</dd><dt>פרסום</dt><dd>${pack.meta.publisher === 'zernio' ? 'Zernio' : 'יבש (לדיסק)'}</dd></dl>
+<dl class="kv"><dt>בתור</dt><dd>${week.counts.queued || 0} ממתינים · ${week.counts.approved || 0} מאושרים</dd><dt>נחסמו השבוע</dt><dd>${week.counts.blocked || 0}</dd><dt>פרסום</dt><dd>${publishers.map((x) => `${PLATFORM_HE[x.platform] || x.platform}: ${publisherHe(x)}`).join(' · ')}</dd></dl>
 <div class="actions p0">${!paused ? postButton(ctx, `/accounts/${pack.id}/kill`, `${icon('power')}כבה את החשבון`, { cls: 'btn danger', confirm: 'בטוח? לחצו שוב לכיבוי' }) : ''}<a class="btn" href="/sources?account=${esc(pack.id)}">מקורות</a></div>
 </article>`;
     })
@@ -260,7 +260,7 @@ export function sourcesPage(ctx, { packs, current, sources, form = {}, problems 
 <div class="actions pt10 p0x">${s.status !== 'approved' ? postButton(ctx, `/sources/${s.id}/approve`, 'אשר', { cls: 'btn sm primary' }) : ''}${s.status !== 'removed' ? postButton(ctx, `/sources/${s.id}/remove`, 'הסר', { cls: 'btn sm danger', confirm: 'להסיר את המקור?' }) : ''}</div></article>`;
     })
     .join('');
-  const body = `<div class="head"><h1>מקורות</h1><span class="sub">רק מקור מאושר יכול לתמוך בעובדה</span></div>
+  const body = `<div class="head"><h1>מקורות</h1><span class="sub">רק מקור מאושר יכול לתמוך בעובדה</span><span class="end"><a class="btn sm" href="/facts?account=${esc(current.id)}">${icon('shield')}עובדות שנבדקו ביד</a></span></div>
 ${tabs}
 <p class="lede">עובדה בשקף חייבת ציטוט ממסמך של מקור מאושר של החשבון. מקור שמוסר כאן מפסיק לתמוך בכל פוסט שעוד לא פורסם, והפוסט ייחסם בבדיקה שלפני הפרסום.</p>
 <div class="cols"><div class="grid12">${list || `<div class="empty"><b>אין מקורות</b></div>`}</div>
@@ -277,6 +277,40 @@ ${problems.length ? `<div class="problems"><ul>${problems.map((p) => `<li>${esc(
 
 /* ------------------------------------------------------------ settings */
 
+const VIA_HE = { zernio: 'Zernio', instagram: 'ישירות דרך Meta', dry: 'יבש (לדיסק)' };
+/** One platform's publisher, and why it is dry when the pack asked for more. */
+function publisherHe({ wants, via }) {
+  if (via === wants || wants === 'dry') return VIA_HE[via] || via;
+  const why = process.env.PUBLISH_MODE !== 'live' ? 'PUBLISH_MODE לא live' : wants === 'zernio' ? 'חסר ZERNIO_API_KEY' : 'חסר אסימון או instagram.userId';
+  return `${VIA_HE[via]} (מוגדר ל${VIA_HE[wants] === 'Zernio' ? '-Zernio' : `${VIA_HE[wants]}`}, ${why})`;
+}
+
+const BASIS_HE = { results: 'לפי התוצאות', approval: 'לפי שיעור האישורים', none: 'אין עוד נתונים' };
+const LEVEL_HE = { ok: ['בתוך התקציב', 'ok'], short: ['התחזית מעל התקציב גם אחרי צמצום', 'warn'], warn: ['מעל 80%', 'warn'], stop: ['נגמר: אין כתיבה עד החודש הבא', 'bad'] };
+
+/** The month against the cap: spent, held, forecast, posts left, and each account's share and volume. */
+export function budgetPanel(ctx, d) {
+  const p = d.plan;
+  const [lvl, cls] = LEVEL_HE[p.level] || [p.level, ''];
+  // Only a value that lowers the cap is in force (globalCap), so only that one is shown: an older, higher setting reads as 0.
+  const set = Number(d.settings.globalBudgetUsd) || 0;
+  const lower = set > 0 && set < d.envCap ? set : 0;
+  const capUsd = usd(d.envCap, Number.isInteger(d.envCap) ? 0 : 2);
+  const rows = p.accounts
+    .map(
+      (a) =>
+        `<tr><td class="title" data-k="">${accDot(a.id)} ${esc(a.name)}</td><td class="n" data-k="נתח">${usd(a.alloc)}</td><td class="n" data-k="הוצאה">${usd(a.spent, 3)}${a.reserved ? ` <span class="muted small">+${usd(a.reserved, 3)} שמור</span>` : ''}</td><td class="n" data-k="לפוסט">${usd(a.costPerPost, 3)}<span class="muted small"> ${a.measured ? 'נמדד' : 'הערכה'}</span></td><td class="n" data-k="ביום">${a.cut ? `<span class="chip warn">${a.perDay} במקום ${a.planned}</span>` : a.perDay}</td><td class="n" data-k="נשארו החודש">${a.remainingPosts}</td><td data-k="חוזק">${esc(BASIS_HE[a.basis])}${a.strength != null ? ` · ${a.strength.toFixed(2)}` : ''}</td></tr>`
+    )
+    .join('');
+  return `<section class="panel" id="budget"><header><h2>תקציב חודשי</h2><span class="end"><span class="chip ${cls}">${esc(lvl)}</span></span></header>
+<div class="row spread"><span>הוצאה ב-${esc(p.month)}</span><b class="ltr num">$${p.spent.toFixed(2)} / $${p.cap}</b></div>
+<meter min="0" max="${p.cap || 1}" low="${(p.cap || 1) * 0.7}" high="${(p.cap || 1) * 0.8}" optimum="0" value="${Math.min(p.spent, p.cap || 1)}"></meter>
+<dl class="kv mt12"><dt>תחזית לסוף החודש</dt><dd>${usd(p.forecast)}</dd><dt>שמור לקריאות שעוד רצות</dt><dd>${usd(p.reserved, 3)}</dd><dt>נשאר</dt><dd>${usd(p.left)} · בערך ${p.postsLeft} פוסטים, ב-${usd(p.costPerPost, 3)} לפוסט</dd></dl>
+<table class="table stack mt12"><thead><tr><th>חשבון</th><th>נתח</th><th>הוצאה</th><th>לפוסט</th><th>ביום</th><th>נשארו החודש</th><th>חוזק</th></tr></thead><tbody>${rows}</tbody></table>
+<p class="muted small">התקרה היא <code class="ltr">OF_BUDGET_MONTHLY_USD</code> ב-<code class="ltr">.env</code> (${capUsd}), לכל שירות בתשלום חוץ מ-Zernio. כל קריאה שומרת קודם את המחיר הגבוה ביותר שהיא יכולה לעלות, ולכן שום דבר לא עובר את התקרה. כשהתחזית עוברת אותה, החשבון החלש ביותר יורד לפוסט אחד ביום, ואחריו הבא. ב-80% מופיעה אזהרה, וב-100% שום פוסט לא נכתב עד החודש הבא.</p>
+<form method="post" action="/settings/budget" class="formgrid mt12">${csrfField(ctx)}<label class="f">תקרה נמוכה יותר לחודש הזה <small>עד ${capUsd}; 0 חוזר לתקרה מ-<code class="ltr">.env</code></small><input type="number" name="budget" min="0" max="${d.envCap}" step="0.5" value="${esc(lower)}"></label><button class="btn" type="submit">שמור</button></form></section>`;
+}
+
 export function settingsPage(ctx, d) {
   const s = d.settings;
   const body = `<div class="head"><h1>הגדרות</h1></div>
@@ -286,19 +320,15 @@ export function settingsPage(ctx, d) {
 <p class="muted">עוצר את כל החשבונות מיד: שום פוסט לא נכתב ושום פוסט לא מתפרסם עד שמכבים אותו.</p>
 ${s.globalKill ? postButton(ctx, '/settings/kill', 'הפעל את המערכת מחדש', { cls: 'btn primary', fields: { on: '0' } }) : postButton(ctx, '/settings/kill', `${icon('power')}עצור הכל`, { cls: 'btn danger', fields: { on: '1' }, confirm: 'בטוח? לחצו שוב לעצירה' })}
 </section>
-<section class="panel" id="budget"><header><h2>תקציב חודשי כללי</h2></header>
-<div class="row spread"><span>הוצאה ב-${esc(d.month)}</span><b class="ltr num">$${d.spend.usd.toFixed(2)} / $${s.globalBudgetUsd}</b></div>
-<meter min="0" max="${s.globalBudgetUsd || 1}" low="${(s.globalBudgetUsd || 1) * 0.7}" high="${(s.globalBudgetUsd || 1) * 0.9}" optimum="0" value="${Math.min(d.spend.usd, s.globalBudgetUsd || 1)}"></meter>
-<ul class="factlist mt12">${d.perAccount.map((r) => `<li>${accDot(r.pack.id)} ${esc(r.pack.meta.displayName)} <span class="muted ltr num">$${r.spend.toFixed(2)} / $${r.cap}</span>${r.reached ? ' <span class="chip bad">נגמר</span>' : ''}</li>`).join('')}</ul>
-<form method="post" action="/settings/budget" class="formgrid mt12">${csrfField(ctx)}<label class="f">תקציב כללי בדולרים לחודש<input type="number" name="budget" min="1" max="5000" step="1" value="${esc(s.globalBudgetUsd)}"></label><button class="btn" type="submit">שמור</button></form>
-<p class="muted small">התקציב של כל חשבון מוגדר בקובץ pack.json שלו. כשאחד מהם נגמר, החשבון מושהה עד החודש הבא.</p></section>
+${budgetPanel(ctx, d)}
 <section class="panel"><header><h2>שעת ייצור יומית</h2></header><form method="post" action="/settings/generate-at" class="formgrid">${csrfField(ctx)}<label class="f">שעה (שעון ישראל)<input type="text" name="at" value="${esc(s.generateAt)}" pattern="[0-2][0-9]:[0-5][0-9]" dir="ltr"></label><button class="btn" type="submit">שמור</button></form></section>
 </div>
 <div>
 <section class="panel"><header><h2>מפתחות</h2><span class="end muted small">רק אם הוגדר, אף פעם לא הערך</span></header><ul class="keys">${d.keys.map((x) => `<li>${x.set ? `<span class="chip ok">${icon('check')}מוגדר</span>` : '<span class="chip ghost">חסר</span>'}<div><code>${esc(x.name)}</code><div class="muted small">${esc(x.he || x.what)}</div></div></li>`).join('')}</ul></section>
 <section class="panel"><header><h2>מצב המנוע</h2></header><dl class="kv"><dt>מקורות וכתיבה</dt><dd>${d.mode === 'live' ? '<span class="chip ok">חי</span> מקורות אמיתיים ו-Claude' : '<span class="chip warn">הקלטות</span> בלי רשת ובלי מפתח'}</dd>
 <dt>מתג פרסום חי</dt><dd>${d.liveSwitch ? '<span class="chip ok">PUBLISH_MODE=live</span>' : '<span class="chip ghost">כבוי: הכל יבש</span>'}</dd>
-${d.publishers.map((p) => `<dt>${esc(p.name)}</dt><dd>${p.via === 'zernio' ? 'Zernio' : `יבש${p.wants === 'zernio' ? ' (מוגדר ל-Zernio, חסר מפתח או מתג)' : ''}`}</dd>`).join('')}</dl></section>
+${d.publishers.map((p) => `<dt>${esc(p.name)}</dt><dd>${p.platforms.map((x) => `${PLATFORM_HE[x.platform] || x.platform}: ${publisherHe(x)}`).join(' · ')}</dd>`).join('')}</dl></section>
+${d.instagram.length ? `<section class="panel"><header><h2>אינסטגרם ישירות (Meta Graph API)</h2></header><ul class="factlist">${d.instagram.map((x) => `<li>${accDot(x.id)} <b>${esc(x.name)}</b> ${x.configured ? '<span class="chip ok">מחובר</span>' : `<span class="chip ghost">חסר ${!x.userId ? 'instagram.userId ב-pack.json' : `<code class="ltr">${esc(x.tokenEnv)}</code>`}</span>`} <span class="muted small">${x.auth === 'instagram' ? 'Instagram Login' : 'Facebook Login (עמוד פייסבוק)'}${x.daysLeft != null ? ` · האסימון בתוקף עוד ${x.daysLeft} ימים` : ''}</span></li>`).join('')}</ul><p class="muted small">בדיקה מלאה של האסימון, החשבון ונתוני ה-insights: <code class="ltr">npm run instagram:check</code></p></section>` : ''}
 <section class="panel"><header><h2>משתמשים</h2></header><ul class="factlist">${d.users.map((u) => `<li><b>${esc(u.name)}</b> <span class="chip ghost">${esc(ROLE_HE[u.role] || u.role)}</span> <span class="muted small">${u.last_login_at ? `נכנס ${esc(stamp(u.last_login_at))}` : ''}</span></li>`).join('')}</ul><p class="muted small">משתמש נוסף: <code class="ltr">npm run user:add -- name</code></p></section>
 <section class="panel"><header><h2>יומן פעולות</h2></header><ol class="trace">${d.audit.map((a) => `<li class="ok"><b>${esc(AUDIT_HE[a.action] || a.action)}</b> <span class="muted small">${esc(a.actor)} · ${esc(stamp(a.at))}${a.account_id ? ` · ${esc(a.account_id)}` : ''}</span></li>`).join('')}</ol></section>
 </div></div>`;
@@ -325,4 +355,41 @@ ${error ? `<div class="err" role="alert">${esc(error)}</div>` : ''}
 
 export function notFoundPage(ctx) {
   return layout({ ...ctx, title: 'לא נמצא', active: '' }, `<div class="empty mt30">${icon('alert')}<b>הדף לא נמצא</b><a href="/">חזרה להיום</a></div>`);
+}
+
+/* ------------------------------------------------------------ hand-checked facts */
+
+const FACT_STATE = { valid: ['בתוקף', 'ok'], soon: ['פג בקרוב', 'warn'], expired: ['פג: לא בשימוש', 'bad'] };
+
+export function factsPage(ctx, { packs, current, topics, today, nextYear, form = {}, problems = [] }) {
+  const tabs = `<nav class="tabs" aria-label="חשבונות">${packs.map((p) => `<a href="/facts?account=${esc(p.id)}"${p.id === current.id ? ' aria-current="true"' : ''}>${accDot(p.id)}${esc(p.meta.displayName)}</a>`).join('')}</nav>`;
+  const list = topics
+    .map(
+      (t) => `<section class="panel"><header><h2 dir="auto">${esc(t.topic)}</h2><span class="end muted small">${t.facts.length} עובדות</span></header>${t.facts.length ? `<ul class="factlist">${t.facts
+        .map((f) => {
+          const [he, cls] = FACT_STATE[f.state] || [f.state, ''];
+          return `<li><div class="meta p0"><span class="chip ${cls}">${esc(he)}</span>${f.checkedBy === 'claude' ? '<span class="chip warn" title="הועתק מהעמוד, עוד לא נבדק על ידיך">נבדק על ידי Claude</span>' : ''}<span class="end muted small">נבדק ${esc(f.checkedAt)} · עד ${esc(f.expires)}</span></div>
+<blockquote dir="auto">${esc(f.quote)}</blockquote><a class="small" href="${esc(f.url)}" target="_blank" rel="noopener noreferrer" dir="auto">${esc(f.source)}</a>${f.note ? `<p class="muted small m4" dir="auto">${esc(f.note)}</p>` : ''}
+${f.problems.length ? `<div class="problems"><ul>${f.problems.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
+<div class="actions pt10 p0x"><form method="post" action="/facts/confirm" class="inline">${csrfField(ctx)}<input type="hidden" name="account" value="${esc(current.id)}"><input type="hidden" name="topic" value="${esc(t.topic)}"><input type="hidden" name="id" value="${esc(f.id)}"><label class="small">בתוקף עד <input type="date" name="expires" value="${esc(f.expires > today ? f.expires : nextYear)}" dir="ltr"></label><button class="btn sm primary" type="submit">${icon('check')}בדקתי שוב היום</button></form>${postButton(ctx, '/facts/remove', 'הסר', { cls: 'btn sm danger', confirm: 'להסיר את העובדה?', fields: { account: current.id, topic: t.topic, id: f.id } })}</div></li>`;
+        })
+        .join('')}</ul>` : '<p class="muted">אין עובדות בנושא הזה.</p>'}</section>`
+    )
+    .join('');
+  const body = `<div class="head"><h1>עובדות שנבדקו ביד</h1><span class="sub">מה שקראתם באתר שהמנוע לא קורא</span></div>
+${tabs}
+<p class="lede">חלק מהאתרים הרשמיים (כל זכות, gov.il) חוסמים קוראים אוטומטיים, והמנוע לא עוקף את זה. כאן אתם כותבים עובדה שקראתם בעצמכם: המשפט מילה במילה, העמוד, היום שבדקתם, ועד מתי היא בתוקף. אחרי תאריך התפוגה העובדה לא משמשת אף פוסט עד שתבדקו אותה שוב, ופוסט שנכתב ממנה ועוד לא פורסם ייחסם.</p>
+<div class="cols"><div>${list || '<div class="empty"><b>עוד אין עובדות לחשבון הזה</b>הראשונה תיצור את התיקייה <code class="ltr">facts/</code> בחבילה שלו.</div>'}</div>
+<section class="panel"><header><h2>עובדה חדשה</h2></header>
+${problems.length ? `<div class="problems"><ul>${problems.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
+<form method="post" action="/facts/add" class="formgrid">${csrfField(ctx)}<input type="hidden" name="account" value="${esc(current.id)}">
+<label class="f">נושא <small>עובדות באותו נושא נכתבות יחד לפוסט אחד</small><input type="text" name="topic" required maxlength="60" list="topics" value="${esc(form.topic || '')}"><datalist id="topics">${topics.map((t) => `<option value="${esc(t.topic)}">`).join('')}</datalist></label>
+<label class="f">המשפט, מילה במילה <small>4 עד 40 מילים, בדיוק כמו בעמוד, בלי שלוש נקודות</small><textarea name="quote" required rows="3">${esc(form.quote || '')}</textarea></label>
+<label class="f">שם המקור<input type="text" name="source" required maxlength="80" value="${esc(form.source || '')}" placeholder="כל זכות"></label>
+<label class="f">כתובת העמוד<input type="url" name="url" required dir="ltr" value="${esc(form.url || '')}"></label>
+<label class="f">נבדק ב<input type="date" name="checkedAt" required dir="ltr" value="${esc(form.checkedAt || today)}"></label>
+<label class="f">בתוקף עד <small>אחרי התאריך הזה היא לא בשימוש עד שתבדקו שוב; עד שנתיים</small><input type="date" name="expires" required dir="ltr" value="${esc(form.expires || nextYear)}"></label>
+<label class="f">הערה <small>לא חובה</small><input type="text" name="note" maxlength="200" value="${esc(form.note || '')}"></label>
+<button class="btn primary" type="submit">${icon('plus')}הוסף עובדה</button></form></section></div>`;
+  return layout({ ...ctx, title: 'עובדות שנבדקו ביד', active: 'sources' }, body);
 }

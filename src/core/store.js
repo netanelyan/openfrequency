@@ -30,7 +30,8 @@ export function step(db, postId, name, status, detail = null, costUsd = 0) {
 /** Global defaults, overridable from the website. */
 export const DEFAULT_SETTINGS = {
   globalKill: false,
-  globalBudgetUsd: 60,
+  // 0: the cap is OF_BUDGET_MONTHLY_USD. The website can set a lower one, never a higher one.
+  globalBudgetUsd: 0,
   publishErrorStreak: 3,
   generateAt: '07:00',
 };
@@ -39,4 +40,22 @@ export function settings(db) {
   const out = { ...DEFAULT_SETTINGS };
   for (const k of Object.keys(DEFAULT_SETTINGS)) out[k] = getSetting(db, k, DEFAULT_SETTINGS[k]);
   return out;
+}
+
+/**
+ * A paid or quota-limited lookup (a Brave search, a YouTube search), answered
+ * from the `lookups` table while it is younger than `days`. Returns { value, cached }.
+ */
+export async function cachedLookup(db, key, days, fn) {
+  const row = db.get('SELECT value_json, expires_at FROM lookups WHERE key = ?', key);
+  if (row && row.expires_at > nowIso()) return { value: j(row.value_json, null), cached: true };
+  const value = await fn();
+  db.run(
+    'INSERT INTO lookups (key, value_json, at, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, at = excluded.at, expires_at = excluded.expires_at',
+    key,
+    JSON.stringify(value),
+    nowIso(),
+    new Date(Date.parse(nowIso()) + days * 86_400_000).toISOString()
+  );
+  return { value, cached: false };
 }

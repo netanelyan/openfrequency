@@ -4,7 +4,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { assetsDir, dataDir } from '../core/paths.js';
-import { nowIso } from '../core/clock.js';
+import { now, nowIso } from '../core/clock.js';
+import { addDays, israelDate } from '../schedule/israel.js';
 import { audit } from '../core/store.js';
 import { bootstrapOwner, checkPassword, clientIp, cookies, createLimiter, csrfFor, csrfOk, isHttps, makeSession, sessionCookie, sessionFrom, sessionSecret, sessionUser } from './auth.js';
 import * as data from './data.js';
@@ -67,6 +68,12 @@ function accountsCss(ctx) {
 
 const flash = (msg) => `of_flash=${encodeURIComponent(String(msg).slice(0, 200))}; Path=/; Max-Age=20; SameSite=Strict`;
 
+/** Today and a year from today, Israel time, for the facts form's defaults. */
+const factDates = () => {
+  const today = israelDate(now());
+  return { today, nextYear: addDays(today, 365) };
+};
+
 export function createHandler(ctx, { port, env = process.env, limiter = createLimiter(), failDelayMs = 400 } = {}) {
   const secret = sessionSecret(env);
   const publicHost = String(env.PUBLIC_HOST || '').trim().toLowerCase() || null;
@@ -89,6 +96,9 @@ export function createHandler(ctx, { port, env = process.env, limiter = createLi
     ['POST', /^\/sources\/(\d+)\/approve$/, (u, m, f) => act.sourceStatus(ctx, u, { id: m[1] }, f, 'approved')],
     ['POST', /^\/sources\/(\d+)\/remove$/, (u, m, f) => act.sourceStatus(ctx, u, { id: m[1] }, f, 'removed')],
     ['POST', /^\/sources\/add$/, (u, m, f) => act.addSource(ctx, u, {}, f)],
+    ['POST', /^\/facts\/add$/, (u, m, f) => act.addFact(ctx, u, {}, f)],
+    ['POST', /^\/facts\/confirm$/, (u, m, f) => act.confirmFact(ctx, u, {}, f)],
+    ['POST', /^\/facts\/remove$/, (u, m, f) => act.removeFactAction(ctx, u, {}, f)],
     ...onboardingRoutes(ctx),
   ];
 
@@ -163,6 +173,7 @@ export function createHandler(ctx, { port, env = process.env, limiter = createLi
           if (!m) continue;
           try {
             const r = await fn(user, m, form);
+            ctx._plan = null; // a change can move the budget plan: the next page computes it afresh
             if (ajax) return json(req, res, 200, r);
             const back = r.redirect || (req.headers.referer && new URL(req.headers.referer).host === host ? new URL(req.headers.referer).pathname + new URL(req.headers.referer).search : '/');
             return redirect(res, back, { 'set-cookie': flash(r.message) });
@@ -177,6 +188,10 @@ export function createHandler(ctx, { port, env = process.env, limiter = createLi
             if (p === '/sources/add') {
               const cur = ctx.pack(form.account) || ctx.packs[0];
               return send(req, res, e.status, pages.sourcesPage({ ...pageCtx(), csrf }, { packs: ctx.packs, current: cur, sources: data.sourcesFor(ctx, cur.id), form, problems: e.problems || [e.message] }));
+            }
+            if (p === '/facts/add') {
+              const cur = ctx.pack(form.account) || ctx.packs[0];
+              return send(req, res, e.status, pages.factsPage({ ...pageCtx(), csrf }, { packs: ctx.packs, current: cur, topics: data.factsFor(ctx, cur), ...factDates(), form, problems: e.problems || [e.message] }));
             }
             return redirect(res, req.headers.referer ? new URL(req.headers.referer).pathname : '/', { 'set-cookie': flash(e.message) });
           }
@@ -221,6 +236,11 @@ export function createHandler(ctx, { port, env = process.env, limiter = createLi
         return page(pages.sourcesPage(pc, { packs: ctx.packs, current: cur, sources: data.sourcesFor(ctx, cur.id) }));
       }
       if (p === '/settings') return page(pages.settingsPage(pc, data.settingsData(ctx)));
+      if (p === '/facts') {
+        const cur = ctx.pack(url.searchParams.get('account')) || ctx.packs.find((x) => x.facts) || ctx.packs[0];
+        if (!cur) return page(pages.notFoundPage(pc), 404);
+        return page(pages.factsPage(pc, { packs: ctx.packs, current: cur, topics: data.factsFor(ctx, cur), ...factDates() }));
+      }
       if (p === '/more') return page(pages.morePage(pc));
       for (const [method, re, fn] of ROUTES) {
         const m = method === 'GET' && re.exec(p);

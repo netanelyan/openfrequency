@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { now } from '../core/clock.js';
+import { israelDate } from '../schedule/israel.js';
 
 // HARD RULE 3: every fact on a slide traces to an approved source, stored with
 // the post and checked in code before rendering.
@@ -82,12 +84,14 @@ export function verifyFact(db, fact, { accountId, maxQuoteWords = 40 } = {}) {
   const fail = (error) => ({ ok: false, error });
   if (!fact?.document_id) return fail('no source document');
   const doc = db.get(
-    `SELECT d.text, d.url, s.account_id, s.status, s.name FROM documents d JOIN sources s ON s.id = d.source_id WHERE d.id = ?`,
+    `SELECT d.text, d.url, d.expires_at, s.account_id, s.status, s.name FROM documents d JOIN sources s ON s.id = d.source_id WHERE d.id = ?`,
     fact.document_id
   );
   if (!doc) return fail('the source document is not stored');
   if (doc.account_id !== accountId) return fail(`the source belongs to another account (${doc.account_id})`);
   if (doc.status !== 'approved') return fail(`the source "${doc.name}" is not approved (${doc.status})`);
+  // Hand-checked facts stop being evidence on their expiry date, until checked again.
+  if (doc.expires_at && israelDate(now()) > doc.expires_at) return fail(`a hand-checked fact here expired on ${doc.expires_at}: check it again on the website`);
   const quote = String(fact.quote || '').trim();
   if (!quote) return fail('no quote');
   if (/\.\.\.|…/.test(quote)) return fail('the quote is cut with an ellipsis');

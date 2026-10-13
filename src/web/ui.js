@@ -67,7 +67,25 @@ export const NAV = [
   ['/settings', 'הגדרות', 'settings', 'settings'],
 ];
 
-/** The page around a body. ctx: { title, active, csrf, spend: { usd, cap }, waiting, theme, user } */
+/**
+ * The budget, said on every page when it matters: 80% of the month's cap spent,
+ * all of it spent (nothing is written until the next month), or an account cut
+ * to one post a day because the forecast did not fit.
+ */
+export function budgetBanner(b) {
+  if (!b) return '';
+  const out = [];
+  const pctTxt = `${Math.round((b.share || 0) * 100)}%`;
+  const nm = b.nextMonth ? shortDate(`${b.nextMonth}T12:00:00Z`) : 'החודש הבא';
+  if (b.level === 'stop') out.push(`<div class="banner bad">${icon('alert')}<div><b>התקציב החודשי נגמר.</b><p>שום פוסט לא נכתב עד ${esc(nm)}. פוסטים שכבר אושרו ממשיכים לצאת.</p></div><a class="btn sm" href="/settings#budget">לתקציב</a></div>`);
+  else if (b.level === 'warn') out.push(`<div class="banner warn">${icon('alert')}<div><b>${pctTxt} מהתקציב החודשי כבר נוצלו.</b><p>התחזית לסוף החודש: $${(b.forecast || 0).toFixed(2)} מתוך $${b.cap}. ב-100% שום פוסט לא נכתב עד ${esc(nm)}.</p></div><a class="btn sm" href="/settings#budget">לתקציב</a></div>`);
+  if (b.cuts?.length) {
+    out.push(`<div class="banner info">${icon('clock')}<div><b>התקציב קצר החודש, אז מצמצמים כמות ולא איכות.</b>${b.cuts.map((c) => `<p>${esc(c.name)}: פוסט ${c.perDay === 1 ? 'אחד' : c.perDay} ביום במקום ${c.planned}.</p>`).join('')}</div><a class="btn sm" href="/settings#budget">למה</a></div>`);
+  }
+  return out.join('');
+}
+
+/** The page around a body. ctx: { title, active, csrf, spend: { usd, cap }, budget, waiting, theme, user } */
 export function layout(ctx, body) {
   const nav = NAV.map(([href, label, key]) => `<a href="${href}"${key === ctx.active ? ' aria-current="page"' : ''}>${label}</a>`).join('');
   const tabs = [NAV[0], NAV[1], NAV[2], NAV[3], ['/more', 'עוד', 'more', 'more']]
@@ -104,6 +122,7 @@ ${SPRITE}
   </div>
 </div></header>
 <main class="wrap" id="main">
+${budgetBanner(ctx.budget)}
 ${body}
 <p class="foot">תדר · ${esc(ctx.footer || '')}</p>
 </main>

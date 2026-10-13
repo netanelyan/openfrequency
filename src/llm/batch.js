@@ -1,0 +1,190 @@
+import { nowIso } from '../core/clock.js';
+import { j } from '../db/index.js';
+import { claudeCost, release, settle } from '../budget/ledger.js';
+import { ClaudeError, requestParams, readMessage } from './claude.js';
+
+// Drafting through the Message Batches API, at half price.
+//
+// Posts are drafted a day ahead of their slot, so nobody waits on an answer and
+// every call can go through a batch. The pipeline is unchanged: it still calls
+// askJson() one step at a time. The batcher is a model client whose json()
+// does not send anything at once. It waits until every post being built in the
+// run is waiting on the model, then sends all their requests as one batch, so a
+// day's outlines go together, then the slides, then the reviews.
+//
+//   const batcher = makeBatcher(ctx, { api });
+//   await Promise.all(plans.map((p) => batcher.run(() => buildPost({ ...ctx, llm: batcher }, p))));
+//
+// THE MONEY. askJson() reserves each request's ceiling before it is queued. When
+// a batch ends, the batcher replaces each reservation by the real cost from that
+// request's usage block, at the batch rate, before it hands the answer back. A
+// request that errored or expired was not billed, and its reservation is dropped.
+//
+// A RESTART IN THE MIDDLE. Every batch is written to the `batches` table with
+// what each request was for. recoverBatches() finds the ones not recorded yet,
+// reads their results when they end, and records what they cost, even though
+// the posts they were for are gone. The ledger never misses a paid call.
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** What one batch result cost and what it says, as { ok, data, usage, model, usd, error }. */
+function readResult(r, meta) {
+  if (r.result?.type !== 'succeeded') {
+    const code = r.result?.type || 'unknown';
+    const msg = r.result?.error?.error?.message || r.result?.error?.message || code;
+    return { ok: false, billed: false, error: new ClaudeError(`batch request ${code}: ${msg}`, `batch_${code}`) };
+  }
+  const message = r.result.message;
+  const usd = claudeCost(message.usage || {}, message.model || meta.model, { batch: true });
+  try {
+    return { ok: true, billed: true, usd, ...readMessage(message, meta.model) };
+  } catch (e) {
+    return { ok: false, billed: true, usd, usage: e.usage, model: e.model, error: e };
+  }
+}
+
+/** Record one result's cost against its reservation. Idempotent per batch row. */
+function account(db, meta, res) {
+  if (!res.billed) return release(db, meta.reservation);
+  settle(db, meta.reservation, {
+    accountId: meta.account_id, postId: meta.post_id, api: 'claude', model: res.model || meta.model, usd: res.usd, tag: meta.tag, batch: true,
+    usage: res.usage || null,
+  });
+}
+
+export function makeBatcher(ctx, { api, pollMs = [20_000, 30_000, 60_000], log = ctx.log } = {}) {
+  const { db } = ctx;
+  const pending = [];
+  let active = 0;
+  let waiting = 0;
+  let seq = 0;
+  const owned = new Set();
+
+  async function send(items) {
+    const requests = items.map((it) => ({ custom_id: it.customId, params: it.params }));
+    let created;
+    try {
+      created = await api.create(requests);
+    } catch (e) {
+      for (const it of items) it.reject(e);
+      return;
+    }
+    const meta = Object.fromEntries(items.map((it) => [it.customId, it.meta]));
+    db.insert('batches', { id: created.id, status: 'in_progress', requests_json: meta, created_at: nowIso() });
+    owned.add(created.id);
+    log?.(`batch ${created.id}: ${items.length} request(s) sent`);
+    try {
+      let i = 0;
+      for (;;) {
+        await sleep(pollMs[Math.min(i++, pollMs.length - 1)]);
+        let b;
+        try {
+          b = await api.retrieve(created.id);
+        } catch (e) {
+          log?.(`batch ${created.id}: ${e.message}, asking again`);
+          continue;
+        }
+        if (b.status === 'ended') {
+          db.update('batches', created.id, { status: 'ended', ended_at: nowIso(), counts_json: b.counts || null });
+          break;
+        }
+      }
+      // Every result is read and recorded before any post is given its answer: a
+      // post that resumed early would otherwise send its next request alone, in a
+      // batch of one, while the others were still being handed theirs.
+      const byId = new Map(items.map((it) => [it.customId, it]));
+      const answers = new Map();
+      for await (const r of api.results(created.id)) {
+        const it = byId.get(r.custom_id);
+        if (!it || answers.has(r.custom_id)) continue;
+        const res = readResult(r, it.meta);
+        account(db, it.meta, res);
+        answers.set(r.custom_id, res);
+      }
+      for (const it of items) {
+        const res = answers.get(it.customId);
+        if (!res) {
+          release(db, it.meta.reservation);
+          it.reject(Object.assign(new ClaudeError('the batch ended without this request', 'batch_missing'), { settled: true }));
+        } else if (res.ok) it.resolve({ data: res.data, usage: res.usage, model: res.model, usd: res.usd, estimated: false, batch: true, settled: true });
+        else it.reject(Object.assign(res.error, { settled: true }));
+      }
+      const done = answers;
+      db.update('batches', created.id, { status: 'recorded', recorded_at: nowIso() });
+      log?.(`batch ${created.id}: ${done.size} result(s) recorded`);
+    } catch (e) {
+      // Left as it is in the table: recoverBatches() records it later.
+      for (const it of items) it.reject(e);
+    } finally {
+      owned.delete(created.id);
+    }
+  }
+
+  function kick() {
+    // Everyone in the run is waiting on the model: send what is queued.
+    if (pending.length && waiting >= active) send(pending.splice(0));
+  }
+
+  return {
+    kind: 'claude',
+    batch: true,
+    fallsBack: () => false,
+    owned,
+    /** Build inside the batcher: its requests are held until every builder is waiting. */
+    async run(fn) {
+      active++;
+      try {
+        return await fn();
+      } finally {
+        active--;
+        kick();
+      }
+    },
+    json(req) {
+      const params = req.params || requestParams(req);
+      const customId = `${String(req.meta?.postId || 'x').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40)}-${req.task || 'call'}-${++seq}`.slice(0, 64);
+      const meta = { account_id: req.meta?.accountId ?? null, post_id: req.meta?.postId ?? null, model: params.model, tag: req.tag || req.task || null, reservation: req.reservation ?? null };
+      waiting++;
+      return new Promise((resolve, reject) => {
+        pending.push({
+          customId, params, meta,
+          resolve: (v) => (waiting--, resolve(v)),
+          reject: (e) => (waiting--, reject(e)),
+        });
+        kick();
+      });
+    },
+  };
+}
+
+/**
+ * Record every batch this process does not own and has not recorded: one left
+ * by a restart. Returns the ids recorded. Posts still "drafting" have no builder
+ * left after a restart; the caller blocks them.
+ */
+export async function recoverBatches(ctx, { api, skip = new Set() } = {}) {
+  const out = [];
+  for (const row of ctx.db.all("SELECT * FROM batches WHERE status != 'recorded'")) {
+    if (skip.has(row.id)) continue;
+    let b;
+    try {
+      b = await api.retrieve(row.id);
+    } catch (e) {
+      ctx.log?.(`batch ${row.id}: ${e.message}`);
+      continue;
+    }
+    if (b.status !== 'ended') continue;
+    const meta = j(row.requests_json, {});
+    const seen = new Set();
+    for await (const r of api.results(row.id)) {
+      const m = meta[r.custom_id];
+      if (!m || seen.has(r.custom_id)) continue;
+      seen.add(r.custom_id);
+      account(ctx.db, m, readResult(r, m));
+    }
+    for (const [id, m] of Object.entries(meta)) if (!seen.has(id)) release(ctx.db, m.reservation);
+    ctx.db.update('batches', row.id, { status: 'recorded', ended_at: row.ended_at || nowIso(), recorded_at: nowIso(), counts_json: b.counts || null });
+    out.push(row.id);
+  }
+  return out;
+}

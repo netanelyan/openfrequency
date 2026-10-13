@@ -10,7 +10,7 @@
 //   - a pack outside examples/ (a pack.json, or a folder with theme.json and sources.json)
 //   - rendered or downloaded media outside docs/screenshots/
 //   - the name of a real account: every pack in $OF_HOME/packs contributes its
-//     id, handle, display name and Zernio ids, and $OF_HOME/public-denylist.txt
+//     id, handle, display name, Zernio ids and Instagram ids, and $OF_HOME/public-denylist.txt
 //     adds any other words (a real source, a person, a sister project)
 //
 // It reads file contents from the git index, so the pre-commit hook checks what
@@ -61,9 +61,11 @@ const fail = (file, why) => problems.push(`${file}: ${why}`);
 
 const MEDIA = /\.(jpe?g|png|webp|gif|mp4|mov|webm|heic)$/i;
 const MEDIA_OK = [/^docs\/screenshots\//, /^src\/web\/static\//];
-const KEY_NAMES = ['ANTHROPIC_API_KEY', 'ZERNIO_API_KEY', 'BRAVE_API_KEY', 'YOUTUBE_API_KEY', 'PEXELS_API_KEY', 'UNSPLASH_ACCESS_KEY', 'SESSION_SECRET', 'OF_ADMIN_PASSWORD'];
+const KEY_NAMES = ['ANTHROPIC_API_KEY', 'ANTHROPIC_WORKSPACE_ID', 'ZERNIO_API_KEY', 'BRAVE_API_KEY', 'YOUTUBE_API_KEY', 'PEXELS_API_KEY', 'UNSPLASH_ACCESS_KEY', 'SESSION_SECRET', 'OF_ADMIN_PASSWORD', 'META_APP_SECRET', 'IG_TOKEN_[A-Z0-9_]+'];
 const KEY_SHAPES = [
   [/sk-ant-[A-Za-z0-9_-]{20,}/, 'an Anthropic key'],
+  [/\bEAA[A-Za-z0-9]{60,}\b/, 'a Meta (Facebook) access token'],
+  [/\bIG(?:QV|AA)[A-Za-z0-9_-]{60,}\b/, 'an Instagram access token'],
   [/\bsk-[A-Za-z0-9]{32,}\b/, 'an API key'],
   [/\bghp_[A-Za-z0-9]{30,}\b/, 'a GitHub token'],
   [/\bxox[baprs]-[A-Za-z0-9-]{10,}/, 'a Slack token'],
@@ -92,6 +94,7 @@ if (existsSync(packsDir)) {
     if (p.handle) real.push({ term: String(p.handle), kind: 'account handle' });
     if (p.displayName) real.push({ term: String(p.displayName), kind: 'account name' });
     for (const v of [p.zernio?.profileId, ...Object.values(p.zernio?.accounts || {})]) if (v && String(v).length >= 6) real.push({ term: String(v), kind: 'Zernio id' });
+    for (const v of [p.instagram?.userId, p.instagram?.pageId]) if (v && String(v).length >= 6) real.push({ term: String(v), kind: 'Instagram or Facebook id' });
   }
 }
 const deny = path.join(home, 'public-denylist.txt');

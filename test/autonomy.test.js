@@ -29,13 +29,16 @@ function contextFor(home) {
 
 const tuesday = (hhmm) => israelInstant('2026-10-13', hhmm).getTime();
 
-test('Approve mode, end to end: generated at 07:00, waits, approved, published by the dry publisher at its slot', async () => {
+test('Approve mode, end to end: drafted a day ahead, waits, approved, published by the dry publisher at its slot', async () => {
   const { home, cleanup } = tempHome();
   try {
     const ctx = contextFor(home);
     let r = await tick(ctx, { t: tuesday('07:05') });
-    assert.equal(r.generated.length, 2, JSON.stringify(r.generated));
-    const posts = ctx.db.all("SELECT id, status, slot_at FROM posts WHERE account_id = 'demo' ORDER BY slot_at");
+    assert.equal(r.generated.length, 4, `today's two empty slots and tomorrow's two: ${JSON.stringify(r.generated)}`);
+    assert.equal(ctx.db.all("SELECT id FROM posts WHERE account_id = 'demo' AND slot_at >= '2026-10-14'").length, 2, 'tomorrow is drafted today');
+    r = await tick(ctx, { t: tuesday('08:00') });
+    assert.equal(r.generated.length, 0, 'once a day');
+    const posts = ctx.db.all("SELECT id, status, slot_at FROM posts WHERE account_id = 'demo' AND slot_at < '2026-10-14' ORDER BY slot_at");
     assert.ok(posts.every((p) => p.status === 'queued'));
     r = await tick(ctx, { t: tuesday('12:45') });
     assert.equal(r.published.length, 0, 'nothing goes out without approval');
@@ -62,7 +65,7 @@ test('Digest mode: the post goes out at its slot unless rejected first', async (
     const ctx = contextFor(home);
     ctx.db.run("UPDATE accounts SET mode = 'digest' WHERE id = 'demo'");
     await tick(ctx, { t: tuesday('07:05') });
-    const [a, b] = ctx.db.all("SELECT id FROM posts WHERE account_id = 'demo' ORDER BY slot_at");
+    const [a, b] = ctx.db.all("SELECT id FROM posts WHERE account_id = 'demo' AND slot_at < '2026-10-14' ORDER BY slot_at");
     ctx.db.run("UPDATE posts SET status = 'rejected' WHERE id = ?", b.id);
     const r = await tick(ctx, { t: tuesday('12:41') });
     assert.deepEqual(r.approved, [a.id]);

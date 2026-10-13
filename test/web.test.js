@@ -150,3 +150,35 @@ test('the Settings page shows which keys are set, never their values', async () 
   assert.ok(html.includes('PEXELS_API_KEY'));
   assert.ok(!html.includes('secret-value-that-must-not-show'));
 });
+
+test('hand-checked facts are added from the website, refused when malformed, and confirmed again with a new expiry', async () => {
+  const cookie = await login();
+  const csrf = await csrfOf(cookie);
+  let res = await post('/facts/add', cookie, { _csrf: csrf, account: 'demo', topic: 'השקיה', quote: 'קצר', source: 'משרד החקלאות', url: 'https://www.example.org/x', checkedAt: '2026-10-13', expires: '2027-06-30' });
+  assert.equal(res.status, 422);
+  assert.ok((await res.json()).problems.some((p) => /קצר מדי/.test(p)));
+  res = await post('/facts/add', cookie, { _csrf: csrf, account: 'demo', topic: 'השקיה', quote: 'צמחי תבלין בעציץ צריכים השקיה כשהשכבה העליונה של האדמה יבשה למגע.', source: 'משרד החקלאות', url: 'https://www.example.org/x', checkedAt: '2026-10-13', expires: '2027-06-30' });
+  assert.equal(res.status, 200, await res.clone().text());
+  // The first fact made the folder, and the folder made the pack's facts source.
+  assert.ok(ctx.db.get("SELECT id FROM sources WHERE account_id = 'demo' AND key = 'facts' AND status = 'approved'"));
+  const page = await (await get('/facts?account=demo', cookie)).text();
+  assert.match(page, /צמחי תבלין בעציץ/);
+  assert.match(page, /בתוקף/);
+  const id = /name="id" value="([^"]+)"/.exec(page)[1];
+  res = await post('/facts/confirm', cookie, { _csrf: csrf, account: 'demo', topic: 'השקיה', id, expires: '2027-10-01' });
+  assert.equal(res.status, 200);
+  assert.match((await res.json()).message, /2027-10-01/);
+});
+
+test('the Settings page shows the month against the cap: spent, forecast, posts left, each account\'s share; a higher cap is refused', async () => {
+  const cookie = await login();
+  const html = await (await get('/settings', cookie)).text();
+  for (const s of ['תקציב חודשי', 'תחזית לסוף החודש', 'פוסטים', 'OF_BUDGET_MONTHLY_USD', 'נתח']) assert.ok(html.includes(s), s);
+  const csrf = await csrfOf(cookie);
+  let res = await post('/settings/budget', cookie, { _csrf: csrf, budget: '400' });
+  assert.equal(res.status, 400, 'never above OF_BUDGET_MONTHLY_USD');
+  res = await post('/settings/budget', cookie, { _csrf: csrf, budget: '10' });
+  assert.equal(res.status, 200);
+  assert.match(await (await get('/settings', cookie)).text(), /\$[\d.]+ \/ \$10/);
+  await post('/settings/budget', cookie, { _csrf: csrf, budget: '0' });
+});

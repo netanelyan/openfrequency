@@ -51,11 +51,17 @@ export function publishErrorStreak(db, accountId) {
   return n;
 }
 
-/** A budget pause lifts itself in a new month. */
-export function liftBudgetPauses(db, t = Date.now()) {
+/**
+ * A budget pause lifts itself in a new month, or sooner when the month's plan
+ * gave the account room again (a cut elsewhere freed money): at least three
+ * posts' worth left in its allocation, and the global budget not stopped.
+ */
+export function liftBudgetPauses(db, t = Date.now(), plan = null) {
   const lifted = [];
   for (const a of db.all("SELECT id, paused_at FROM accounts WHERE status = 'paused' AND paused_reason = 'budget'")) {
-    if (monthKey(Date.parse(a.paused_at)) !== monthKey(t)) {
+    const row = plan?.level !== 'stop' ? plan?.accounts?.find((x) => x.id === a.id) : null;
+    const room = row ? row.alloc - row.spent - row.reserved >= 3 * row.costPerPost : false;
+    if (monthKey(Date.parse(a.paused_at)) !== monthKey(t) || room) {
       resumeAccount(db, a.id);
       lifted.push(a.id);
     }

@@ -41,7 +41,7 @@ export class ZernioError extends Error {
 export const AI_CAPTION_LINE = 'התמונה בפוסט נוצרה בעזרת AI.';
 
 /** The request body for one platform. Pure, so the tests can read it. */
-export function postBody({ platform, accountId, caption, imageUrls, privacy = 'SELF_ONLY', aiLabel = false, title = '' }) {
+export function postBody({ platform, accountId, caption, imageUrls, privacy = 'SELF_ONLY', aiLabel = false, title = '', aiAsDraft = true }) {
   if (platform === 'tiktok') {
     return {
       content: String(title).slice(0, 90),
@@ -56,7 +56,7 @@ export function postBody({ platform, accountId, caption, imageUrls, privacy = 'S
         auto_add_music: true,
         content_preview_confirmed: true,
         express_consent_given: true,
-        ...(aiLabel ? { video_made_with_ai: true, draft: true } : {}),
+        ...(aiLabel ? { video_made_with_ai: true, ...(aiAsDraft ? { draft: true } : {}) } : {}),
       },
       publishNow: true,
     };
@@ -75,14 +75,14 @@ function partOf(post, platform) {
 }
 
 /** Create one post on one platform and wait for it, up to timeoutMs. */
-export async function publishZernio({ platform, accountId, caption, imageUrls, privacy, aiLabel, title }, { pollMs = 5000, timeoutMs = 180_000 } = {}) {
+export async function publishZernio({ platform, accountId, caption, imageUrls, privacy, aiLabel, title, aiAsDraft = true }, { pollMs = 5000, timeoutMs = 180_000 } = {}) {
   if (!zernioConfigured()) throw new ZernioError('ZERNIO_API_KEY is not set', { step: 'config', code: 'not_configured' });
   if (!accountId) throw new ZernioError(`no Zernio ${platform} account id in pack.json`, { step: 'config', code: 'no_account' });
   if (platform === 'tiktok' && (imageUrls.length < 2 || imageUrls.length > 35)) throw new ZernioError(`a TikTok photo post takes 2 to 35 images, this one has ${imageUrls.length}`, { step: 'config', code: 'card_images' });
   if (platform === 'instagram' && imageUrls.length > 10) throw new ZernioError(`an Instagram carousel takes at most 10 images, this one has ${imageUrls.length}`, { step: 'config', code: 'card_images' });
   let created;
   try {
-    created = await postJson(`${BASE()}/posts`, postBody({ platform, accountId, caption, imageUrls, privacy, aiLabel, title }), { headers: auth(), timeoutMs: 30_000 });
+    created = await postJson(`${BASE()}/posts`, postBody({ platform, accountId, caption, imageUrls, privacy, aiLabel, title, aiAsDraft }), { headers: auth(), timeoutMs: 30_000 });
   } catch (e) {
     throw new ZernioError(e.message, { step: 'create', code: e.code, status: e.status, category: e.body?.error?.errorCategory || null });
   }
@@ -98,7 +98,13 @@ export async function publishZernio({ platform, accountId, caption, imageUrls, p
   if (part.status === 'failed' || part.status === 'cancelled') {
     throw new ZernioError(`${platform} refused the post: ${part.error || part.status}`, { step: 'status', code: part.category || part.status, category: part.category });
   }
-  return { via: 'zernio', zernioId: id, postId: part.postId, url: part.url, status: part.status, pending: part.status !== 'published', draft: Boolean(aiLabel && platform === 'tiktok') };
+  return { via: 'zernio', zernioId: id, postId: part.postId, url: part.url, status: part.status, pending: part.status !== 'published', draft: Boolean(aiLabel && aiAsDraft && platform === 'tiktok') };
+}
+
+/** Our connected accounts on Zernio, for the check script: [{ id, platform, username, active }]. */
+export async function zernioAccounts() {
+  const body = await getJson(`${BASE()}/accounts`, { headers: auth() });
+  return (body?.accounts || []).map((a) => ({ id: a._id, platform: a.platform, username: a.username || a.displayName || '', active: a.isActive !== false && !a.needsReconnection }));
 }
 
 /** A platform strike or a content-policy refusal: the account pauses, it does not retry. */

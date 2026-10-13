@@ -6,6 +6,9 @@ import { renderPost } from '../render/render.js';
 import { pauseAccount, resumeAccount } from '../autonomy/rails.js';
 import { publishPost } from '../publish/index.js';
 import { MODES } from '../packs/validate.js';
+import { factProblems, readTopics, removeFact, saveFact } from '../sources/facts.js';
+import { israelDate } from '../schedule/israel.js';
+import { DEFAULT_MONTHLY_USD } from '../budget/ledger.js';
 
 // What each button does. Every action is a function (ctx, user, params, form)
 // that returns { ok, message, redirect } or throws an ActionError with a message
@@ -143,12 +146,14 @@ export function globalKill(ctx, user, _p, form) {
   return { ok: true, message: on ? 'הכל נעצר.' : 'המערכת פועלת שוב.' };
 }
 
+/** A lower cap than OF_BUDGET_MONTHLY_USD for now, never a higher one; 0 goes back to it. */
 export function setBudget(ctx, user, _p, form) {
+  const hard = Number(process.env.OF_BUDGET_MONTHLY_USD) > 0 ? Number(process.env.OF_BUDGET_MONTHLY_USD) : DEFAULT_MONTHLY_USD;
   const n = Number(form.budget);
-  if (!(n >= 1 && n <= 5000)) throw new ActionError('תקציב בין 1 ל-5000 דולר');
+  if (!(n >= 0 && n <= hard)) throw new ActionError(`תקרה בין 0 ל-${hard} דולר. התקרה עצמה נקבעת ב-.env (OF_BUDGET_MONTHLY_USD)`);
   setSetting(ctx.db, 'globalBudgetUsd', n);
-  audit(ctx.db, { actor: user.name, action: 'global_budget', detail: { usd: n } });
-  return { ok: true, message: 'התקציב עודכן.' };
+  audit(ctx.db, { actor: user.name, action: 'global_budget', detail: { usd: n || hard } });
+  return { ok: true, message: n ? `התקרה לחודש הזה: ${n}.` : `התקרה חזרה ל-${hard} מ-.env.` };
 }
 
 export function setGenerateAt(ctx, user, _p, form) {
@@ -185,4 +190,55 @@ export function addSource(ctx, user, _p, form) {
   ctx.db.insert('sources', { account_id: account, key, type: form.type, url, name: String(form.name).trim().slice(0, 120), why: String(form.why).trim().slice(0, 400), status: 'approved', origin: 'manual', approved_at: nowIso(), config_json: {}, created_at: nowIso() });
   audit(ctx.db, { actor: user.name, action: 'source_added', accountId: account, detail: { url } });
   return { ok: true, message: 'המקור נוסף ואושר.', redirect: `/sources?account=${encodeURIComponent(account)}` };
+}
+
+// ---- hand-checked facts (src/sources/facts.js), written into the pack's facts/ folder
+
+const factPack = (ctx, form) => {
+  const pack = ctx.pack(String(form.account || ''));
+  if (!pack) throw new ActionError('אין חשבון כזה', 404);
+  return { pack, dir: path.join(pack.dir, 'facts') };
+};
+
+export function addFact(ctx, user, _p, form) {
+  const { pack, dir } = factPack(ctx, form);
+  const topic = String(form.topic || '').trim().slice(0, 60);
+  const fact = {
+    quote: String(form.quote || '').replace(/\s+/g, ' ').trim(),
+    source: String(form.source || '').trim().slice(0, 80),
+    url: String(form.url || '').trim(),
+    checkedAt: String(form.checkedAt || ''),
+    checkedBy: user.name,
+    expires: String(form.expires || ''),
+    note: String(form.note || '').trim().slice(0, 200),
+  };
+  const problems = [...(topic ? [] : ['צריך נושא']), ...factProblems(fact, { maxQuoteWords: pack.rules.maxQuoteWords || 40 })];
+  if (problems.length) throw new ActionError('העובדה לא נשמרה', 422, { problems, values: { ...form } });
+  const first = !pack.facts;
+  saveFact(dir, topic, fact);
+  // The first fact makes the folder, and the folder makes the pack's "facts" source.
+  if (first) ctx.reloadPacks();
+  audit(ctx.db, { actor: user.name, action: 'fact_added', accountId: pack.id, detail: { topic, url: fact.url, expires: fact.expires } });
+  return { ok: true, message: 'העובדה נשמרה. היא תשמש פוסטים עד תאריך התפוגה.', redirect: `/facts?account=${encodeURIComponent(pack.id)}` };
+}
+
+export function confirmFact(ctx, user, _p, form) {
+  const { pack, dir } = factPack(ctx, form);
+  const topic = readTopics(dir).find((t) => t.topic === form.topic);
+  const fact = topic?.facts.find((f) => f.id === form.id);
+  if (!fact) throw new ActionError('העובדה לא נמצאה', 404);
+  const next = { ...fact, checkedAt: israelDate(Date.now()), checkedBy: user.name, expires: String(form.expires || fact.expires) };
+  const problems = factProblems(next, { maxQuoteWords: pack.rules.maxQuoteWords || 40 });
+  if (problems.length) throw new ActionError(problems[0]);
+  saveFact(dir, topic.topic, next);
+  audit(ctx.db, { actor: user.name, action: 'fact_confirmed', accountId: pack.id, detail: { topic: topic.topic, id: fact.id, expires: next.expires } });
+  return { ok: true, message: `נבדקה שוב, בתוקף עד ${next.expires}.`, redirect: `/facts?account=${encodeURIComponent(pack.id)}` };
+}
+
+export function removeFactAction(ctx, user, _p, form) {
+  const { pack, dir } = factPack(ctx, form);
+  const gone = removeFact(dir, String(form.topic || ''), String(form.id || ''));
+  if (!gone) throw new ActionError('העובדה לא נמצאה', 404);
+  audit(ctx.db, { actor: user.name, action: 'fact_removed', accountId: pack.id, detail: { topic: form.topic, quote: gone.quote.slice(0, 80) } });
+  return { ok: true, message: 'הוסרה. פוסט שעוד לא פורסם ונשען עליה ייחסם בבדיקה שלפני הפרסום.', redirect: `/facts?account=${encodeURIComponent(pack.id)}` };
 }

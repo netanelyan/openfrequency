@@ -2,7 +2,9 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { examplesDir, packsDir } from '../core/paths.js';
 import { nowIso } from '../core/clock.js';
+import { setSetting } from '../core/store.js';
 import { validateAll, validatePack, voiceExamples } from './validate.js';
+import { factsSource } from '../sources/facts.js';
 
 // Packs are folders of configuration. The engine reads them from $OF_HOME/packs;
 // the one tracked pack, examples/packs/demo, is read from the repo only when it
@@ -40,6 +42,8 @@ export function readPack(dir) {
   pack.id = meta.id;
   pack.examples = voiceExamples(pack.voice);
   pack.recordingsDir = path.join(dir, 'recordings');
+  // A facts/ folder: hand-checked facts, one more approved source (src/sources/facts.js).
+  pack.facts = factsSource(path.join(dir, 'facts'));
   return pack;
 }
 
@@ -102,7 +106,7 @@ export function syncAccounts(db, packs) {
       } else {
         db.update('accounts', pk.id, { display_name: pk.meta.displayName, handle: pk.meta.handle, updated_at: at });
       }
-      for (const s of pk.sources.sources || []) {
+      for (const s of [...(pk.sources.sources || []), ...factSources(pk)]) {
         const have = db.get('SELECT id, status, origin FROM sources WHERE account_id = ? AND key = ?', pk.id, s.id);
         const fields = {
           type: s.type,
@@ -119,5 +123,13 @@ export function syncAccounts(db, packs) {
         }
       }
     }
+    // Each account's weight in the budget (pack.json budget.share, 1 by default).
+    setSetting(db, 'budget:weights', Object.fromEntries(packs.map((pk) => [pk.id, Number(pk.meta.budget?.share) > 0 ? Number(pk.meta.budget.share) : 1])));
   });
+}
+
+/** A pack with a facts/ folder has one more approved source: its hand-checked facts. */
+function factSources(pk) {
+  if (!pk.facts) return [];
+  return [{ id: 'facts', type: 'api', api: { kind: 'facts' }, url: pk.facts.url, name: pk.facts.name, why: pk.facts.why, approvedAt: pk.facts.approvedAt }];
 }

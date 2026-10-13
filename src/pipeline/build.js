@@ -9,18 +9,26 @@ import { NoRecording } from '../llm/recorded.js';
 import { refreshSource } from '../sources/index.js';
 import { ensureFormats, pickFormat } from '../formats/rotation.js';
 import { resolveFormat } from '../trends/index.js';
-import { tellsIn } from '../voice/tells.js';
+import { isGenericQuestion, mechanicalFix, normHe, tellsIn } from '../voice/tells.js';
 import { BLOCK_AT, REWRITE_AT, reviewTexts } from '../voice/review.js';
 import { checkRules } from '../rules/check.js';
 import { gate, verifyFact } from '../verify/claims.js';
 import { findImage } from '../images/index.js';
 import { renderPost } from '../render/render.js';
-import { outlinePrompt, outlineUser, slidesPrompt, slidesUser } from './prompts.js';
+import { outlinePrompt, outlineUser, rewritePrompt, rewriteUser, slidesPrompt, slidesUser } from './prompts.js';
 
 // One post, from topic to a rendered, queued slideshow:
 //
 //   topic -> facts from approved sources -> outline -> slides -> voice and tell
 //   checks -> fact verification -> render -> queue
+//
+// What it costs is kept down by doing in code whatever code can do: documents
+// are narrowed to their content before the model sees them, facts are verified
+// before any slide is written, punctuation tells are fixed in code instead of by
+// a redraft, a generic closing question is dropped, the slides get one redraft
+// at most, and the review runs only after every code check passed. The lines it
+// flags get one rewrite, only then; whatever is still wrong drops the post.
+// Nothing is ever retried a second time.
 //
 // Every step writes a row to `steps` as it happens, so any post can be traced
 // from a slide back to the fact, the quote, the stored document and the approved
@@ -99,6 +107,46 @@ export function checkPost(ctx, pack, draft, facts) {
 
 const say = (p) => `${p.where}: ${p.msg}`;
 
+/**
+ * The caption and its closing question, once, and never a generic one. A model
+ * that already ended the caption with the question would otherwise ask it twice
+ * ("ידעתם? ידעתם?"), and a generic engagement line ("ידעתם את זה?") is the most
+ * bot-like line a post can have: the cost comparison caught both. Dropping it in
+ * code costs nothing; a rewrite costs a call.
+ */
+export function joinCaption(caption, question) {
+  const c = String(caption || '').trim();
+  const q = isGenericQuestion(question) ? '' : String(question || '').trim();
+  const flat = (s) => normHe(s).replace(/\s+/g, ' ');
+  if (!q || (c && flat(c).endsWith(flat(q)))) return c;
+  return [c, q].filter(Boolean).join(' ');
+}
+
+/** Fix the mechanical tells in every text of a draft, in place. Returns what changed, per text. */
+export function fixDraft(draft) {
+  const out = [];
+  const fix = (where, get, set) => {
+    const r = mechanicalFix(get());
+    if (r.fixed.length) {
+      set(r.text);
+      out.push(`${where}: ${r.fixed.join(', ')}`);
+    }
+  };
+  fix('cover', () => draft.hook, (v) => (draft.hook = v));
+  fix('cover line 2', () => draft.sub, (v) => (draft.sub = v));
+  fix('caption', () => draft.caption, (v) => (draft.caption = v));
+  draft.slides.forEach((sl, i) => {
+    if (sl.kind !== 'item') return;
+    fix(`slide ${i} title`, () => sl.title, (v) => (sl.title = v));
+    fix(`slide ${i} text`, () => sl.body, (v) => (sl.body = v));
+  });
+  return out;
+}
+
+/** Output room per call. The ceiling reserved for a call is priced on this, so it is no bigger than the answer needs. */
+export const MAX_TOKENS = { outline: 10_000, slides: 8_000, rewrite: 6_000 };
+export const EFFORT = { outline: 'medium', slides: 'medium', rewrite: 'medium' };
+
 export async function buildPost(ctx, { pack, formatKey = null, sample = false, slotAt = null, maxDocs = 6 }) {
   const { db } = ctx;
   const account = db.get('SELECT * FROM accounts WHERE id = ?', pack.id);
@@ -131,7 +179,9 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
   };
 
   try {
-    guard(db, { pack, estimateUsd: 0.05 });
+    guard(db, { pack, estimateUsd: 0 });
+    // The pack's prefix is cached for an hour in a batch, whose rounds can be more than five minutes apart.
+    const ttl = ctx.llm.batch ? '1h' : '5m';
     step(db, postId, 'format', 'info', { format: format.id, name: format.name });
 
     // ---- topic: a document from an approved source
@@ -147,10 +197,10 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     tries: for (const f of formatsToTry) {
       for (const d of docs.slice(0, maxDocs)) {
         const ref = { ...d, ref: 'D1' };
-        const p = outlinePrompt(pack, f);
+        const p = outlinePrompt(pack, { ttl });
         try {
           const res = await askJson(pctx, {
-            task: 'outline', role: 'draft', system: p.system, user: outlineUser([ref], { avoid: recent }), schema: p.schema, effort: 'medium', maxTokens: 12000, expectOut: 3000,
+            task: 'outline', role: 'draft', system: p.system, user: outlineUser(f, [ref], { avoid: recent }), schema: p.schema, effort: EFFORT.outline, maxTokens: MAX_TOKENS.outline,
             meta: { recordingsDir: pack.recordingsDir, docKey: d.key, format: f.base || f.id, attempt: 0 },
           });
           if (!res.data.usable) {
@@ -191,8 +241,9 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     const verifiedFacts = facts.filter((f) => f.verified);
 
     // ---- slides, then every check; one redraft with the reasons
-    const sp = slidesPrompt(pack, format, { n: items.length });
-    const edits = db.all('SELECT before, after FROM edits WHERE account_id = ? ORDER BY id DESC LIMIT 5', pack.id);
+    const sp = slidesPrompt(pack, { ttl });
+    // The owner's own rewrites teach the voice; the three latest short ones are enough.
+    const edits = db.all('SELECT before, after FROM edits WHERE account_id = ? AND length(after) <= 240 ORDER BY id DESC LIMIT 3', pack.id);
     const closer = pickBy(format.closers, postId);
     let draft = null;
     let checked = null;
@@ -201,8 +252,8 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
       let res;
       try {
         res = await askJson(pctx, {
-          task: 'slides', role: 'draft', system: sp.system, user: slidesUser({ outline: { ...outline, items }, facts: verifiedFacts, edits, problems: lastProblems.map(say) }), schema: sp.schema,
-          effort: 'medium', maxTokens: 12000, expectOut: 2500, meta: { recordingsDir: pack.recordingsDir, docKey: doc.key, format: format.base || format.id, attempt },
+          task: 'slides', role: 'draft', system: sp.system, user: slidesUser({ format, n: items.length, outline: { ...outline, items }, facts: verifiedFacts, edits, problems: lastProblems.map(say) }), schema: sp.schema,
+          effort: EFFORT.slides, maxTokens: MAX_TOKENS.slides, meta: { recordingsDir: pack.recordingsDir, docKey: doc.key, format: format.base || format.id, attempt },
         });
       } catch (e) {
         if (e instanceof NoRecording && attempt > 0) break;
@@ -212,15 +263,17 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
       draft = {
         hook: String(d.hook || '').trim(),
         sub: String(d.sub || '').trim(),
-        caption: [String(d.caption || '').trim(), String(d.question || '').trim()].filter(Boolean).join(' '),
+        caption: joinCaption(d.caption, d.question),
         slides: [
           { kind: 'cover', title: '', body: '', factKeys: [] },
           ...(d.slides || []).map((s) => ({ kind: 'item', title: String(s.title || '').trim(), body: String(s.body || '').trim(), factKeys: (s.facts || []).map(String) })),
           { kind: 'closer', title: closer.title, body: closer.body || '', factKeys: [] },
         ],
       };
+      // What code can fix, code fixes: no model call for a stray exclamation mark.
+      const fixes = fixDraft(draft);
       checked = checkPost(pctx, pack, draft, facts);
-      step(db, postId, attempt ? 'redraft' : 'slides', checked.problems.length ? 'failed' : 'ok', { problems: checked.problems.map(say) }, res.usd);
+      step(db, postId, attempt ? 'redraft' : 'slides', checked.problems.length ? 'failed' : 'ok', { problems: checked.problems.map(say), fixed: fixes }, res.usd);
       if (!checked.problems.length) break;
       lastProblems = checked.problems;
     }
@@ -233,29 +286,56 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
       return block(kind, sorted.slice(0, 3).map(say).join(' · '), { problems: sorted.map(say) });
     }
 
-    // ---- the second model: does it sound like a bot? Rewrites at 4+, kept only if they pass every check.
+    // ---- the second look: does it sound like a bot, and does any text say more
+    // than its facts? The reviewer only scores. A text at 4+, or with a fact
+    // problem, is rewritten by the drafting model in one call, and kept only if
+    // it passes every check. A fact problem
+    // that is not fixed blocks the post: the code gate proves every number is
+    // quoted, not that the sentence around it is true to the quote.
     const texts = textsOf(draft);
     const review = await reviewTexts(pctx, { pack, texts, facts: verifiedFacts });
     const applied = [];
-    review.reviews.forEach((r, i) => {
-      const t = texts[i];
-      if (r.botScore < REWRITE_AT || !r.rewrite) return;
-      const next = structuredClone(draft);
-      if (t.where === 'cover') next.hook = r.rewrite;
-      else if (t.where === 'cover line 2') next.sub = r.rewrite;
-      else if (t.where === 'caption') next.caption = r.rewrite;
-      else next.slides[t.idx][t.field] = r.rewrite;
-      const c = checkPost(pctx, pack, next, facts);
-      if (!c.problems.length) {
-        draft = next;
-        applied.push({ where: t.where, from: t.text, to: r.rewrite, score: r.botScore });
-        r.rewritten = true;
+    // The rewrite is one bounded call on the flagged lines only, never a second
+    // redraft of the post: it runs once even after the slides used their redraft
+    // (measured: without it, half the posts a strong reviewer flagged were lost),
+    // and whatever it does not fix drops the post.
+    const flagged = review.reviews.map((r, i) => ({ ...r, index: i, where: texts[i].where, text: texts[i].text })).filter((r) => r.botScore >= REWRITE_AT || r.factProblem);
+    if (flagged.length && pctx.llm.kind === 'claude') {
+      const rp = rewritePrompt(pack, { ttl });
+      try {
+        const res = await askJson(pctx, {
+          task: 'rewrite', role: 'rewrite', system: rp.system, user: rewriteUser({ flagged, facts: verifiedFacts }), schema: rp.schema, effort: EFFORT.rewrite, maxTokens: MAX_TOKENS.rewrite,
+          meta: { recordingsDir: pack.recordingsDir, docKey: doc.key, format: format.base || format.id, attempt: 1 },
+        });
+        for (const rw of res.data.rewrites || []) {
+          const t = texts[rw.index];
+          const r = review.reviews[rw.index];
+          if (!t || !r || (r.botScore < REWRITE_AT && !r.factProblem)) continue;
+          const text = mechanicalFix(String(rw.text || '').trim()).text;
+          if (!text) continue;
+          const next = structuredClone(draft);
+          if (t.where === 'cover') next.hook = text;
+          else if (t.where === 'cover line 2') next.sub = text;
+          else if (t.where === 'caption') next.caption = text;
+          else next.slides[t.idx][t.field] = text;
+          if (!checkPost(pctx, pack, next, facts).problems.length) {
+            draft = next;
+            applied.push({ where: t.where, from: t.text, to: text, score: r.botScore });
+            r.rewritten = true;
+          }
+        }
+        step(db, postId, 'rewrite', 'ok', { flagged: flagged.length, kept: applied.length }, res.usd);
+      } catch (e) {
+        if (e instanceof BudgetError) throw e;
+        step(db, postId, 'rewrite', 'failed', { error: String(e.message).slice(0, 200) });
       }
-    });
+    }
     const scores = review.reviews.map((r) => (r.rewritten ? Math.min(r.botScore, REWRITE_AT - 1) : r.botScore));
     const worst = Math.max(0, ...scores);
-    step(db, postId, 'review', worst >= BLOCK_AT ? 'failed' : 'ok', { reviewer: review.reviewer, worst, scores: texts.map((t, i) => ({ where: t.where, score: review.reviews[i].botScore, tells: review.reviews[i].tells })), rewrites: applied });
-    if (worst >= BLOCK_AT) return block('voice', `נשמע כמו בוט (${worst}/10) גם אחרי שכתוב`);
+    const unfixed = review.reviews.map((r, i) => ({ ...r, where: texts[i].where })).filter((r) => r.factProblem && !r.rewritten);
+    step(db, postId, 'review', worst >= BLOCK_AT || unfixed.length ? 'failed' : 'ok', { reviewer: review.reviewer, worst, scores: texts.map((t, i) => ({ where: t.where, score: review.reviews[i].botScore, tells: review.reviews[i].tells, factProblem: review.reviews[i].factProblem || undefined })), rewrites: applied });
+    if (unfixed.length) return block('review', `הבודק מצא משפט שאומר יותר מהעובדות: ${unfixed.slice(0, 2).map((r) => `${r.where}: ${r.factProblem}`).join(' · ')}`);
+    if (worst >= BLOCK_AT) return block('voice', `נשמע כמו בוט (${worst}/10)${applied.length ? ' גם אחרי שכתוב' : ''}`);
 
     // ---- the gate, final: this exact text, these facts
     const final = checkPost(pctx, pack, draft, facts);

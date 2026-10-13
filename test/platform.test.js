@@ -50,13 +50,47 @@ test('no engagement endpoint is named anywhere in the code', () => {
   assert.deepEqual(hits, []);
 });
 
-test('the only writes are drafting with Claude and creating our own post on Zernio', () => {
+test('the only writes are Claude, our own post on Zernio, and publishing our own post on Instagram', () => {
   assert.deepEqual(
-    WRITE_RULES.map((r) => `${r.method} ${r.host}`),
-    ['POST api.anthropic.com', 'POST zernio.com']
+    WRITE_RULES.map((r) => `${r.method} ${r.host} ${r.path.source}`),
+    [
+      'POST api.anthropic.com ^\\/v1\\/messages$',
+      'POST api.anthropic.com ^\\/v1\\/messages\\/batches$',
+      'POST zernio.com ^\\/api\\/v1\\/posts$',
+      'POST graph.facebook.com ^\\/v\\d+\\.\\d+\\/\\d+\\/(media|media_publish)$',
+      'POST graph.instagram.com ^\\/v\\d+\\.\\d+\\/\\d+\\/(media|media_publish)$',
+    ]
   );
-  for (const r of WRITE_RULES) assert.equal(isSocial(r.host), false, `${r.host} is not a social platform`);
+  // A write that reaches a social host is publishing on our own account through its official API, and only that.
+  for (const r of WRITE_RULES.filter((x) => isSocial(x.host))) assert.match(r.path.source, /\(media\|media_publish\)\$$/, `${r.host} writes only create and publish media`);
   for (const r of READ_RULES.filter((x) => isSocial(x.host))) assert.ok(r.path, `${r.host} reads are limited to listed API paths`);
+});
+
+test('the Graph API is open for publishing and our own numbers, never for comments, mentions, messages or other accounts', () => {
+  for (const [m, u] of [
+    ['POST', 'https://graph.facebook.com/v25.0/17841400000000000/media'],
+    ['POST', 'https://graph.instagram.com/v25.0/17841400000000000/media_publish'],
+    ['GET', 'https://graph.facebook.com/v25.0/17895695668004550?fields=status_code,status'],
+    ['GET', 'https://graph.facebook.com/v25.0/17895695668004550/insights?metric=reach,saved,shares,likes,comments,views'],
+    ['GET', 'https://graph.facebook.com/v25.0/17841400000000000/content_publishing_limit?fields=quota_usage,config'],
+    ['GET', 'https://graph.facebook.com/v25.0/debug_token?input_token=x'],
+    ['GET', 'https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token'],
+  ]) assert.doesNotThrow(() => assertAllowed(m, u), `${m} ${u}`);
+  for (const [m, u] of [
+    ['POST', 'https://graph.facebook.com/v25.0/17895695668004550/comments'],
+    ['POST', 'https://graph.facebook.com/v25.0/17895695668004550/replies'],
+    ['POST', 'https://graph.facebook.com/v25.0/17841400000000000/messages'],
+    ['POST', 'https://graph.facebook.com/v25.0/17841400000000000/mentions'],
+    ['GET', 'https://graph.facebook.com/v25.0/17895695668004550/comments'],
+    ['GET', 'https://graph.facebook.com/v25.0/17841400000000000/tags'],
+    ['GET', 'https://graph.facebook.com/v25.0/17841400000000000/conversations'],
+    ['GET', 'https://graph.facebook.com/v25.0/ig_hashtag_search?q=x'],
+    ['GET', 'https://graph.facebook.com/v25.0/17841400000000000?fields=business_discovery.username(someone){followers_count}'],
+    ['GET', 'https://graph.facebook.com/v25.0/17895695668004550?fields=comments{text,username}'],
+    ['GET', 'https://graph.facebook.com/v25.0/17841400000000000/mentioned_media?media_id=1'],
+    ['GET', 'https://graph.facebook.com/somebody'],
+    ['GET', 'https://www.instagram.com/someone/'],
+  ]) assert.throws(() => assertAllowed(m, u), /refused/, `${m} ${u}`);
 });
 
 test('the door refuses every write to a social platform and every inbox', () => {

@@ -2,31 +2,55 @@ import { DAY, monthKey, now } from '../core/clock.js';
 import { KEYS, isSet } from '../core/env.js';
 import { settings } from '../core/store.js';
 import { j } from '../db/index.js';
-import { monthSpend } from '../budget/ledger.js';
+import { DEFAULT_MONTHLY_USD, monthSpend } from '../budget/ledger.js';
+import { planMonth, WARN_AT } from '../budget/plan.js';
 import { loadPost } from '../pipeline/build.js';
 import { israelDate, israelInstant, addDays } from '../schedule/israel.js';
 import { relative, postScore } from '../formats/rotation.js';
 import { engineMode } from '../engine.js';
-import { publisherFor } from '../publish/index.js';
+import { publisherFor, wantedPublisher } from '../publish/index.js';
 import { zernioConfigured } from '../publish/zernio.js';
+import { igConfig, instagramConfigured } from '../publish/instagram.js';
+import { getSetting } from '../core/store.js';
 import { resolveFormat } from '../trends/index.js';
+import { factProblems, factState, readTopics } from '../sources/facts.js';
+import path from 'node:path';
 
 // What each page shows, as plain queries. Pages never touch the database
 // themselves, so what a page can see is listed here.
 
+/** The month's budget plan, computed at most every few seconds (a page asks for it more than once). */
+const planOf = (ctx) => {
+  if (!ctx._plan || Date.now() - ctx._plan.at > 5000) ctx._plan = { at: Date.now(), plan: planMonth(ctx.db, ctx.packs) };
+  return ctx._plan.plan;
+};
+
 export function header(ctx) {
   const s = settings(ctx.db);
-  const spend = monthSpend(ctx.db, undefined);
+  const plan = planOf(ctx);
   const waiting = ctx.db.get("SELECT COUNT(*) AS n FROM posts WHERE status = 'queued' AND sample = 0").n;
-  return { spend: { usd: spend.usd, cap: s.globalBudgetUsd }, waiting, globalKill: s.globalKill };
+  return {
+    spend: { usd: plan.spent, cap: plan.cap },
+    budget: { level: plan.level, share: plan.cap ? plan.spent / plan.cap : 0, warnAt: WARN_AT, forecast: plan.forecast, cap: plan.cap, nextMonth: plan.nextMonth, cuts: plan.accounts.filter((a) => a.cut).map((a) => ({ id: a.id, name: a.name, perDay: a.perDay, planned: a.planned })) },
+    waiting,
+    globalKill: s.globalKill,
+  };
 }
 
 export function accountRows(ctx) {
+  const plan = planOf(ctx);
   return ctx.packs.map((pack) => {
     const acc = ctx.db.get('SELECT * FROM accounts WHERE id = ?', pack.id);
     const spend = monthSpend(ctx.db, pack.id);
-    return { pack, acc, spend: spend.usd, cap: Number(pack.meta.budget?.monthlyUsd) || 0, reached: spend.usd >= (Number(pack.meta.budget?.monthlyUsd) || Infinity) };
+    const p = plan.accounts.find((a) => a.id === pack.id) || null;
+    const cap = p ? p.alloc : 0;
+    return { pack, acc, spend: spend.usd, cap, plan: p, reached: p ? spend.usd >= cap - 1e-9 : false, publishers: publishersOf(ctx, pack) };
   });
+}
+
+/** Each platform's publisher: what the pack asks for, and what it really goes through now. */
+export function publishersOf(ctx, pack) {
+  return pack.meta.platforms.map((platform) => ({ platform, wants: wantedPublisher(pack, platform), via: publisherFor(pack, platform, { db: ctx.db }) }));
 }
 
 /** Today: what waits for a decision, what is scheduled, what was refused and what went out. */
@@ -111,20 +135,39 @@ export function results(ctx, t = now()) {
   return { posts, scored, winners, losers, formats, medians, demo, trends };
 }
 
+/** A pack's hand-checked facts, each with its state today and anything wrong with it. */
+export function factsFor(ctx, pack) {
+  return readTopics(path.join(pack.dir, 'facts')).map((t) => ({
+    ...t,
+    facts: t.facts.map((f) => ({ ...f, state: factState(f), problems: factProblems(f, { maxQuoteWords: pack.rules.maxQuoteWords || 40 }) })),
+  }));
+}
+
 export function sourcesFor(ctx, accountId) {
   return ctx.db.all("SELECT s.*, (SELECT COUNT(*) FROM documents d WHERE d.source_id = s.id) AS docs FROM sources s WHERE s.account_id = ? ORDER BY CASE s.status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END, s.name", accountId).map((s) => ({ ...s, score: j(s.score_json, null), config: j(s.config_json, {}) }));
 }
 
 export function settingsData(ctx) {
   const s = settings(ctx.db);
+  const envCap = Number(process.env.OF_BUDGET_MONTHLY_USD) > 0 ? Number(process.env.OF_BUDGET_MONTHLY_USD) : DEFAULT_MONTHLY_USD;
   return {
     settings: s,
     spend: monthSpend(ctx.db, undefined),
     month: monthKey(),
+    plan: planOf(ctx),
+    envCap,
     perAccount: accountRows(ctx),
     keys: KEYS.map((k2) => ({ ...k2, set: isSet(k2.name) })),
     mode: engineMode(),
-    publishers: ctx.packs.map((p) => ({ id: p.id, name: p.meta.displayName, via: publisherFor(p), wants: p.meta.publisher })),
+    publishers: ctx.packs.map((p) => ({ id: p.id, name: p.meta.displayName, platforms: publishersOf(ctx, p) })),
+    // What is known about each pack's Instagram token without asking Meta: the check script asks.
+    instagram: ctx.packs
+      .filter((p) => p.meta.platforms.includes('instagram') && wantedPublisher(p, 'instagram') === 'instagram')
+      .map((p) => {
+        const cfg = igConfig(p);
+        const saved = getSetting(ctx.db, `instagram:token:${p.id}`, null);
+        return { id: p.id, name: p.meta.displayName, auth: cfg.auth, tokenEnv: cfg.tokenEnv, userId: cfg.userId, configured: instagramConfigured(ctx.db, p), daysLeft: saved?.expiresAt ? Math.floor((saved.expiresAt - now()) / DAY) : null };
+      }),
     zernio: zernioConfigured(),
     liveSwitch: process.env.PUBLISH_MODE === 'live',
     users: ctx.db.all('SELECT id, name, role, created_at, last_login_at FROM users ORDER BY id'),

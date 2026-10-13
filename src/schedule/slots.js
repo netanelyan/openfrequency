@@ -1,11 +1,11 @@
 import { israelInstant, israelHour, weekday } from './israel.js';
-import { inShabbat } from './shabbat.js';
+import { restAt } from './shabbat.js';
 
 // The day's posting slots for one account.
 //
 // Slots are Israel wall-clock times from the pack (`schedule.slots`, with
 // `schedule.slotsByDay` overriding a weekday, 0 Sunday ... 6 Saturday, so Friday
-// can post early and Saturday after nightfall). A slot inside Shabbat or outside
+// can post early and Saturday after nightfall). A slot inside Shabbat, a yom tov or outside
 // the pack's posting windows is dropped AND named, because a configured slot that
 // can never post is a mistake in the file and the website should say so rather
 // than quietly posting less.
@@ -23,7 +23,8 @@ export function slotsFor(date, schedule = {}, { notBefore = null } = {}) {
   const slots = [];
   for (const hhmm of day) {
     const at = israelInstant(date, hhmm);
-    if (inShabbat(at)) dropped.push({ at: hhmm, why: 'שבת' });
+    const rest = restAt(at);
+    if (rest) dropped.push({ at: hhmm, why: rest });
     else if (!inWindows(at, schedule.windows)) dropped.push({ at: hhmm, why: 'מחוץ לשעות הפרסום' });
     else if (notBefore != null && at.getTime() < notBefore) dropped.push({ at: hhmm, why: 'השעה עברה' });
     else slots.push(at);

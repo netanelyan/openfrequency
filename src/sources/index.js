@@ -6,14 +6,25 @@ import { nowIso } from '../core/clock.js';
 import { j } from '../db/index.js';
 import { parseFeed } from './rss.js';
 import { htmlToText, mainHtml, titleOf } from './text.js';
+import { parseCsv } from './csv.js';
+import { factDocuments, factsDir } from './facts.js';
 
 // Sources, behind one interface: read(source) -> [{ url, title, text, publishedAt, key? }].
 //
 //   rss   a feed; short items are completed from their own page
 //   web   one page, narrowed to its main content (hints.selector), optionally
 //         following links from an index page (hints.follow)
-//   api   structured data: Wikidata SPARQL, or any JSON endpoint turned into
-//         lines of "field: value" (hints.fields)
+//   api   structured data, each record one line of "field: value" so its
+//         numbers can be quoted exactly. api.kind says which:
+//           json             any JSON endpoint (api.path to the records, api.fields)
+//           wikidata-sparql  a SPARQL query
+//           csv              a CSV file (government datasets; api.encoding when
+//                            not UTF-8), with api.changesOnly to keep only the rows
+//                            where a series changed (a rate, daily)
+//           ckan             a data.gov.il datastore resource, through CKAN's own
+//                            datastore_search API
+//           facts            the pack's hand-checked facts (facts.js), one document
+//                            per topic, each expiring with its earliest fact
 //
 // The recorded implementation reads <pack>/recordings/documents/*.json instead,
 // so the pipeline runs offline on documents that were really fetched once.
@@ -81,14 +92,58 @@ async function fetchApi(src, cfg) {
     const lines = (body?.results?.bindings || []).map((b) => vars.map((v) => `${v}: ${b[v]?.value ?? ''}`).join(' | '));
     return [{ url: src.url, title: api.title || src.name, text: lines.join('\n').slice(0, MAX_TEXT), publishedAt: null }];
   }
+  if (api.kind === 'facts') return factDocuments(factsDir(src.account_id));
+  if (api.kind === 'csv') {
+    const { body } = await getText(api.url || src.url, { accept: 'text/csv,text/plain;q=0.9,*/*;q=0.5', encoding: api.encoding || null });
+    let rows = parseCsv(body, { delimiter: api.delimiter || null });
+    for (const [k, v] of Object.entries(api.filter || {})) rows = rows.filter((r) => String(r[k]) === String(v));
+    if (api.changesOnly) rows = changesOf(rows, api.changesOnly, api.seriesBy);
+    if (api.last) rows = rows.slice(-api.last);
+    return [{ url: src.url, title: api.title || src.name, text: linesOf(rows, api).join('\n').slice(0, MAX_TEXT), publishedAt: null }];
+  }
+  if (api.kind === 'ckan') {
+    // data.gov.il's own CKAN API: the dataset's datastore, as JSON.
+    const q = new URLSearchParams({ resource_id: api.resource, limit: String(api.limit || 100), ...(api.sort ? { sort: api.sort } : {}), ...(api.filters ? { filters: JSON.stringify(api.filters) } : {}) });
+    const body = await getJson(`${api.base || 'https://data.gov.il/api/3/action'}/datastore_search?${q}`);
+    if (!body?.success) throw new Error(`data.gov.il: ${body?.error?.message || 'the datastore answered without success'}`);
+    let rows = body.result?.records || [];
+    if (api.changesOnly) rows = changesOf(rows, api.changesOnly, api.seriesBy);
+    if (api.last) rows = rows.slice(-api.last);
+    return [{ url: src.url, title: api.title || src.name, text: linesOf(rows, api).join('\n').slice(0, MAX_TEXT), publishedAt: null }];
+  }
   // A JSON endpoint: each record becomes one line of "field: value", which keeps
   // the numbers quotable verbatim.
   const body = await getJson(api.url || src.url);
   const records = api.path ? api.path.split('.').reduce((o, k) => o?.[k], body) : body;
   const list = Array.isArray(records) ? records : [records];
-  const fields = api.fields || Object.keys(list[0] || {});
-  const lines = list.slice(0, api.max || 200).map((r) => fields.map((f) => `${f}: ${f.split('.').reduce((o, k) => o?.[k], r) ?? ''}`).join(' | '));
-  return [{ url: src.url, title: api.title || src.name, text: lines.join('\n').slice(0, MAX_TEXT), publishedAt: null }];
+  return [{ url: src.url, title: api.title || src.name, text: linesOf(list.slice(0, api.max || 200), api).join('\n').slice(0, MAX_TEXT), publishedAt: null }];
+}
+
+/**
+ * Records to lines of "label: value | label: value". A label (api.labels) says in
+ * Hebrew what a coded column is, so the line can be read and quoted as written.
+ */
+export function linesOf(records, { fields = null, labels = {} } = {}) {
+  const keys = fields || Object.keys(records[0] || {});
+  const get = (r, f) => f.split('.').reduce((o, k) => o?.[k], r);
+  return records.map((r) => keys.map((f) => `${labels[f] || f}: ${get(r, f) ?? ''}`).join(' | '));
+}
+
+/**
+ * The rows where a value changed from the row before, per series, oldest first:
+ * a rate that is published daily but changes a few times a year, as its changes.
+ * The last row of each series is kept too, so the current value is always there.
+ */
+export function changesOf(rows, field, seriesBy = null) {
+  const out = [];
+  const last = new Map();
+  rows.forEach((r, i) => {
+    const s = seriesBy ? r[seriesBy] : '';
+    const isLast = !rows.slice(i + 1).some((x) => (seriesBy ? x[seriesBy] : '') === s);
+    if (last.get(s) !== r[field] || isLast) out.push(r);
+    last.set(s, r[field]);
+  });
+  return out;
 }
 
 /** Documents recorded for a pack: <pack>/recordings/documents/<key>.json with { source, url, title, text, ... }. */
@@ -107,6 +162,8 @@ export function recordedSources(pack) {
   return {
     kind: 'recorded',
     async read(src) {
+      // The hand-checked facts are the pack's own files, not a network source: read them as they are.
+      if (j(src.config_json, {})?.api?.kind === 'facts') return factDocuments(path.join(pack.dir, 'facts'));
       return load()
         .filter((d) => d.source === src.key)
         .map((d) => ({ key: d.key, url: d.url, title: d.title, text: d.text, publishedAt: d.publishedAt || null, fetchedAt: d.fetchedAt || null }));
@@ -145,6 +202,7 @@ export async function refreshSource(db, impl, src) {
         published_at: d.publishedAt || null,
         fetched_at: d.fetchedAt || nowIso(),
         recorded: impl.kind === 'recorded' ? 1 : 0,
+        expires_at: d.expiresAt || null,
       });
       row = db.get('SELECT * FROM documents WHERE id = ?', id);
     }

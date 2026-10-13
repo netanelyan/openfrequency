@@ -1,7 +1,7 @@
 import { isSet } from '../core/env.js';
 import { getBytes, getJson } from '../core/net.js';
 import { now, nowIso, DAY } from '../core/clock.js';
-import { audit } from '../core/store.js';
+import { audit, cachedLookup } from '../core/store.js';
 import { j } from '../db/index.js';
 import { record } from '../budget/ledger.js';
 import { askJson } from '../llm/index.js';
@@ -103,8 +103,10 @@ export async function runTrends(ctx, pack, { yt = youtubeConfigured() ? youtubeC
   for (const lang of ['he', 'en']) {
     for (const q of cfg.queries?.[lang] || []) {
       try {
-        for (const v of await yt.search(q, { lang, t })) if (!raw.has(v.id)) raw.set(v.id, { ...v, lang, query: q });
-        record(ctx.db, { accountId: pack.id, api: 'youtube', usd: 0, tag: 'trends' });
+        // A week-old answer to the same search is reused: trends run weekly, and search.list has a daily quota of 100.
+        const { value, cached } = await cachedLookup(ctx.db, `youtube:search:${lang}:${q}`, 7, () => yt.search(q, { lang, t }));
+        for (const v of value || []) if (!raw.has(v.id)) raw.set(v.id, { ...v, lang, query: q });
+        if (!cached) record(ctx.db, { accountId: pack.id, api: 'youtube', usd: 0, tag: 'trends' });
       } catch (e) {
         notes.push(`YouTube "${q}": ${e.message}`);
         if (e.status === 403) break;

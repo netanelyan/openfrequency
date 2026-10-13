@@ -82,3 +82,43 @@ export function mainHtml(html, selector = null) {
   }
   return /<main\b[^>]*>([\s\S]*?)<\/main>/i.exec(s)?.[1] || /<article\b[^>]*>([\s\S]*?)<\/article>/i.exec(s)?.[1] || s;
 }
+
+// Words a page uses for its own buttons, never content.
+const UI = /^(?:הדפס|הדפסה|שלח לחבר|שתף|שיתוף|קרא עוד|לקריאה נוספת|מידע נוסף\.{0,3}|חזרה|לראש העמוד|print|share|read more|more|back|next|previous|close|×)$/i;
+const menuLike = (l) => l.length <= 40 && !/\d/.test(l) && !/[.:?!,;]$/.test(l) && !/,/.test(l) && l.split(/\s+/).length <= 6;
+
+/**
+ * The part of a stored document worth sending to the model: the document
+ * without its menus. Runs of three or more short lines with no number and no
+ * punctuation are navigation, a page's own buttons are dropped, repeated lines
+ * are kept once, and the rest is cut at a line boundary at maxChars. Only what
+ * is sent is narrowed: every quote is still checked against the whole stored
+ * text, and every kept line is a line of it.
+ */
+export function focusText(text, { maxChars = 7000 } = {}) {
+  const lines = String(text || '').split('\n').map((l) => l.trim()).filter(Boolean);
+  const seen = new Set();
+  const out = [];
+  for (let i = 0; i < lines.length; ) {
+    let k = i;
+    while (k < lines.length && menuLike(lines[k])) k++;
+    if (k - i >= 3) {
+      i = k;
+      continue;
+    }
+    for (const end = Math.max(k, i + 1); i < end; i++) {
+      const l = lines[i];
+      if (UI.test(l) || seen.has(l)) continue;
+      seen.add(l);
+      out.push(l);
+    }
+  }
+  let size = 0;
+  const kept = [];
+  for (const l of out) {
+    if (size + l.length + 1 > maxChars) break;
+    kept.push(l);
+    size += l.length + 1;
+  }
+  return kept.join('\n');
+}

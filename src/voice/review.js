@@ -3,11 +3,15 @@ import { normHe, sentencesOf, tellsIn } from './tells.js';
 
 // The second look: does this sound like a bot?
 //
-// A separate call with a different job from the drafting call. It reads the
-// post's texts as a sharp Israeli in their twenties would and scores each from
-// 0 (a person wrote it) to 10 (obviously a bot), names the tells, and rewrites
-// any text at REWRITE_AT or more. A rewrite replaces the original only if it
-// passes the same code checks (the caller decides that).
+// A separate call with a different job from the drafting call (Claude Sonnet
+// 5.5: Haiku was measured and missed what this call is for, see src/llm/index.js).
+// It runs only on a post that already passed every code check cleanly, reads its texts as a sharp Israeli in their twenties
+// would, and scores each from 0 (a person wrote it) to 10 (obviously a bot),
+// naming the tells, and says when a text claims more than its facts. It only
+// scores: a text it flags at REWRITE_AT or more, or with a fact problem, is
+// rewritten by the drafting model in one more call, once, and a rewrite
+// replaces the original only if it passes the same code checks; what it does
+// not fix drops the post. A post with nothing flagged costs one call here.
 //
 // With no API key the reviewer is a heuristic built from the same tells plus a
 // few structural ones (every slide opening the same way, long sentences). It is
@@ -17,16 +21,15 @@ import { normHe, sentencesOf, tellsIn } from './tells.js';
 export const REWRITE_AT = 4;
 export const BLOCK_AT = 6;
 
-const SYSTEM = `You are a sharp Israeli in your twenties. You scroll TikTok and Instagram in Hebrew all day and you can smell a bot, a marketer or a ChatGPT text from the first line.
+export const REVIEW_SYSTEM = `You are a sharp Israeli in your twenties. You scroll TikTok and Instagram in Hebrew all day and you can smell a bot, a marketer or a ChatGPT text from the first line.
 
 You get the texts of one slideshow post: the cover line, each slide, the caption. For each text, answer honestly: would you guess a bot wrote this?
 
 - botScore: 0 means clearly a person wrote it, 10 means obviously a bot. Be strict: a text that is balanced, complete and polished, that sounds like a brochure or a school summary, that praises in general terms or opens with a stock phrase scores high. Translated-sounding Hebrew scores high.
 - tells: only what gives it away, a few English words each ("stock opener", "translated Hebrew", "too polished", "brochure tone"). Empty when nothing does.
-- factProblem: if the text states something its facts do not support, say what; else an empty string.
-- rewrite: when botScore is ${REWRITE_AT} or more, the same text rewritten so a person would have written it, in natural spoken Hebrew, plural address, no exclamation marks, no long dashes. Keep every fact and every number exactly; add none. When below ${REWRITE_AT}, an empty string.`;
+- factProblem: if the text states something its facts do not support, say what; else an empty string.`;
 
-const SCHEMA = {
+export const REVIEW_SCHEMA = {
   type: 'object',
   properties: {
     reviews: {
@@ -38,9 +41,8 @@ const SCHEMA = {
           botScore: { type: 'integer' },
           tells: { type: 'array', items: { type: 'string' } },
           factProblem: { type: 'string' },
-          rewrite: { type: 'string' },
         },
-        required: ['index', 'botScore', 'tells', 'factProblem', 'rewrite'],
+        required: ['index', 'botScore', 'tells', 'factProblem'],
         additionalProperties: false,
       },
     },
@@ -51,15 +53,14 @@ const SCHEMA = {
 
 const clamp = (n) => Math.max(0, Math.min(10, Math.round(Number(n) || 0)));
 
-/**
- * texts: [{ where, kind, text }]. facts: the post's facts, for factProblem.
- * Returns { reviewer, reviews: [{ botScore, tells, factProblem, rewrite }] }.
- */
-export async function reviewTexts(ctx, { pack, texts, facts = [] }) {
-  if (ctx.llm.kind !== 'claude') return { reviewer: 'heuristic', reviews: heuristicReview(texts, pack) };
-  const user = [
+/** Who is talking, in a few lines: the reviewer needs the register, not the whole guide. */
+const whoTalks = (pack) => (pack.voice.split(/\n## /)[1] || pack.voice).replace(/^[^\n]*\n/, '').trim().slice(0, 900);
+
+/** The review's user turn: who is talking, the facts, the texts numbered. */
+export const reviewUser = (pack, texts, facts = []) =>
+  [
     `ACCOUNT: ${pack.meta.displayName}. Who is talking, from the account's voice guide:`,
-    pack.voice.slice(0, 2500),
+    whoTalks(pack),
     '',
     'FACTS THE POST STANDS ON:',
     ...facts.map((f) => `- ${f.claim}`),
@@ -67,12 +68,19 @@ export async function reviewTexts(ctx, { pack, texts, facts = [] }) {
     'TEXTS:',
     ...texts.map((t, i) => `[${i}] (${t.where}) ${t.text}`),
   ].join('\n');
-  const { data } = await askJson(ctx, { task: 'review', role: 'review', system: SYSTEM, user, schema: SCHEMA, effort: 'low', maxTokens: 8000, expectOut: 2500, tag: 'review' });
+
+/**
+ * texts: [{ where, kind, text }]. facts: the post's facts, for factProblem.
+ * Returns { reviewer, reviews: [{ botScore, tells, factProblem }] }.
+ */
+export async function reviewTexts(ctx, { pack, texts, facts = [] }) {
+  if (ctx.llm.kind !== 'claude') return { reviewer: 'heuristic', reviews: heuristicReview(texts, pack) };
+  const { data } = await askJson(ctx, { task: 'review', role: 'review', system: REVIEW_SYSTEM, user: reviewUser(pack, texts, facts), schema: REVIEW_SCHEMA, effort: 'low', maxTokens: 4000, tag: 'review' });
   return {
     reviewer: 'claude',
     reviews: texts.map((_, i) => {
       const r = (data.reviews || []).find((x) => x.index === i) || {};
-      return { botScore: clamp(r.botScore), tells: (r.tells || []).map(String).slice(0, 5), factProblem: String(r.factProblem || ''), rewrite: String(r.rewrite || '').trim() };
+      return { botScore: clamp(r.botScore), tells: (r.tells || []).map(String).slice(0, 5), factProblem: String(r.factProblem || '') };
     }),
   };
 }
@@ -99,6 +107,6 @@ export function heuristicReview(texts, pack) {
       score += 1;
       tells.push('every slide opens the same way');
     }
-    return { botScore: clamp(score), tells, factProblem: '', rewrite: '' };
+    return { botScore: clamp(score), tells, factProblem: '' };
   });
 }

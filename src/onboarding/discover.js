@@ -1,7 +1,8 @@
 import { isSet } from '../core/env.js';
 import { getJson, getText, isSocial } from '../core/net.js';
 import { DAY, now } from '../core/clock.js';
-import { guard, record } from '../budget/ledger.js';
+import { API_PRICES, guard, record } from '../budget/ledger.js';
+import { cachedLookup } from '../core/store.js';
 import { askJson } from '../llm/index.js';
 import { declaredFeeds, parseFeed } from '../sources/rss.js';
 import { titleOf } from '../sources/text.js';
@@ -81,18 +82,22 @@ For each candidate return:
   });
 }
 
+/** A Brave search, from the cache when the same query ran in the last 30 days; paid ($0.005) only when it did not. */
 async function brave(ctx, q, notes) {
-  try {
-    guard(ctx.db, { pack: null, estimateUsd: 0.005 });
-  } catch (e) {
-    notes.push(e.message);
-    return [];
-  }
-  const body = await getJson(`https://api.search.brave.com/res/v1/web/search?${new URLSearchParams({ q, count: '15', search_lang: 'he', safesearch: 'moderate' })}`, {
-    headers: { 'x-subscription-token': String(process.env.BRAVE_API_KEY || '').trim(), 'accept-encoding': 'gzip' },
-  });
-  record(ctx.db, { api: 'brave', usd: 0.005, tag: 'onboarding' });
-  return (body?.web?.results || []).map((r) => ({ url: r.url, title: String(r.title || '').replace(/<[^>]+>/g, ''), description: String(r.description || '').replace(/<[^>]+>/g, '') }));
+  const { value } = await cachedLookup(ctx.db, `brave:${q}`, 30, async () => {
+    reserveFor(ctx, notes);
+    const body = await getJson(`https://api.search.brave.com/res/v1/web/search?${new URLSearchParams({ q, count: '15', search_lang: 'he', safesearch: 'moderate' })}`, {
+      headers: { 'x-subscription-token': String(process.env.BRAVE_API_KEY || '').trim(), 'accept-encoding': 'gzip' },
+    });
+    record(ctx.db, { api: 'brave', usd: API_PRICES.brave, tag: 'onboarding' });
+    return (body?.web?.results || []).map((r) => ({ url: r.url, title: String(r.title || '').replace(/<[^>]+>/g, ''), description: String(r.description || '').replace(/<[^>]+>/g, '') }));
+  }).catch((e) => (notes.push(e.message), { value: [] }));
+  return value;
+}
+
+/** The global cap must have room for one more Brave query. */
+function reserveFor(ctx) {
+  guard(ctx.db, { pack: null, estimateUsd: API_PRICES.brave });
 }
 
 /** Read a site's home page for its declared feeds; returns feed candidates with their newest item. */
