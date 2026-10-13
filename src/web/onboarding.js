@@ -91,9 +91,9 @@ function detailPage(ctx, pc, r) {
 <div class="cols"><div class="grid12">${cands
         .map(
           (c) => `<article class="card srccard"><div class="meta p0"><label class="chip ghost"><input type="checkbox" name="approve_${esc(c.id)}"${c.score.authority >= 7 && c.score.terms !== 'no' ? ' checked' : ''}> לאשר</label><span class="chip ghost">${esc(TYPE_HE[c.type] || c.type)}</span><span class="chip ${c.score.authority >= 7 ? 'ok' : c.score.authority >= 5 ? '' : 'warn'}">סמכות ${c.score.authority}/10</span><span class="chip">עדכניות ${c.score.freshness}/10</span><span class="chip ${c.score.terms === 'ok' ? 'ok' : c.score.terms === 'no' ? 'bad' : 'warn'}">${esc(TERMS_HE[c.score.terms])}</span></div>
-<h3 class="srcname">${esc(c.name)}</h3><a class="small ltr" href="${esc(c.url)}" target="_blank" rel="noopener noreferrer">${esc(c.url)}</a>
+<h3 class="srcname" dir="auto">${esc(c.name)}</h3><a class="small ltr" href="${esc(c.url)}" target="_blank" rel="noopener noreferrer">${esc(c.url)}</a>
 <p class="muted small m6">${esc(c.score.reason)}${c.score.by === 'heuristic' ? ' · דירוג היוריסטי (בלי מפתח API)' : ''}</p>
-<label class="f mt12">למה סומכים עליו<input type="text" name="why_${esc(c.id)}" value="${esc(c.why || c.score.reason)}" maxlength="300"></label></article>`
+<label class="f mt12">למה סומכים עליו<input type="text" dir="auto" name="why_${esc(c.id)}" value="${esc(c.why || c.score.reason)}" maxlength="300"></label></article>`
         )
         .join('') || `<div class="empty">${icon('sources')}<b>לא נמצאו מקורות</b>נסו דוגמאות של אתרים, או הגדירו BRAVE_API_KEY.</div>`}</div>
 <div class="grid12"><section class="panel"><header><h2>שם לחשבון</h2></header><div class="formgrid">

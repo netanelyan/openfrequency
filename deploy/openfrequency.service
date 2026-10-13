@@ -1,0 +1,51 @@
+# /etc/systemd/system/openfrequency.service
+#
+# The engine and the approval website in one process: the site on 127.0.0.1:4700
+# (Caddy in front, see Caddyfile.example) and the runner that generates,
+# publishes and reads metrics once a minute.
+#
+#   sudo useradd --system --create-home --home-dir /var/lib/openfrequency --shell /usr/sbin/nologin openfrequency
+#   sudo git clone <public repo> /opt/open-frequency
+#   sudo git clone <your PRIVATE repo> /opt/open-frequency/private      # packs, recordings
+#   sudo -u openfrequency mkdir -p /opt/open-frequency/private/data
+#   cd /opt/open-frequency && sudo npm ci --omit=dev
+#   sudo PLAYWRIGHT_BROWSERS_PATH=/opt/open-frequency/.browsers npx playwright install --with-deps chromium
+#   sudo cp deploy/openfrequency.service /etc/systemd/system/ && sudo systemctl daemon-reload
+#   sudo systemctl enable --now openfrequency
+#
+# Keys go in /opt/open-frequency/private/.env, mode 600, owned by openfrequency.
+
+[Unit]
+Description=open-frequency (Teder): the engine and the approval website
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=openfrequency
+Group=openfrequency
+WorkingDirectory=/opt/open-frequency
+Environment=NODE_ENV=production
+Environment=OF_HOME=/opt/open-frequency/private
+Environment=PORT=4700
+Environment=PLAYWRIGHT_BROWSERS_PATH=/opt/open-frequency/.browsers
+ExecStart=/usr/bin/node scripts/web.js --runner
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+
+# Hardening: the process can write only to the private folder.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/open-frequency/private /var/lib/openfrequency
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

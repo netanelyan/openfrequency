@@ -52,7 +52,18 @@ if (!dir) {
 const pack = loadPack(dir);
 // The other packs are loaded too, so the brand checks (no cross-promotion,
 // distinct themes) see the whole set.
-const others = loadAll().filter((p) => p.id !== pack.id);
+// A pack that is not valid yet (one being written) is skipped here with a
+// warning: a dry run of one pack should not fail on another's half-written file.
+const { packDirs } = await import('../src/packs/load.js');
+const others = [];
+for (const d of packDirs()) {
+  if (path.resolve(d) === path.resolve(dir)) continue;
+  try {
+    others.push(loadPack(d));
+  } catch (e) {
+    console.log(`(skipping ${path.basename(d)} for the brand checks: ${e.message.split('\n')[0]})`);
+  }
+}
 // One database and one media folder per pack, so two dry runs can go at once.
 const dbFile = path.join(dataDir(), `dry-${pack.id}.db`);
 for (const f of [dbFile, `${dbFile}-wal`, `${dbFile}-shm`]) rmSync(f, { force: true });

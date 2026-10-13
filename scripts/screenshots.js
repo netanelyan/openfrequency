@@ -61,6 +61,19 @@ try {
         ['settings', '/settings'],
         ...(device === 'phone' ? [['more', '/more']] : []),
       ];
+      // The onboarding review, from a fictional seed, offline: discovery runs, the page lists what it found.
+      if (!only || only.includes('new-review')) {
+        await page.goto(`${base}/new`);
+        await page.fill('input[name=niche]', 'בישול טבעוני לסטודנטים');
+        await page.fill('input[name=audience]', 'סטודנטים עם מטבח קטן ותקציב קטן');
+        await page.fill('input[name=topics]', 'מתכונים, תקציב, תזונה');
+        await Promise.all([page.waitForNavigation(), page.click('form[action="/new"] button[type=submit]')]);
+        for (let i = 0; i < 30 && !(await page.content()).includes('שם לחשבון'); i++) {
+          await page.waitForTimeout(500);
+          await page.reload();
+        }
+        shots.push(await shot(page, `new-review-${device}${theme === 'dark' ? '-dark' : ''}`));
+      }
       for (const [name, url] of pages) {
         if (only && !only.includes(name)) continue;
         await page.goto(`${base}${url}`, { waitUntil: 'networkidle' });

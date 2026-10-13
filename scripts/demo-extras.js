@@ -43,7 +43,7 @@ export const EXTRAS = [
       autonomy: { mode: 'digest' }, budget: { monthlyUsd: 8 }, compliance: [], imagery: { providers: ['commons'] },
     },
     theme: { template: 'poster', variant: 'a', colors: { bg: '#FBF4E9', surface: '#FFFFFF', ink: '#241812', muted: '#6A5547', accent: '#5B3A29', accent2: '#E2A23B', onAccent: '#FFFFFF' }, fonts: { display: 'Secular One', text: 'Rubik' }, options: { radius: 22, coverPhoto: false } },
-    sources: { sources: [{ id: 'home-coffee-lab', type: 'rss', url: 'https://www.example.org/coffee/feed.xml', name: 'מעבדת הקפה הביתית (בדיונית)', lang: 'he', why: 'Fictional source for the demo, on the reserved example.org domain.', approvedAt: '2026-10-13' }] },
+    sources: { sources: [{ id: 'home-coffee-lab', type: 'rss', url: 'https://www.example.org/coffee/feed.xml', name: 'מעבדת הקפה הביתית (בדיונית)', lang: 'he', why: 'מקור בדיוני לדמו, על הדומיין השמור example.org.', approvedAt: '2026-10-13' }] },
     formats: {
       formats: [
         { id: 'brew-guide', name: 'מדריך חליטה', about: 'The numbers behind one brewing method.', weight: 2, items: [3, 5], hooks: ['{method} בבית: {n} מספרים שמשנים את הכוס'], closers: [{ title: 'שמרו לבוקר הבא', body: 'ותשלחו למי שמכין לכם קפה' }] },
@@ -103,7 +103,7 @@ export const EXTRAS = [
       autonomy: { mode: 'auto' }, budget: { monthlyUsd: 8 }, compliance: [], imagery: { providers: ['commons'] },
     },
     theme: { template: 'scoreboard', variant: 'b', colors: { bg: '#0E1A2B', surface: '#172741', ink: '#F2F5FA', muted: '#A9B7C9', accent: '#FF6B5E', accent2: '#49D99B', onAccent: '#0E1A2B' }, fonts: { display: 'Heebo', text: 'Assistant' }, options: { radius: 18, coverPhoto: false } },
-    sources: { sources: [{ id: 'sports-med-example', type: 'web', url: 'https://www.example.net/running/', name: 'מכון הדוגמה לרפואת ספורט (בדיוני)', lang: 'he', why: 'Fictional source for the demo, on the reserved example.net domain.', approvedAt: '2026-10-13' }] },
+    sources: { sources: [{ id: 'sports-med-example', type: 'web', url: 'https://www.example.net/running/', name: 'מכון הדוגמה לרפואת ספורט (בדיוני)', lang: 'he', why: 'מקור בדיוני לדמו, על הדומיין השמור example.net.', approvedAt: '2026-10-13' }] },
     formats: {
       formats: [
         { id: 'beginner-plan', name: 'תוכנית למתחילים', about: 'Rules for the first weeks.', weight: 2, items: [3, 4], hooks: ['ריצה ראשונה? {n} כללים לחודש הראשון'], closers: [{ title: 'שמרו לפני האימון הבא', body: 'ותשלחו למי שאמר שיתחיל ביום ראשון' }] },

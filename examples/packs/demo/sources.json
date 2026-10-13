@@ -6,7 +6,7 @@
       "url": "https://www.example.com/plant-care/",
       "name": "ספריית הצמחים לדוגמה",
       "lang": "en",
-      "why": "Fictional source for the demo pack. example.com is reserved for documentation, so nothing here points at a real publisher.",
+      "why": "מקור בדיוני לחבילת הדמו. הדומיין example.com שמור לתיעוד, כך ששום דבר כאן לא מצביע על מפרסם אמיתי.",
       "approvedAt": "2026-10-13"
     },
     {
@@ -15,7 +15,7 @@
       "url": "https://www.example.org/urban-gardening/feed.xml",
       "name": "המכון לגינון עירוני (בדיוני)",
       "lang": "he",
-      "why": "Fictional source for the demo pack: an invented institute on the reserved example.org domain.",
+      "why": "מקור בדיוני לחבילת הדמו: מכון מומצא על הדומיין השמור example.org.",
       "approvedAt": "2026-10-13"
     },
     {
@@ -24,9 +24,18 @@
       "url": "https://api.example.net/climate/monthly",
       "name": "נתוני אקלים לדוגמה",
       "lang": "he",
-      "why": "Fictional structured source for the demo pack, to show an API source next to a feed and a page.",
+      "why": "מקור מובנה בדיוני לחבילת הדמו, כדי להראות מקור API לצד פיד ודף.",
       "approvedAt": "2026-10-13",
-      "api": { "kind": "json", "fields": ["month", "name", "avg_high_c", "avg_low_c", "sun_hours"] }
+      "api": {
+        "kind": "json",
+        "fields": [
+          "month",
+          "name",
+          "avg_high_c",
+          "avg_low_c",
+          "sun_hours"
+        ]
+      }
     }
   ]
 }

@@ -59,3 +59,67 @@ The owner's instruction mid-session (2026-10-13): the repo becomes public and ho
 ## Recordings of real sources live with the real pack
 
 The real packs' recordings are documents fetched from real, approved sources, and the drafts written from them. They are private (they name real sources and real content), so they live in `$OF_HOME/packs/<id>/recordings`, never in the repository. The demo pack's recordings are invented text on reserved `example.*` domains.
+
+## Publishing needs three switches, not one
+
+A post leaves through Zernio only when `PUBLISH_MODE=live`, `ZERNIO_API_KEY` is set
+and the pack's own `pack.json` says `"publisher": "zernio"`. A key alone is not
+consent to post publicly to a real account; the owner turns that on deliberately,
+per account. Everything else uses the dry publisher, which writes the exact request
+Zernio would have received.
+
+## One process: the website and the runner
+
+`npm start` runs both. The runner ticks once a minute and never overlaps itself; a
+second process would need a lock on the database for no benefit at this volume. The
+website alone (`npm run web`) is for looking without anything moving.
+
+## Digest and Auto hold back a post that sounds a little like a bot
+
+The reviewer's score blocks a post at 6 or more. A post that scored 4 or 5 and could
+not be rewritten cleanly is allowed in Approve mode (the owner reads it anyway) but
+waits for the owner in Digest and Auto, where nobody would.
+
+## The demo shows three fictional accounts
+
+`examples/packs/demo` is the one tracked pack, as asked. The Today and Accounts pages
+exist to show several brands side by side, so `npm run demo` adds two more fictional
+brands, generated at run time into `./.demo` from `scripts/demo-extras.js`. They are
+never a pack folder in the repository. The demo seeds a few readings so the Results
+page has something to show; each is marked `demo-seed`, and the page says, in a
+banner, that the numbers are invented. The engine itself never writes a number an
+API did not give.
+
+## The API catalog lives in the engine
+
+Onboarding suggests open, structured sources (Wikidata, data.gov.il, the CBS and
+Bank of Israel APIs, openfootball, Open-Meteo, GitHub's changelog) when the seed's
+words match. It is a list of public data sources with keywords, not code about any
+one account, and a structured source is the best kind there is for this engine: a
+number from an API is quotable exactly and nobody's prose is copied. Adding one is a
+line in `src/onboarding/apis.js`.
+
+## Hebrew is counted by words, and some checks were loosened by evidence
+
+Running real content through the checks changed three of them. The "mostly Hebrew"
+check counts words that carry Hebrew, not letters, so a button name in Latin letters
+inside a Hebrew sentence passes and a Latin sentence does not. The cover's word count
+splits on whitespace, so `ש-Gemini` is one word. The singular-"you" list keeps only
+unambiguous forms, because the masculine future (`תוכל`) is spelled exactly like the
+third person feminine (`Google תוכל`). And the render's fit check tolerates a tall
+face's descenders spilling out of a tight line box: only a whole extra line is an
+overflow.
+
+## Owner-written text keeps its own direction
+
+Source names, reasons and URLs are whatever the owner or the source wrote, often
+English. They render with `dir="auto"` inside the Hebrew page, so an English sentence
+keeps its period on the right side. The engine's own words, the catalog's reasons and
+the demo's are Hebrew.
+
+## Dry runs have their own database per pack
+
+`npm run dry` recreates `$OF_HOME/data/dry-<pack>.db` and its media folder every
+run, never touching the live database, and two dry runs for two packs can go at once.
+A pack that is not valid yet is skipped (with a warning) when another pack's dry run
+loads the set for the brand checks.

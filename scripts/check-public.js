@@ -105,9 +105,11 @@ const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const L = '[\\p{L}\\p{N}_]';
 const matchers = real.map((r) => {
   const t = esc(r.term);
-  // A distinctive id (a dash or a digit in it, or long) is refused anywhere; a
-  // plain word that happens to be an id is refused where it is used as one.
-  if (r.packId && !/[-\d]/.test(r.term) && r.term.length < 8) {
+  // A distinctive id (a dash or a digit in it) is refused anywhere; a plain word
+  // that happens to be an id ("football") is refused where it is used as one,
+  // because the engine may use the word itself. The account's handle and display
+  // name are matched everywhere either way.
+  if (r.packId && !/[-\d]/.test(r.term)) {
     return { ...r, re: new RegExp(`(?:packs[\\\\/]${t}(?!${L})|--pack[ =]['"]?${t}(?!${L})|(?:pack|packId|pack_id|account|accountId|account_id)['"]?\\s*[:=]\\s*['"]${t}['"])`, 'iu') };
   }
   return { ...r, re: new RegExp(`(?<!${L})@?${t}(?!${L})`, 'iu') };

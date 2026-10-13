@@ -1,0 +1,10 @@
+# /etc/systemd/system/openfrequency-backup.service (run by the timer below)
+[Unit]
+Description=open-frequency: back up the database
+
+[Service]
+Type=oneshot
+User=openfrequency
+WorkingDirectory=/opt/open-frequency
+Environment=OF_HOME=/opt/open-frequency/private
+ExecStart=/usr/bin/node scripts/backup.js --keep 14

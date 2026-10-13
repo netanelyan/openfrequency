@@ -1,0 +1,30 @@
+# Append to /etc/caddy/Caddyfile, then:
+#   caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy
+#
+# Two names. Replace them with yours, and set the same first one as PUBLIC_HOST
+# in private/.env (the site then insists on HTTPS through this proxy, and on a
+# password).
+
+# The approval website. Only Caddy talks to it; it listens on 127.0.0.1.
+teder.example.com {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:4700
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Robots-Tag "noindex, nofollow"
+		-Server
+	}
+}
+
+# Public slide images, for Zernio to fetch when it publishes (set
+# MEDIA_PUBLIC_BASE_URL=https://media.example.com). Each post's files sit under
+# an unguessable folder name, and nothing here is listed.
+media.example.com {
+	root * /opt/open-frequency/private/data/public
+	file_server
+	header {
+		Cache-Control "public, max-age=604800"
+		X-Robots-Tag "noindex, nofollow"
+		-Server
+	}
+}

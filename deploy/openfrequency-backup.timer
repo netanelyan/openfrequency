@@ -1,0 +1,11 @@
+# /etc/systemd/system/openfrequency-backup.timer
+#   sudo systemctl enable --now openfrequency-backup.timer
+[Unit]
+Description=open-frequency: back up the database every night
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
