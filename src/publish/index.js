@@ -9,6 +9,7 @@ import { israelDate } from '../schedule/israel.js';
 import { gate, verifyFact } from '../verify/claims.js';
 import { loadPost } from '../pipeline/build.js';
 import { exportPost } from '../pipeline/export.js';
+import { imageCredit } from '../images/index.js';
 import { canRun, pauseAccount, publishErrorStreak } from '../autonomy/rails.js';
 import { isStrike, postBody, publishZernio, zernioConfigured } from './zernio.js';
 
@@ -90,7 +91,7 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
 
   db.update('posts', postId, { status: 'publishing', updated_at: nowIso() });
   const via = publisherFor(pack);
-  const caption = [post.caption, (post.hashtags || []).join(' ')].filter(Boolean).join('\n\n');
+  const caption = [post.caption, imageCredit(db, post), (post.hashtags || []).join(' ')].filter(Boolean).join('\n\n');
   const results = {};
   let failed = null;
   for (const platform of pack.meta.platforms) {

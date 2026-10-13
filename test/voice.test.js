@@ -5,7 +5,8 @@ import { tellsIn } from '../src/voice/tells.js';
 import { experienceIn, fakeProofIn, badgeNextTo } from '../src/voice/honesty.js';
 import { heuristicReview, REWRITE_AT } from '../src/voice/review.js';
 import { checkRules } from '../src/rules/check.js';
-import { commonsLicenseOk } from '../src/images/index.js';
+import { commonsLicenseOk, imageCredit, needsCredit } from '../src/images/index.js';
+import { Db } from '../src/db/index.js';
 import { DEMO } from './helpers.js';
 
 const pack = readPack(DEMO);
@@ -58,4 +59,20 @@ test('the offline reviewer scores a bot-sounding text at the rewrite threshold o
 test('image licences: only public domain, CC0, CC BY and CC BY-SA from Commons', () => {
   for (const ok of ['CC0', 'Public domain', 'CC BY 4.0', 'CC BY-SA 3.0', 'CC BY-SA 4.0']) assert.ok(commonsLicenseOk(ok), ok);
   for (const no of ['CC BY-NC 4.0', 'CC BY-ND 2.0', 'CC BY-NC-SA 3.0', 'Fair use', '', 'All rights reserved']) assert.equal(commonsLicenseOk(no), false, no);
+});
+
+test('a photo whose licence asks for credit is credited in the caption, and others are not', () => {
+  assert.ok(needsCredit('CC BY-SA 4.0') && needsCredit('CC BY 2.0'));
+  assert.ok(!needsCredit('CC0') && !needsCredit('Public domain') && !needsCredit('Pexels License'));
+  const db = new Db(':memory:');
+  try {
+    const at = new Date().toISOString();
+    const by = db.insert('images', { provider: 'commons', license: 'CC BY-SA 4.0', author: 'A. Photographer', created_at: at });
+    const free = db.insert('images', { provider: 'pexels', license: 'Pexels License', author: 'B', created_at: at });
+    assert.equal(imageCredit(db, { slides: [{ image_id: by }] }), 'צילום: A. Photographer · CC BY-SA 4.0 · Wikimedia Commons');
+    assert.equal(imageCredit(db, { slides: [{ image_id: free }] }), '');
+    assert.equal(imageCredit(db, { slides: [{ image_id: null }] }), '');
+  } finally {
+    db.close();
+  }
 });

@@ -2,6 +2,7 @@ import { copyFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { ensureDir } from '../core/paths.js';
 import { j } from '../db/index.js';
+import { imageCredit } from '../images/index.js';
 import { loadPost } from './build.js';
 
 // A post written out to a folder a person can open: the slides for each
@@ -16,7 +17,7 @@ export function exportPost(db, postId, dir) {
     const sub = ensureDir(path.join(dir, platform));
     for (const f of files) copyFileSync(f, path.join(sub, path.basename(f)));
   }
-  const caption = [post.caption, '', (post.hashtags || []).join(' ')].join('\n').trim();
+  const caption = [post.caption, imageCredit(db, post), (post.hashtags || []).join(' ')].filter(Boolean).join('\n\n');
   writeFileSync(path.join(dir, 'caption.txt'), `${caption}\n`);
 
   const lines = [`# ${post.hook || post.topic || post.id}`, '', `Status: ${post.status}${post.reason ? ` (${post.reason})` : ''}`, `Format: ${post.format_id}`, ''];

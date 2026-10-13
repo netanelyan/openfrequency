@@ -65,7 +65,8 @@ const commons = {
           mime: ii?.mime,
         };
       })
-      .filter((c) => c.url && /^image\/(jpeg|png|webp)$/.test(c.mime || '') && commonsLicenseOk(c.license));
+      // A license that requires attribution is usable only with a name to attribute.
+      .filter((c) => c.url && /^image\/(jpeg|png|webp)$/.test(c.mime || '') && commonsLicenseOk(c.license) && (c.author || !needsCredit(c.license)));
   },
 };
 
@@ -105,6 +106,23 @@ const unsplash = {
 };
 
 export const PROVIDERS = { pexels, unsplash, commons };
+
+/** CC BY and CC BY-SA require the author and the license next to the picture. */
+export const needsCredit = (license) => /\bby\b|attribution/i.test(String(license || ''));
+
+const PROVIDER_NAME = { commons: 'Wikimedia Commons', pexels: 'Pexels', unsplash: 'Unsplash' };
+
+/**
+ * The credit line a post's caption carries when its photo's license asks for one,
+ * or ''. It is added when the caption is published, after the checks: a license
+ * name ("CC BY-SA 4.0") is not a claim, and its numbers are not facts.
+ */
+export function imageCredit(db, post) {
+  const id = (post.slides || []).find((s) => s.image_id)?.image_id;
+  const img = id ? db.get('SELECT provider, license, author FROM images WHERE id = ?', id) : null;
+  if (!img || !needsCredit(img.license)) return '';
+  return `צילום: ${img.author} · ${img.license} · ${PROVIDER_NAME[img.provider] || img.provider}`;
+}
 
 /**
  * One licensed photograph for a query, stored with its licence, or null.

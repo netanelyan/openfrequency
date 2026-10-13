@@ -123,3 +123,38 @@ the demo's are Hebrew.
 run, never touching the live database, and two dry runs for two packs can go at once.
 A pack that is not valid yet is skipped (with a warning) when another pack's dry run
 loads the set for the brand checks.
+
+## Sources behind bot protection are not read
+
+Several of the best Israeli sources for a money account answer an automated
+reader with a Cloudflare challenge or a 403 from Imperva or Radware. The engine
+does not drive a browser through those, rotate addresses, or pretend to be a
+person: a site that has put up a gate has said no to automated reading, and
+getting past it is the kind of evasion the hard rules exist to rule out. Those
+sources come in when they offer a feed or an API.
+
+## A count in Hebrew words is a number
+
+The fact gate compared only digits, so a slide could say "חמש" against a quote
+that said four. Hebrew counting words from three up (with their construct forms,
+tens, and up to two prefix letters: "ובשלושת") are now numbers on item slides and
+in quotes. One and two are left out: "אחד הצמחים" and "יום שני" are not counts, and
+a guard that refuses correct Hebrew gets switched off. The cover and the caption
+are left out too, where "שלושת הטיפים" is the post's own count.
+
+## Provider names that are ordinary words need context
+
+The investment-advice check refused correct Hebrew: "כלל" (a rule, "בדרך כלל"),
+"מגדל" (a tower), "מנורה" (a lamp) and "מור" (inside "המורים") are also the names of
+financial companies. Those names now count only next to a company word ("מגדל
+מקפת", "כלל ביטוח"), after "חברת" or "בית ההשקעות", or where money is moved to them
+("תעבירו את הקרן למגדל"). A bare name next to "כדאי" is no longer caught by this
+part; the superlative, the return promise and the buy-or-sell checks still are.
+That trade is why a financial pack starts in Approve mode.
+
+## A photo credit is added after the checks
+
+CC BY and CC BY-SA require the author and the licence. The credit line goes into
+the caption when it is published or exported, after the fact gate: "CC BY-SA 4.0"
+is not a claim, and its 4 is not a number to trace. A Commons photo whose licence
+asks for credit and that names no author is not used.
