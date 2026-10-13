@@ -43,12 +43,12 @@ export const isSet = (name, env = process.env) => Boolean(String(env[name] || ''
  * check that .env.example lists them all. The values are never shown anywhere.
  */
 export const KEYS = [
-  { name: 'ANTHROPIC_API_KEY', group: 'drafting', what: 'Claude: drafting, review, scoring' },
-  { name: 'ZERNIO_API_KEY', group: 'publishing', what: 'Zernio: publishing and analytics' },
-  { name: 'BRAVE_API_KEY', group: 'discovery', what: 'Brave Search: finding sources for a new account' },
-  { name: 'YOUTUBE_API_KEY', group: 'discovery', what: 'YouTube Data API: formats that work now' },
-  { name: 'PEXELS_API_KEY', group: 'images', what: 'Pexels photographs' },
-  { name: 'UNSPLASH_ACCESS_KEY', group: 'images', what: 'Unsplash photographs' },
-  { name: 'SESSION_SECRET', group: 'website', what: 'signs the login cookie' },
-  { name: 'OF_ADMIN_PASSWORD', group: 'website', what: 'the first user\'s password, used once to create it' },
+  { name: 'ANTHROPIC_API_KEY', group: 'drafting', what: 'Claude: drafting, review, scoring', he: 'Claude: כתיבה, בדיקת "נשמע כמו בוט", דירוג מקורות' },
+  { name: 'ZERNIO_API_KEY', group: 'publishing', what: 'Zernio: publishing and analytics', he: 'Zernio: פרסום ונתונים' },
+  { name: 'BRAVE_API_KEY', group: 'discovery', what: 'Brave Search: finding sources for a new account', he: 'Brave: חיפוש מקורות לחשבון חדש' },
+  { name: 'YOUTUBE_API_KEY', group: 'discovery', what: 'YouTube Data API: formats that work now', he: 'YouTube: פורמטים שעובדים עכשיו, עם מספרים אמיתיים' },
+  { name: 'PEXELS_API_KEY', group: 'images', what: 'Pexels photographs', he: 'Pexels: תמונות ברישיון' },
+  { name: 'UNSPLASH_ACCESS_KEY', group: 'images', what: 'Unsplash photographs', he: 'Unsplash: תמונות ברישיון' },
+  { name: 'SESSION_SECRET', group: 'website', what: 'signs the login cookie', he: 'חתימה על עוגיית הכניסה' },
+  { name: 'OF_ADMIN_PASSWORD', group: 'website', what: "the first user's password, used once to create it", he: 'הסיסמה של המשתמש הראשון, פעם אחת' },
 ];

@@ -1,0 +1,120 @@
+#!/usr/bin/env node
+// npm run demo [-- --no-serve] [-- --port 4700]
+//
+// The whole engine on the fictional demo pack, in a throwaway home (./.demo,
+// gitignored, rebuilt on every run): posts in every state, then the website.
+//
+// The Results page needs published posts with numbers, and the demo has never
+// published anything real. So the demo seeds a few readings and marks every one
+// of them `source: demo-seed`; the Results page then says, in a banner, that
+// the numbers are invented for the demo. The engine itself never writes a
+// number an API did not give.
+
+import { cpSync, rmSync } from 'node:fs';
+import path from 'node:path';
+import { ROOT, examplesDir } from '../src/core/paths.js';
+
+const args = process.argv.slice(2);
+const home = path.join(ROOT, '.demo');
+process.env.OF_HOME = home;
+process.env.OF_MODE = 'recorded';
+rmSync(home, { recursive: true, force: true });
+cpSync(path.join(examplesDir, 'demo'), path.join(home, 'packs', 'demo'), { recursive: true });
+// Two more fictional brands, so the pages can show several accounts side by side (scripts/demo-extras.js).
+const { EXTRAS } = await import('./demo-extras.js');
+const { mkdirSync, writeFileSync } = await import('node:fs');
+for (const x of EXTRAS) {
+  const dir = path.join(home, 'packs', x.id);
+  for (const sub of ['recordings/documents', 'recordings/drafts']) mkdirSync(path.join(dir, sub), { recursive: true });
+  for (const k of ['pack', 'theme', 'sources', 'formats', 'rules']) writeFileSync(path.join(dir, `${k}.json`), JSON.stringify(x[k], null, 2));
+  writeFileSync(path.join(dir, 'voice.md'), x.voice);
+  for (const [key, d] of Object.entries(x.documents)) writeFileSync(path.join(dir, 'recordings', 'documents', `${key}.json`), JSON.stringify(d, null, 2));
+  for (const [key, d] of Object.entries(x.drafts)) writeFileSync(path.join(dir, 'recordings', 'drafts', `${key}.json`), JSON.stringify({ document: key, ...d }, null, 2));
+}
+
+const { makeContext } = await import('../src/engine.js');
+const { buildPost } = await import('../src/pipeline/build.js');
+const { publishPost } = await import('../src/publish/index.js');
+const { addUser } = await import('../src/web/auth.js');
+const { learn } = await import('../src/metrics/collect.js');
+const { israelDate, israelInstant, addDays } = await import('../src/schedule/israel.js');
+const { slotsFor } = await import('../src/schedule/slots.js');
+const { closeBrowser } = await import('../src/render/render.js');
+const { writeSummaries } = await import('../src/autonomy/runner.js');
+const { setSetting } = await import('../src/core/store.js');
+
+const ctx = makeContext({ log: () => {} });
+const db = ctx.db;
+const pack = ctx.pack('demo');
+const PASSWORD = 'demo-password-2026';
+addUser(db, 'demo', PASSWORD, 'owner');
+setSetting(db, 'globalBudgetUsd', 40);
+
+const now = Date.now();
+const today = israelDate(now);
+const HOUR = 3_600_000;
+const build = async (opts = {}) => {
+  const r = await buildPost(ctx, { pack, ...opts });
+  if (r.status !== 'queued') console.log(`demo: a post was ${r.status} (${r.reason})`);
+  return r;
+};
+
+// Three posts published in the past fortnight, with demo readings 72h+ later.
+const past = [];
+for (const [daysAgo, views, likes, shares, saves] of [
+  [12, 4200, 310, 64, 120],
+  [8, 1900, 96, 11, 31],
+  [5, 6100, 520, 140, 260],
+]) {
+  const r = await build();
+  const at = new Date(now - daysAgo * 24 * HOUR).toISOString();
+  db.update('posts', r.postId, { status: 'approved', approved_by: 'demo', approved_at: at, slot_at: at });
+  await publishPost(ctx, r.postId, { t: Date.parse(israelInstant(israelDate(Date.parse(at)), '12:45').toISOString()) }).catch((e) => console.log(`demo publish: ${e.message}`));
+  db.update('posts', r.postId, { published_at: at, created_at: at });
+  for (const [platform, v, l, s, sv] of [
+    ['tiktok', views, likes, shares, null],
+    ['instagram', Math.round(views * 0.35), Math.round(likes * 0.4), Math.round(shares * 0.3), saves],
+  ]) {
+    db.insert('metrics', { post_id: r.postId, platform, collected_at: new Date(Date.parse(at) + 80 * HOUR).toISOString(), age_hours: 80, views: v, likes: l, comments: Math.round(l / 12), shares: s, saves: sv, raw_json: { source: 'demo-seed' } });
+  }
+  past.push(r.postId);
+}
+learn(ctx);
+
+// Today: one published this morning, one approved for later, two waiting.
+const { slots } = slotsFor(today, pack.meta.schedule);
+const later = slots.find((s) => s.getTime() > now) || new Date(now + 3 * HOUR);
+const r1 = await build();
+db.update('posts', r1.postId, { status: 'approved', approved_by: 'demo', approved_at: new Date(now - 2 * HOUR).toISOString(), slot_at: new Date(now - HOUR).toISOString() });
+await publishPost(ctx, r1.postId, { t: Date.parse(israelInstant(today, '12:41').toISOString()) }).catch((e) => console.log(`demo publish: ${e.message}`));
+const r2 = await build({ slotAt: later.toISOString() });
+db.update('posts', r2.postId, { status: 'approved', approved_by: 'demo', approved_at: new Date(now - 30 * 60_000).toISOString() });
+await build({ slotAt: new Date(later.getTime() + 2 * HOUR).toISOString() });
+// Nothing new is left to draft from, so the last one is refused by the pipeline, and says why.
+await build({ slotAt: israelInstant(addDays(today, 1), '12:40').toISOString() });
+// The two extra brands: one post published last week with demo readings, one for today.
+for (const [id, views] of [['demo-coffee', 2600], ['demo-running', 5300]]) {
+  const p = ctx.pack(id);
+  const a = await buildPost(ctx, { pack: p });
+  const at = new Date(now - 6 * 24 * HOUR).toISOString();
+  db.update('posts', a.postId, { status: 'approved', approved_by: 'demo', approved_at: at, slot_at: at });
+  await publishPost(ctx, a.postId, { t: Date.parse(israelInstant(israelDate(Date.parse(at)), '19:00').toISOString()) }).catch((e) => console.log(`demo publish: ${e.message}`));
+  db.update('posts', a.postId, { published_at: at, created_at: at });
+  for (const [platform, v, sv] of [['tiktok', views, null], ['instagram', Math.round(views * 0.3), Math.round(views * 0.02)]]) {
+    db.insert('metrics', { post_id: a.postId, platform, collected_at: new Date(Date.parse(at) + 80 * HOUR).toISOString(), age_hours: 80, views: v, likes: Math.round(v * 0.06), comments: Math.round(v * 0.004), shares: Math.round(v * 0.012), saves: sv, raw_json: { source: 'demo-seed' } });
+  }
+  const s2 = slotsFor(today, p.meta.schedule).slots.find((x) => x.getTime() > now) || new Date(now + 4 * HOUR);
+  const b = await buildPost(ctx, { pack: p, slotAt: s2.toISOString() });
+  if (id === 'demo-running' && b.status === 'queued') db.update('posts', b.postId, { status: 'approved', approved_by: 'engine:auto', approved_at: new Date().toISOString() });
+}
+learn(ctx);
+writeSummaries(ctx, addDays(today, -1));
+await closeBrowser();
+
+console.log(`demo: ${db.get('SELECT COUNT(*) AS n FROM posts').n} posts in ${home}`);
+if (!args.includes('--no-serve')) {
+  const { listen } = await import('../src/web/server.js');
+  const port = args.includes('--port') ? Number(args[args.indexOf('--port') + 1]) : Number(process.env.PORT) || 4700;
+  const s = await listen(ctx, { port });
+  console.log(`\nopen http://127.0.0.1:${s.port}\n  user: demo\n  password: ${PASSWORD}\n(fictional demo data; nothing here is real)`);
+}

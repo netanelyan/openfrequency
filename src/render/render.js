@@ -130,7 +130,9 @@ export async function renderHtml(html, { size, file }) {
 
     // Shrink any block that overflows, 2% a step, down to the floor.
     const fitted = await tab.evaluate((floor) => {
-      const over = (el) => el.scrollHeight - el.clientHeight > Math.max(2, (parseFloat(getComputedStyle(el).lineHeight) || 40) * 0.3);
+      // A line that did not fit costs a whole line; a tall face's descenders spilling out of a tight
+      // line box (line-height 0.9) cost a third of one at any size. Only the first is an overflow.
+      const over = (el) => el.scrollHeight - el.clientHeight > Math.max(2, (parseFloat(getComputedStyle(el).lineHeight) || 40) * 0.6);
       const out = [];
       for (const el of document.querySelectorAll('.fit')) {
         if (!over(el)) continue;

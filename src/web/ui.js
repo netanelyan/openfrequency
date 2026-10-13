@@ -1,0 +1,144 @@
+// The pieces every page is made of. Pages are functions from data to HTML
+// strings: no framework, so a page can be tested by reading it. Every value that
+// came from outside goes through esc().
+//
+// HARD RULE 8: the document is lang="he" dir="rtl". A Latin run inside Hebrew
+// (a handle, a URL, a product name) sits in <bdi> or .ltr so bidi cannot
+// scramble the punctuation around it.
+
+export const esc = (s) =>
+  String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+const TZ = 'Asia/Jerusalem';
+const fmt = (o) => new Intl.DateTimeFormat('he-IL', { timeZone: TZ, ...o });
+const F = {
+  day: fmt({ weekday: 'long', day: 'numeric', month: 'long' }),
+  short: fmt({ day: 'numeric', month: 'short' }),
+  time: fmt({ hour: '2-digit', minute: '2-digit', hour12: false }),
+  stamp: fmt({ day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }),
+  wd: fmt({ weekday: 'narrow' }),
+};
+export const dayHe = (t) => F.day.format(new Date(t));
+export const shortDate = (t) => (t ? F.short.format(new Date(t)) : '');
+export const timeHe = (t) => (t ? F.time.format(new Date(t)) : '');
+export const stamp = (t) => (t ? F.stamp.format(new Date(t)) : '');
+export const weekdayNarrow = (t) => F.wd.format(new Date(t));
+export const usd = (n, d = 2) => `<span class="num ltr">$${(Number(n) || 0).toFixed(d)}</span>`;
+export const k = (n) => (n == null ? '–' : n >= 10_000 ? `${Math.round(n / 1000)}K` : n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(n));
+export const pct = (x) => (x == null ? '–' : `${Math.round(x * 100)}%`);
+
+export const icon = (name, cls = 'i') => `<svg class="${cls}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+
+const SPRITE = `<svg class="sr" width="0" height="0" aria-hidden="true"><defs>
+<symbol id="i-wave" viewBox="0 0 24 24"><path d="M2 12c2.5-6 4.5-6 7 0s4.5 6 7 0 4-6 6 0"/></symbol>
+<symbol id="i-today" viewBox="0 0 24 24"><path d="M4 13h4l2 3h4l2-3h4"/><path d="M5.5 5h13L21 13v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5z"/></symbol>
+<symbol id="i-accounts" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.8c1.8.6 3 2.3 3.5 5.2"/></symbol>
+<symbol id="i-results" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></symbol>
+<symbol id="i-sources" viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/><path d="M9 8h7M9 11.5h5"/></symbol>
+<symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="M4.5 12.5l5 5 10-11"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+<symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></symbol>
+<symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18v.01"/></symbol>
+<symbol id="i-power" viewBox="0 0 24 24"><path d="M12 3v9"/><path d="M6.3 7.3a8 8 0 1 0 11.4 0"/></symbol>
+<symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></symbol>
+<symbol id="i-logout" viewBox="0 0 24 24"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"/><path d="M10 8l-4 4 4 4M6 12h10"/></symbol>
+<symbol id="i-chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+<symbol id="i-ext" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+<symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></symbol>
+<symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.9 5.5L19.5 10l-5.6 1.6L12 17l-1.9-5.4L4.5 10l5.6-1.5z"/></symbol>
+<symbol id="i-inbox" viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M4 14h4l2 3h4l2-3h4"/></symbol>
+</defs></svg>`;
+
+export const NAV = [
+  ['/', 'היום', 'today', 'today'],
+  ['/accounts', 'חשבונות', 'accounts', 'accounts'],
+  ['/results', 'תוצאות', 'results', 'results'],
+  ['/sources', 'מקורות', 'sources', 'sources'],
+  ['/new', 'חשבון חדש', 'new', 'plus'],
+  ['/settings', 'הגדרות', 'settings', 'settings'],
+];
+
+/** The page around a body. ctx: { title, active, csrf, spend: { usd, cap }, waiting, theme, user } */
+export function layout(ctx, body) {
+  const nav = NAV.map(([href, label, key]) => `<a href="${href}"${key === ctx.active ? ' aria-current="page"' : ''}>${label}</a>`).join('');
+  const tabs = [NAV[0], NAV[1], NAV[2], NAV[3], ['/more', 'עוד', 'more', 'more']]
+    .map(
+      ([href, label, key, ic]) =>
+        `<a href="${href}"${key === ctx.active || (key === 'more' && ['new', 'settings', 'more'].includes(ctx.active)) ? ' aria-current="page"' : ''}>${icon(ic)}<span>${label}</span>${key === 'today' && ctx.waiting ? `<b class="badge num">${ctx.waiting}</b>` : ''}</a>`
+    )
+    .join('');
+  const s = ctx.spend || { usd: 0, cap: 0 };
+  const theme = ctx.theme === 'dark' || ctx.theme === 'light' ? ` data-theme="${ctx.theme}"` : '';
+  return `<!doctype html>
+<html lang="he" dir="rtl"${theme}>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f4f1ea" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f1114" media="(prefers-color-scheme: dark)">
+<title>${esc(ctx.title)} · תדר</title>
+<link rel="preload" href="/static/fonts/Assistant.ttf" as="font" type="font/ttf" crossorigin>
+<link rel="stylesheet" href="/static/style.css?v=${ctx.v || 1}">
+<link rel="stylesheet" href="/static/accounts.css?v=${ctx.v || 1}">
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+</head>
+<body>
+${SPRITE}
+<header class="top"><div class="wrap">
+  <a class="brand" href="/" aria-label="תדר, לדף הבית"><span class="mark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12c2.5-6 4.5-6 7 0s4.5 6 7 0 4-6 6 0"/></svg></span><span><b>תדר</b><small>open frequency</small></span></a>
+  <nav class="nav" aria-label="ראשי">${nav}</nav>
+  <div class="tools">
+    <a class="spend" href="/settings#budget" title="ההוצאה החודשית מתוך התקציב הכללי"><span>החודש</span><b class="num ltr">$${(Number(s.usd) || 0).toFixed(2)} / $${Number(s.cap) || 0}</b><meter min="0" max="${Number(s.cap) || 1}" low="${(Number(s.cap) || 1) * 0.7}" high="${(Number(s.cap) || 1) * 0.9}" optimum="0" value="${Math.min(Number(s.usd) || 0, Number(s.cap) || 1)}"></meter></a>
+    <form method="post" action="/theme" data-ajax="theme"><input type="hidden" name="_csrf" value="${esc(ctx.csrf)}"><button class="iconbtn" type="submit" aria-label="מצב כהה או בהיר">${icon('moon')}</button></form>
+    <form method="post" action="/logout"><input type="hidden" name="_csrf" value="${esc(ctx.csrf)}"><button class="iconbtn" type="submit" aria-label="יציאה">${icon('logout')}</button></form>
+  </div>
+</div></header>
+<main class="wrap" id="main">
+${body}
+<p class="foot">תדר · ${esc(ctx.footer || '')}</p>
+</main>
+<nav class="tabbar" aria-label="ניווט">${tabs}</nav>
+<div id="toast" role="status" aria-live="polite"></div>
+<script src="/static/app.js?v=${ctx.v || 1}" defer></script>
+</body>
+</html>`;
+}
+
+export const csrfField = (ctx) => `<input type="hidden" name="_csrf" value="${esc(ctx.csrf)}">`;
+
+/** A small POST form: one button. opts: { cls, ajax, confirm, fields, label, title } */
+export function postButton(ctx, action, label, { cls = 'btn', ajax = null, confirm = null, fields = {}, title = null, iconName = null } = {}) {
+  const hidden = Object.entries(fields)
+    .map(([k2, v]) => `<input type="hidden" name="${esc(k2)}" value="${esc(v)}">`)
+    .join('');
+  return `<form method="post" action="${esc(action)}"${ajax ? ` data-ajax="${esc(ajax)}"` : ''}>${csrfField(ctx)}${hidden}<button class="${cls}" type="submit"${confirm ? ` data-confirm="${esc(confirm)}"` : ''}${title ? ` title="${esc(title)}"` : ''}>${iconName ? icon(iconName) : ''}${label}</button></form>`;
+}
+
+export const MODE_HE = { approve: ['אישור', 'כל פוסט מחכה לך'], digest: ['תקציר', 'יוצא אם לא דחית'], auto: ['אוטומטי', 'יוצא, וסיכום יומי'] };
+export const STATUS_HE = {
+  drafting: ['בכתיבה', ''],
+  queued: ['ממתין', 'sig'],
+  approved: ['אושר', 'ok'],
+  publishing: ['מתפרסם', 'ok'],
+  published: ['פורסם', 'ok'],
+  rejected: ['נדחה', 'ghost'],
+  blocked: ['נחסם', 'bad'],
+  failed: ['נכשל', 'bad'],
+  expired: ['פג תוקף', 'ghost'],
+  sample: ['דוגמה', 'warn'],
+};
+export const statusChip = (s) => {
+  const [he, cls] = STATUS_HE[s] || [s, ''];
+  return `<span class="chip ${cls}">${esc(he)}</span>`;
+};
+export const accDot = (id) => `<span class="dot acc-${esc(id)}" aria-hidden="true"></span>`;
