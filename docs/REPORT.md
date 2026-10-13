@@ -73,6 +73,7 @@ All of them are in `.env.example` with a comment; the file goes to `$OF_HOME/.en
 | `OF_MODE` | `live` or `recorded` | Default: live when an Anthropic key is set |
 | `OF_LLM` | `recorded` forces recorded drafting in live mode | For testing |
 | `ANTHROPIC_API_KEY` | Claude | console.anthropic.com, API keys |
+| `ANTHROPIC_WORKSPACE_ID` | The workspace, only for a key not scoped to one (the API refuses such a key without it) | console.anthropic.com, Settings, Workspaces (`wrkspc_...`) |
 | `MODEL_DRAFT`, `MODEL_REVIEW`, `MODEL_JUDGE` | Model per role | Default `claude-opus-5-5`; `claude-sonnet-5-5` halves the cost |
 | `ZERNIO_API_KEY` | Publishing and analytics | zernio.com, Settings, API |
 | `PUBLISH_MODE` | Must be `live` for anything to leave | You |

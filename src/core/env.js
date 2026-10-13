@@ -44,6 +44,7 @@ export const isSet = (name, env = process.env) => Boolean(String(env[name] || ''
  */
 export const KEYS = [
   { name: 'ANTHROPIC_API_KEY', group: 'drafting', what: 'Claude: drafting, review, scoring', he: 'Claude: כתיבה, בדיקת "נשמע כמו בוט", דירוג מקורות' },
+  { name: 'ANTHROPIC_WORKSPACE_ID', group: 'drafting', what: 'The workspace, for a key not scoped to one', he: 'מזהה ה-workspace, למפתח שלא שייך לאחד' },
   { name: 'ZERNIO_API_KEY', group: 'publishing', what: 'Zernio: publishing and analytics', he: 'Zernio: פרסום ונתונים' },
   { name: 'BRAVE_API_KEY', group: 'discovery', what: 'Brave Search: finding sources for a new account', he: 'Brave: חיפוש מקורות לחשבון חדש' },
   { name: 'YOUTUBE_API_KEY', group: 'discovery', what: 'YouTube Data API: formats that work now', he: 'YouTube: פורמטים שעובדים עכשיו, עם מספרים אמיתיים' },

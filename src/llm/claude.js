@@ -26,8 +26,10 @@ export class ClaudeError extends Error {
   }
 }
 
-export function claudeClient({ apiKey = process.env.ANTHROPIC_API_KEY } = {}) {
-  const sdk = new Anthropic({ apiKey, fetch: doorFetch, maxRetries: 2, timeout: 10 * 60_000 });
+export function claudeClient({ apiKey = process.env.ANTHROPIC_API_KEY, workspaceId = process.env.ANTHROPIC_WORKSPACE_ID } = {}) {
+  // A key that is not scoped to a workspace must name one on every request.
+  const ws = String(workspaceId || '').trim();
+  const sdk = new Anthropic({ apiKey, fetch: doorFetch, maxRetries: 2, timeout: 10 * 60_000, ...(ws ? { defaultHeaders: { 'anthropic-workspace-id': ws } } : {}) });
   let fallbackRefused = false;
 
   return {

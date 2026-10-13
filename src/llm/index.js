@@ -18,7 +18,7 @@ export const ROLES = {
 /** The live client when a key is set and recordings are not forced; otherwise the recorded one. */
 export function makeLlm(env = process.env) {
   const live = isSet('ANTHROPIC_API_KEY', env) && env.OF_LLM !== 'recorded';
-  return live ? claudeClient({ apiKey: env.ANTHROPIC_API_KEY }) : recordedClient();
+  return live ? claudeClient({ apiKey: env.ANTHROPIC_API_KEY, workspaceId: env.ANTHROPIC_WORKSPACE_ID }) : recordedClient();
 }
 
 /**
