@@ -1,0 +1,48 @@
+{
+  "document": "basil-iceberg",
+  "format": "plant-iceberg",
+  "outline": {
+    "usable": true,
+    "why": "the page goes from the basics everyone knows (sun, flowers) down to details few people know (cold damage, the seeds, the smell glands)",
+    "topic": "הקרחון של הבזיליקום",
+    "subject": { "a": "", "b": "", "answer": "", "date": "" },
+    "imageQuery": "",
+    "facts": [
+      { "id": "f1", "claim": "בזיליקום צריך לפחות 6 שעות שמש ישירה ביום, ופחות מזה נותן עלים קטנים וחיוורים", "quote": "Basil needs at least 6 hours of direct sun a day, and fewer hours give small, pale leaves.", "doc": "D1" },
+      { "id": "f2", "claim": "קוטמים ניצני פרחים ברגע שהם מופיעים, כי אחרי הפריחה העלים נהיים מרים ויוצאים פחות עלים חדשים", "quote": "once basil flowers, its leaves turn bitter and the plant makes fewer new ones", "doc": "D1" },
+      { "id": "f3", "claim": "קוטפים מלמעלה, מעל זוג עלים, ומהנקודה הזאת יוצאים שני גבעולים חדשים", "quote": "Harvest from the top, cutting just above a pair of leaves, and two new stems will grow from that point.", "doc": "D1" },
+      { "id": "f4", "claim": "ייחור של 10 סנטימטרים בכוס מים מוציא שורשים תוך 7 עד 10 ימים", "quote": "A 10 cm cutting placed in a glass of water grows roots in about 7 to 10 days.", "doc": "D1" },
+      { "id": "f5", "claim": "עלי בזיליקום משחירים כשהלילה יורד מתחת ל-10 מעלות, והם כבר לא מתאוששים", "quote": "Basil leaves turn black when the night drops below 10°C, and the damage does not recover.", "doc": "D1" },
+      { "id": "f6", "claim": "בזיליקום קטוף משחיר במקרר תוך יום, ומחזיק יותר בכוס מים על השיש", "quote": "Cut basil kept in the fridge turns black within a day, and it keeps longer in a glass of water on the counter.", "doc": "D1" },
+      { "id": "f7", "claim": "זרעי בזיליקום תופחים במים והופכים לג'ל שקוף תוך דקות", "quote": "Basil seeds swell and form a clear gel within minutes in water, which is why some countries add them to drinks.", "doc": "D1" },
+      { "id": "f8", "claim": "הריח בא משמנים בבלוטות זעירות על פני העלה, ולכן עלה מעוך מריח חזק יותר", "quote": "The smell comes from oils in tiny glands on the leaf surface, which is why a crushed leaf smells stronger than a whole one.", "doc": "D1" },
+      { "id": "f9", "claim": "קוטמים את ניצני הפרחים ברגע שהם מופיעים", "quote": "Pinch off the flower buds as soon as they appear", "doc": "D1" }
+    ],
+    "items": [
+      { "role": "layer", "point": "שמש, והרבה ממנה", "facts": ["f1"] },
+      { "role": "layer", "point": "הפרחים הם הסוף", "facts": ["f9", "f2"] },
+      { "role": "layer", "point": "קוטפים מלמעלה", "facts": ["f3"] },
+      { "role": "layer", "point": "בזיליקום מכוס מים", "facts": ["f4"] },
+      { "role": "layer", "point": "הקור משחיר אותו", "facts": ["f5", "f6"] },
+      { "role": "layer", "point": "הזרעים והריח", "facts": ["f7", "f8"] }
+    ]
+  },
+  "slides": {
+    "hook": "הקרחון של הבזיליקום, מהשמש ועד הזרעים",
+    "sub": "למעלה מה שכולם יודעים, למטה מה שכמעט אף אחד לא",
+    "hookPattern": "iceberg",
+    "subject": { "a": "", "b": "", "answer": "", "date": "" },
+    "slides": [
+      { "role": "layer", "title": "שמש, והרבה ממנה", "body": "לפחות 6 שעות שמש ישירה ביום.\nפחות מזה, והעלים יוצאים קטנים וחיוורים.", "a": "", "b": "", "facts": ["f1"] },
+      { "role": "layer", "title": "הפרחים הם הסוף", "body": "קוטמים כל ניצן פרח ברגע שהוא מופיע.\nאחרי הפריחה העלים נהיים מרים, ויוצאים פחות עלים חדשים.", "a": "", "b": "", "facts": ["f9", "f2"] },
+      { "role": "layer", "title": "קוטפים מלמעלה", "body": "חותכים ממש מעל זוג עלים.\nמהנקודה הזאת יוצאים שני גבעולים חדשים.", "a": "", "b": "", "facts": ["f3"] },
+      { "role": "layer", "title": "בזיליקום מכוס מים", "body": "ייחור של 10 סנטימטרים בכוס מים.\nתוך 7 עד 10 ימים יש לו שורשים.", "a": "", "b": "", "facts": ["f4"] },
+      { "role": "layer", "title": "הקור משחיר אותו", "body": "מתחת ל-10 מעלות בלילה העלים משחירים, ולא מתאוששים.\nגם במקרר הוא משחיר תוך יום, ובכוס מים על השיש מחזיק יותר.", "a": "", "b": "", "facts": ["f5", "f6"] },
+      { "role": "layer", "title": "הזרעים והריח", "body": "זרעי בזיליקום במים הופכים לג'ל שקוף תוך דקות.\nהריח בא משמנים בבלוטות זעירות על העלה, ולכן עלה מעוך מריח חזק יותר.", "a": "", "b": "", "facts": ["f7", "f8"] }
+    ],
+    "caption": "הקרחון של הבזיליקום, מהשכבה שכולם מכירים ועד הקרקעית. למעלה השמש והפרחים שקוטמים, באמצע ייחור בכוס מים ולילה קר שמשחיר את העלים. ובקרקעית, זרעים שהופכים לג'ל ומאיפה בכלל מגיע הריח.",
+    "captionShort": "מ-6 שעות שמש ועד זרעים שהופכים לג'ל, שכבה אחרי שכבה.",
+    "question": "כמה זמן מחזיק אצלכם בזיליקום?",
+    "keywords": ["בזיליקום", "basil", "צמחי תבלין", "גינה במרפסת"]
+  }
+}

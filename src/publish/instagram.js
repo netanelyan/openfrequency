@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { getJson, NetError, postForm } from '../core/net.js';
+import { deleteJson, getJson, NetError, postForm } from '../core/net.js';
 import { getSetting, setSetting } from '../core/store.js';
 import { DAY, now } from '../core/clock.js';
 
@@ -85,6 +85,7 @@ async function graph(db, pack, path, { method = 'GET', params = {}, step, token 
   const url = `${base || `${host(cfg.auth)}/${GRAPH_VERSION()}`}/${path}`;
   try {
     if (method === 'GET') return await getJson(`${url}?${new URLSearchParams({ ...params, access_token: token })}`, { timeoutMs: 30_000 });
+    if (method === 'DELETE') return await deleteJson(`${url}?${new URLSearchParams({ ...params, access_token: token })}`, { timeoutMs: 30_000 });
     return await postForm(url, { ...params, access_token: token }, { timeoutMs: 60_000 });
   } catch (e) {
     const err = e.body?.error || {};
@@ -258,4 +259,18 @@ export async function publishInstagram(db, pack, { caption, imageUrls, aiLabel =
   let permalink = null;
   if (mediaId) permalink = (await graph(db, pack, mediaId, { params: { fields: 'permalink' }, step: 'permalink' }).catch(() => null))?.permalink || null;
   return { via: 'instagram', mediaId, creationId: parent.id, url: permalink, status: 'published' };
+}
+
+/**
+ * Delete one of our published posts (a carousel by its album id), after a
+ * takedown notice. Meta allows it only through Facebook Login, with the
+ * instagram_manage_contents permission; an Instagram Login account is deleted
+ * by hand in the app, and so is a token without that permission.
+ */
+export async function deleteMedia(db, pack, mediaId) {
+  if (igConfig(pack).auth !== 'facebook') throw new InstagramError('Instagram Login cannot delete a post through the API: delete it in the app', { step: 'delete' });
+  if (!/^\d+$/.test(String(mediaId || ''))) throw new InstagramError('no media id to delete', { step: 'delete' });
+  const r = await graph(db, pack, String(mediaId), { method: 'DELETE', step: 'delete' });
+  if (r && r.success === false) throw new InstagramError('Meta answered that the post was not deleted', { step: 'delete' });
+  return { deleted: true, id: r?.deleted_id || mediaId };
 }

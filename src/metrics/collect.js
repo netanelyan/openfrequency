@@ -2,7 +2,7 @@ import { DAY, HOUR, now, nowIso } from '../core/clock.js';
 import { j } from '../db/index.js';
 import { zernioAnalytics, zernioConfigured } from '../publish/zernio.js';
 import { insights as instagramInsights } from '../publish/instagram.js';
-import { credit, judge } from '../formats/rotation.js';
+import { credit, judge, learnMix } from '../formats/rotation.js';
 import { audit } from '../core/store.js';
 
 // What a published post did, read from the platforms, and what that teaches the
@@ -71,6 +71,12 @@ export function learn(ctx, { t = now() } = {}) {
     for (const c of judge(ctx.db, pack.id, { t })) {
       changes.push({ account: pack.id, ...c });
       audit(ctx.db, { action: `format_${c.change}`, accountId: pack.id, detail: c });
+    }
+    // The mix of entertaining and number posts follows the results, within 40% to 80%.
+    const m = learnMix(ctx.db, pack, { t });
+    if (m) {
+      changes.push({ account: pack.id, format: 'mix', change: 'mix', why: m.why });
+      audit(ctx.db, { action: 'mix_changed', accountId: pack.id, detail: m });
     }
   }
   return changes;

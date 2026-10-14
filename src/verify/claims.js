@@ -114,38 +114,55 @@ export function verifyFact(db, fact, { accountId, maxQuoteWords = 40 } = {}) {
  * whose text no longer hashes to its token, so an edit after the check cannot
  * reach a rendered slide without passing the gate again.
  */
-export function gate({ slides, facts, caption = '', hook = '', sub = '' }) {
+export function gate({ slides, facts, caption = '', hook = '', sub = '', extra = {}, structure = null, factFree = () => false }) {
   const problems = [];
   const byKey = new Map(facts.map((f) => [f.key, f]));
   const items = slides.filter((s) => s.kind === 'item');
   const allQuoteNums = new Set(facts.filter((f) => f.verified).flatMap((f) => [...numbersIn(f.quote, { words: true, hebrew: true })]));
-  const count = String(items.length);
+  // The post's own structure (how many slides, a top 10) is not a claim.
+  const own = structure || new Set([String(items.length)]);
 
   items.forEach((s, i) => {
     const where = `slide ${i + 1}`;
     const keys = s.factKeys || [];
-    if (!keys.length) problems.push(`${where}: states no sourced fact`);
+    // A myth as people say it, a verdict, a joke's setup: no fact of its own, and
+    // still no number the post's quotes do not hold.
+    const free = factFree(s.role);
+    if (!keys.length && !free) problems.push(`${where}: states no sourced fact`);
     const cited = keys.map((k) => byKey.get(k));
     keys.forEach((k, x) => {
       if (!cited[x]) problems.push(`${where}: cites "${k}", which is not one of the post's facts`);
       else if (!cited[x].verified) problems.push(`${where}: cites "${k}", which failed verification (${cited[x].error || 'unverified'})`);
     });
-    const nums = new Set(cited.filter((f) => f?.verified).flatMap((f) => [...numbersIn(f.quote, { words: true, hebrew: true })]));
-    // A count written in Hebrew words ("חמש") is held to its quotes like one written in digits.
-    for (const x of numbersIn(`${s.title} ${s.body}`, { hebrew: true })) if (!nums.has(x)) problems.push(`${where}: the number ${x} is not in the quotes it cites`);
+    const nums = !keys.length && free ? allQuoteNums : new Set(cited.filter((f) => f?.verified).flatMap((f) => [...numbersIn(f.quote, { words: true, hebrew: true })]));
+    // A count written in Hebrew words ("חמש") is held to its quotes like one written in digits,
+    // and so are a head-to-head's two values.
+    for (const x of numbersIn(`${s.title} ${s.body} ${s.a || ''} ${s.b || ''}`, { hebrew: true })) if (!nums.has(x)) problems.push(`${where}: the number ${x} is not in the quotes it cites`);
   });
   for (const [where, text] of [
-    ['the cover', `${hook} ${sub}`],
-    ['the caption', caption],
+    ['the cover', `${hook} ${sub} ${(extra.keywords || []).join(' ')} ${extra.subject?.date || ''}`],
+    ['the caption', `${caption} ${extra.captionIg || ''}`],
   ]) {
-    for (const x of numbersIn(text)) if (x !== count && !allQuoteNums.has(x)) problems.push(`${where}: the number ${x} is not in any cited quote`);
+    // "שמונה שנים" on a cover is a number like "8": held to the quotes, unless it is the post's own count.
+    for (const x of numbersIn(text, { hebrew: true })) if (!own.has(x) && !allQuoteNums.has(x)) problems.push(`${where}: the number ${x} is not in any cited quote`);
   }
-  const token = tokenOf({ slides, caption, hook, sub });
+  const token = tokenOf({ slides, caption, hook, sub, extra });
   return { ok: problems.length === 0, problems, token };
 }
 
-/** A hash of exactly the text that was checked. */
-export function tokenOf({ slides, caption = '', hook = '', sub = '' }) {
-  const body = JSON.stringify({ hook, sub, caption, slides: slides.map((s) => [s.kind, s.title || '', s.body || '', s.factKeys || []]) });
+/**
+ * A hash of exactly the text that was checked. The fields a phase 1 post never
+ * had (a slide's role and values, the Instagram caption, the keywords, the
+ * subject, the call to action) are hashed only when present, so a stored post's
+ * token still matches its text.
+ */
+export function tokenOf({ slides, caption = '', hook = '', sub = '', extra = {} }) {
+  const slide = (s) => {
+    const base = [s.kind, s.title || '', s.body || '', s.factKeys || []];
+    const role = s.role && !['item', 'cover', 'closer'].includes(s.role) ? s.role : '';
+    return role || s.a || s.b ? [...base, role, s.a || '', s.b || ''] : base;
+  };
+  const x = Object.fromEntries(Object.entries(extra || {}).filter(([, v]) => (Array.isArray(v) ? v.length : v && typeof v === 'object' ? Object.values(v).some(Boolean) : Boolean(v))));
+  const body = JSON.stringify({ hook, sub, caption, slides: slides.map(slide), ...(Object.keys(x).length ? { extra: x } : {}) });
   return createHash('sha256').update(body).digest('hex').slice(0, 32);
 }

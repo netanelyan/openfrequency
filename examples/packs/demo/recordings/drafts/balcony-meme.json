@@ -1,0 +1,43 @@
+{
+  "document": "balcony-meme",
+  "format": "balcony-meme",
+  "outline": {
+    "usable": true,
+    "why": "everyone has watched a supermarket basil die, and the page explains the real reason and the fix",
+    "topic": "למה בזיליקום מהסופר מת",
+    "subject": { "a": "", "b": "", "answer": "", "date": "" },
+    "imageQuery": "",
+    "facts": [
+      { "id": "f1", "claim": "עציץ בזיליקום מהסופר הוא לא צמח אחד: יש בו בדרך כלל 20 עד 30 שתילים צפופים", "quote": "A pot of basil from the supermarket is not one plant: it usually holds 20 to 30 seedlings sown close together.", "doc": "D1" },
+      { "id": "f2", "claim": "השתילים גודלו מהר בחממה חמה כדי להיראות מלאים על המדף, לא כדי להחזיק על אדן החלון", "quote": "They were grown fast in a warm greenhouse to look full on the shelf, not to last on a windowsill.", "doc": "D1" },
+      { "id": "f3", "claim": "השתילים הצפופים נלחמים על מים ואור, ורובם נחלשים תוך שבועיים מההגעה הביתה", "quote": "Crowded together, the seedlings compete for water and light, and most of them weaken within 2 weeks of coming home.", "doc": "D1" },
+      { "id": "f4", "claim": "השקיה מוגזמת מחמירה את זה, כי השורשים הצפופים נשארים רטובים ומתחילים להירקב", "quote": "Overwatering makes it worse, because the dense roots stay wet and start to rot.", "doc": "D1" },
+      { "id": "f5", "claim": "הפתרון הוא לפרק את גוש השורשים ל-3 או 4 גושים ולשתול כל אחד בעציץ משלו", "quote": "ease the root ball apart into 3 or 4 clumps and plant each in its own pot", "doc": "D1" },
+      { "id": "f6", "claim": "אחרי הפירוק הגושים בדרך כלל מתאוששים תוך שבוע וממשיכים לגדול עד סוף העונה", "quote": "Split this way, the clumps usually recover within a week and keep growing for the rest of the season.", "doc": "D1" }
+    ],
+    "items": [
+      { "role": "joke", "point": "היום הראשון: כבר מחפשים מתכון לפסטו", "facts": [] },
+      { "role": "joke", "point": "עלה אחד מצהיב: משקים, ועוד פעם", "facts": [] },
+      { "role": "joke", "point": "חצי עציץ שוכב: טיפול נמרץ בחלון אחר", "facts": [] },
+      { "role": "joke", "point": "שבועיים אחרי: חוזרים לסופר", "facts": ["f3"] },
+      { "role": "truth", "point": "20 עד 30 שתילים בעציץ אחד, והפתרון", "facts": ["f1", "f5", "f6"] }
+    ]
+  },
+  "slides": {
+    "hook": "כשאתם קונים בזיליקום בסופר ובטוחים שהפעם הוא יחזיק",
+    "sub": "ולמה זה בכלל לא אשמתכם",
+    "hookPattern": "when-you",
+    "subject": { "a": "", "b": "", "answer": "", "date": "" },
+    "slides": [
+      { "role": "joke", "title": "היום הראשון. הבזיליקום מהסופר על אדן החלון", "body": "כבר מחפשים מתכון לפסטו", "a": "", "b": "", "facts": [] },
+      { "role": "joke", "title": "היום השלישי. עלה אחד מצהיב", "body": "משקים. ואז עוד פעם, ליתר ביטחון", "a": "", "b": "", "facts": [] },
+      { "role": "joke", "title": "סוף השבוע. חצי עציץ שוכב על הצד", "body": "מעבירים אותו לחלון אחר וקוראים לזה טיפול נמרץ", "a": "", "b": "", "facts": [] },
+      { "role": "joke", "title": "שבועיים אחרי", "body": "חוזרים לסופר. אותו מדף, אותו בזיליקום", "a": "", "b": "", "facts": ["f3"] },
+      { "role": "truth", "title": "זה לא צמח אחד, זה 20 עד 30", "body": "בעציץ מהסופר יש בדרך כלל 20 עד 30 שתילים צפופים. מפרקים את גוש השורשים ל-3 או 4 גושים, וכל אחד מקבל עציץ משלו. תוך שבוע בערך הם מתאוששים.", "a": "", "b": "", "facts": ["f1", "f5", "f6"] }
+    ],
+    "caption": "בזיליקום מהסופר נראה מלא ושופע על המדף, ונחלש תוך שבועיים על אדן החלון. הסיבה היא שבעציץ אחד יש 20 עד 30 שתילים שנלחמים על מים ואור. מפרקים אותם ל-3 או 4 עציצים, ותוך שבוע בערך הם מתאוששים וממשיכים לגדול עד סוף העונה.",
+    "captionShort": "בעציץ בזיליקום מהסופר יש 20 עד 30 שתילים. ככה מצילים אותו.",
+    "question": "כמה בזיליקומים מהסופר כבר עברו אצלכם?",
+    "keywords": ["בזיליקום", "בזיליקום מהסופר", "basil", "גינה במרפסת"]
+  }
+}

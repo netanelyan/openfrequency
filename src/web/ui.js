@@ -155,6 +155,7 @@ export const STATUS_HE = {
   failed: ['נכשל', 'bad'],
   expired: ['פג תוקף', 'ghost'],
   sample: ['דוגמה', 'warn'],
+  taken_down: ['הוסר אחרי הודעה', 'bad'],
 };
 export const statusChip = (s) => {
   const [he, cls] = STATUS_HE[s] || [s, ''];

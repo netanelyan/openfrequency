@@ -50,7 +50,7 @@ test('no engagement endpoint is named anywhere in the code', () => {
   assert.deepEqual(hits, []);
 });
 
-test('the only writes are Claude, our own post on Zernio, and publishing our own post on Instagram', () => {
+test('the only writes are Claude, our own post on Zernio, publishing our own post on Instagram, and deleting it after a takedown', () => {
   assert.deepEqual(
     WRITE_RULES.map((r) => `${r.method} ${r.host} ${r.path.source}`),
     [
@@ -59,10 +59,18 @@ test('the only writes are Claude, our own post on Zernio, and publishing our own
       'POST zernio.com ^\\/api\\/v1\\/posts$',
       'POST graph.facebook.com ^\\/v\\d+\\.\\d+\\/\\d+\\/(media|media_publish)$',
       'POST graph.instagram.com ^\\/v\\d+\\.\\d+\\/\\d+\\/(media|media_publish)$',
+      'DELETE graph.facebook.com ^\\/v\\d+\\.\\d+\\/\\d+$',
     ]
   );
-  // A write that reaches a social host is publishing on our own account through its official API, and only that.
-  for (const r of WRITE_RULES.filter((x) => isSocial(x.host))) assert.match(r.path.source, /\(media\|media_publish\)\$$/, `${r.host} writes only create and publish media`);
+  // A write that reaches a social host is publishing on our own account through its official API, or
+  // deleting one of our posts by its numeric id; never an edge (a comment, a like) and never a POST to an object.
+  for (const r of WRITE_RULES.filter((x) => isSocial(x.host))) {
+    if (r.method === 'DELETE') assert.equal(r.path.source, '^\\/v\\d+\\.\\d+\\/\\d+$', `${r.host} deletes only a media object by id`);
+    else assert.match(r.path.source, /\(media\|media_publish\)\$$/, `${r.host} writes only create and publish media`);
+  }
+  assert.throws(() => assertAllowed('DELETE', 'https://graph.facebook.com/v25.0/17895695668004550/comments'), /refused/);
+  assert.throws(() => assertAllowed('POST', 'https://graph.facebook.com/v25.0/17895695668004550'), /refused/);
+  assert.throws(() => assertAllowed('DELETE', 'https://zernio.com/api/v1/posts/abc'), /refused/);
   for (const r of READ_RULES.filter((x) => isSocial(x.host))) assert.ok(r.path, `${r.host} reads are limited to listed API paths`);
 });
 

@@ -1,0 +1,242 @@
+import { test, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+import { contentRange, kindProblems, KINDS, ranksOf, shapeProblems, structureNumbers } from '../src/formats/kinds.js';
+import { buildPost, candidatesOf, gateDraft, hashtagsFor, keepItems, loadPost, mentionsDay, sourceLabel, textsOf } from '../src/pipeline/build.js';
+import { reviewUser } from '../src/voice/review.js';
+import { tokenOf } from '../src/verify/claims.js';
+import { closeBrowser, renderPost, slidePlaces } from '../src/render/render.js';
+import { headlineFaces, headlineFamily } from '../src/render/fonts.js';
+import { he, splitLead } from '../src/render/html.js';
+import { loadAll, loadPack } from '../src/packs/load.js';
+import { Db } from '../src/db/index.js';
+import { makeContext } from '../src/engine.js';
+import { copyPack, opened, tempHome } from './helpers.js';
+
+// The ten kinds of post: their shapes, the checks each kind adds, the gate's
+// rules for the slides that carry no fact of their own, and a full render of a
+// post of every kind on both platforms.
+
+after(() => closeBrowser());
+
+const fmt = (kind) => ({ id: `t-${kind}`, kind, name: KINDS[kind].name, hooks: ['x'] });
+const s = (role, title, body = '', facts = ['f1'], extra = {}) => ({ kind: 'item', role, title, body, factKeys: facts, ...extra });
+
+/** A small, valid post of each kind: the content slides, the subject, and its facts. */
+const SAMPLES = {
+  story: { slides: [s('beat', 'הכל התחיל בעציץ אחד', 'שתיל אחד של פוטוס על אדן חלון בתל אביב.'), s('beat', 'שנה אחת אחר כך', 'הוא כיסה קיר שלם במטבח.'), s('beat', 'ואז הגיע החורף', 'העלים התחילו להצהיב אחד אחרי השני.'), s('payoff', 'הוא חי מייחור אחד', 'ענף אחד במים הציל את כל הצמח.')] },
+  'what-happened': { subject: { a: 'הפיקוס' }, slides: [s('then', 'פעם הוא היה בכל סלון', 'הצמח הכי נמכר במשתלות.'), s('turn', 'ואז הוא התחיל להשיר עלים', 'כל הזזה של העציץ הרגיזה אותו.'), s('turn', 'אנשים עברו לצמחים קלים יותר', 'הוא דורש מקום קבוע ואור יציב.'), s('now', 'היום הוא חוזר', 'בעיקר במשרדים עם חלונות גדולים.')] },
+  'on-this-day': { subject: { date: '14 באוקטובר 2019' }, slides: [s('context', 'גג ריק בלב העיר', 'אף אחד לא חשב שיצמח שם משהו.'), s('moment', 'שלושים עציצים ביום אחד', 'השכנים עלו עם שתילים וכלים.'), s('moment', 'הגינה נפתחה לכולם', 'כל אחד קיבל ערוגה משלו.'), s('after', 'היום יש שם גינה קבועה', 'והיא מספקת ירק לכל הבניין.')] },
+  'guess-who': { subject: { answer: 'אלוורה' }, slides: [s('clue', 'אני שורד חודש בלי מים', 'העלים שלי שומרים את המים בפנים.'), s('clue', 'יש לי שוליים קוצניים', 'אבל אני לא קקטוס.'), s('clue', 'ג׳ל מהעלים שלי מרגיע כוויות', 'הרבה בתים מחזיקים אותי במטבח.'), s('reveal', 'אלוורה', 'סוקולנט שצריך מעט מאוד מים.')] },
+  'head-to-head': { subject: { a: 'נענע', b: 'בזיליקום' }, slides: [s('stat', 'שעות שמש ביום', 'בזיליקום צריך יותר.', ['f1'], { a: '4', b: '6' }), s('stat', 'רוחב העציץ', 'נענע צריכה עציץ משלה.', ['f1'], { a: '25', b: '15' }), s('stat', 'קור בלילה', 'נענע שורדת כפור.', ['f1'], { a: 'כפור', b: '10°' }), s('stat', 'כמה שנים', 'נענע חוזרת כל אביב.', ['f1'], { a: 'שנים', b: 'עונה' }), s('verdict', 'שמש של בוקר? נענע', 'פחות שמש ופחות רגישות לקור.', [])] },
+  ranking: { slides: [s('ranks', 'ועוד חמישה שכמעט נכנסו', 'פוטוס\nזמיה\nסנסיווריה\nקקטוס\nאלוורה'), s('rank', 'פילודנדרון', 'שבועיים בין השקיות.'), s('rank', 'מונסטרה', 'שבועיים וחצי.'), s('rank', 'ספטיפיליום', 'שלושה שבועות.'), s('rank', 'זמיוקולקס', 'חודש.'), s('rank', 'קקטוס', 'חודש וחצי.')] },
+  iceberg: { slides: [s('layer', 'כולם יודעים', 'בזיליקום אוהב שמש\nצריך להשקות'), s('layer', 'קצת פחות', 'קוטפים מלמעלה'), s('layer', 'מעטים יודעים', 'פרחים מרים את העלים'), s('layer', 'כמעט אף אחד', 'הוא קרוב משפחה של הנענע')] },
+  'hot-take': { slides: [s('case', 'רוב הצמחים מתים מהשקיה', 'שורשים ספוגים נרקבים.'), s('case', 'אדמה יבשה זה לא סימן לצמא', 'השכבה העליונה מתייבשת ראשונה.'), s('case', 'עציץ בלי חור זו מלכודת', 'המים לא יוצאים.'), s('ask', 'פחות מים, יותר צמחים', 'מסכימים?', [])] },
+  'myth-fact': { slides: [s('myth', 'צריך להשקות כל יום', '', []), s('fact', 'רוב צמחי הבית רוצים אדמה שמתייבשת', 'בודקים עם האצבע לפני.'), s('myth', 'צמחים לא אוהבים לדבר איתם', '', []), s('fact', 'מה שעוזר זה אור, לא שיחה', 'חלון מזרחי עושה את העבודה.')] },
+  meme: { slides: [s('joke', 'כשקונים צמח רביעי', 'כי השלישי לא שרד את החורף', []), s('joke', 'כשהשכן שואל איך הצמחים', 'מצוין, בעיקר המתים', []), s('joke', 'כשהעלה הראשון מצהיב', 'מתחילים לחפש מטפל לצמחים', []), s('truth', 'רוב הצמחים מתים מעודף מים', 'לא מחוסר אהבה.')] },
+};
+
+test('every kind has a 5 to 8 slide shape, and the samples pass it', () => {
+  assert.equal(Object.keys(KINDS).filter((k) => k !== 'list').length, 10);
+  for (const [kind, sample] of Object.entries(SAMPLES)) {
+    const f = fmt(kind);
+    const [lo, hi] = contentRange(f);
+    assert.ok(lo + 1 >= 5 && hi + 1 <= 8, `${kind}: ${lo + 1} to ${hi + 1} slides with the cover`);
+    assert.deepEqual(shapeProblems(f, sample.slides.map((x) => x.role)), [], kind);
+    const post = { hook: 'שער', sub: '', subject: { a: '', b: '', answer: '', date: '', ...(sample.subject || {}) }, slides: sample.slides, caption: '', captionShort: '', keywords: [] };
+    assert.deepEqual(kindProblems(f, post), [], kind);
+  }
+});
+
+test('a shape out of order, too short or with a foreign role is refused, with a reason the model can use', () => {
+  assert.match(shapeProblems(fmt('story'), ['beat', 'payoff', 'beat', 'beat'])[0], /out of order|needs/);
+  assert.match(shapeProblems(fmt('guess-who'), ['clue', 'clue', 'reveal']).join(' '), /needs 4 to 5 content slides/);
+  assert.match(shapeProblems(fmt('guess-who'), ['clue', 'clue', 'reveal', 'reveal']).join(' '), /"clue"/);
+  assert.match(shapeProblems(fmt('head-to-head'), ['stat', 'stat', 'stat', 'stat', 'verdict', 'clue']).join(' '), /not part of/);
+  assert.match(shapeProblems(fmt('myth-fact'), ['myth', 'fact', 'fact', 'myth']).join(' '), /alternate|out of order|in a row/);
+  assert.match(shapeProblems(fmt('what-happened'), ['then', 'then', 'then', 'turn', 'now']).join(' '), /at most 2 "then"/);
+  assert.match(shapeProblems(fmt('ranking'), ['rank', 'rank', 'rank', 'rank']).join(' '), /5 to 6|"rank"/);
+});
+
+test('the kind checks: a guess-who that gives the answer away, place numbers in a ranking, a myth with a number of its own', () => {
+  const g = SAMPLES['guess-who'];
+  const spoiled = kindProblems(fmt('guess-who'), { hook: 'תנחשו את הצמח', sub: '', subject: g.subject, slides: g.slides, caption: 'הפעם: האלוורה של סבתא', captionShort: '', keywords: [] });
+  assert.match(spoiled.join(' '), /the captions gives the answer away/);
+  const clue = kindProblems(fmt('guess-who'), { hook: 'x', sub: '', subject: g.subject, slides: [{ ...g.slides[0], body: 'כמו כל אלוורה' }, ...g.slides.slice(1)], caption: '', captionShort: '', keywords: [] });
+  assert.match(clue.join(' '), /clue 1 gives the answer away/);
+  const numbered = g.slides.map((x, i) => (i === 1 ? { ...x, title: `רמז 1: ${x.title}` } : x));
+  assert.match(kindProblems(fmt('guess-who'), { hook: 'x', sub: '', subject: g.subject, slides: numbered, caption: '', captionShort: '', keywords: [] }).join(' '), /no clue numbers/);
+  const r = SAMPLES.ranking.slides.map((x, i) => (i === 5 ? { ...x, body: 'מקום ראשון: חודש וחצי.' } : x));
+  assert.match(kindProblems(fmt('ranking'), { slides: r, subject: {} }).join(' '), /no place numbers/);
+  const bad = SAMPLES.ranking.slides.map((x, i) => (i === 0 ? { ...x, body: 'פוטוס\nזמיה' } : x));
+  assert.match(kindProblems(fmt('ranking'), { slides: bad, subject: {} }).join(' '), /exactly five lines/);
+  const myth = SAMPLES['myth-fact'].slides.map((x, i) => (i === 0 ? { ...x, title: 'צריך להשקות 3 פעמים ביום' } : x));
+  assert.match(kindProblems(fmt('myth-fact'), { slides: myth, subject: {} }).join(' '), /the myth states 3/);
+  assert.match(kindProblems(fmt('head-to-head'), { slides: [s('stat', 'x', '', ['f1'], { a: '4', b: '' })], subject: { a: 'א', b: 'ב' } }).join(' '), /needs both values/);
+  assert.match(kindProblems(fmt('on-this-day'), { slides: SAMPLES['on-this-day'].slides, subject: { date: '14 באוקטובר' } }).join(' '), /year/);
+});
+
+test("a post's structure is not a claim: a top 10, 3 clues; the design numbers the places", () => {
+  assert.ok(structureNumbers(fmt('ranking'), SAMPLES.ranking.slides).has('10'));
+  assert.ok(structureNumbers(fmt('guess-who'), SAMPLES['guess-who'].slides).has('3'));
+  assert.deepEqual(ranksOf(SAMPLES.ranking.slides), [[10, 9, 8, 7, 6], 5, 4, 3, 2, 1]);
+  const places = slidePlaces([{ kind: 'cover' }, ...SAMPLES['guess-who'].slides]);
+  assert.deepEqual(places.slice(1).map((p) => [p.n, p.clues, p.isLast]), [[1, 3, false], [2, 3, false], [3, 3, false], [1, 3, true]]);
+});
+
+test('the gate: a verdict or a myth needs no fact, but every number on it is still quoted; both values of a stat are checked', () => {
+  const facts = [{ key: 'f1', quote: 'basil needs at least 6 hours of direct sun a day, while mint does well with 4 hours', verified: true }];
+  const draft = (slides, extra = {}) => ({ hook: 'נענע או בזיליקום', sub: '', caption: '', captionIg: '', keywords: [], subject: { a: 'נענע', b: 'בזיליקום' }, cta: null, slides: [{ kind: 'cover', role: 'cover', title: '', body: '', factKeys: [] }, ...slides], ...extra });
+  const h2h = fmt('head-to-head');
+  const ok = [s('stat', 'שעות שמש', '', ['f1'], { a: '4', b: '6' }), s('verdict', 'נענע', 'פחות שמש', [])];
+  assert.deepEqual(gateDraft(h2h, draft(ok), facts).problems, []);
+  const wrongValue = [s('stat', 'שעות שמש', '', ['f1'], { a: '4', b: '8' }), s('verdict', 'נענע', '', [])];
+  assert.match(gateDraft(h2h, draft(wrongValue), facts).problems.join(' '), /the number 8/);
+  const verdictNumber = [s('stat', 'שעות שמש', '', ['f1'], { a: '4', b: '6' }), s('verdict', 'נענע ב-3 מתוך 4', '', [])];
+  assert.match(gateDraft(h2h, draft(verdictNumber), facts).problems.join(' '), /the number 3/);
+  const noFact = [s('stat', 'שעות שמש', '', [], { a: '4', b: '6' }), s('verdict', 'נענע', '', [])];
+  assert.match(gateDraft(h2h, draft(noFact), facts).problems.join(' '), /states no sourced fact/);
+  // The keywords and the date are on the cover: their numbers are held to the quotes too.
+  assert.match(gateDraft(h2h, draft(ok, { keywords: ['basil 2024'] }), facts).problems.join(' '), /the cover: the number 2024/);
+});
+
+test("a phase 1 post's token does not change: the new fields count only when present", () => {
+  const slides = [{ kind: 'cover', title: '', body: '', factKeys: [] }, { kind: 'item', role: 'item', title: 'a', body: 'b', factKeys: ['f1'] }];
+  const before = tokenOf({ slides: slides.map(({ role, ...x }) => x), caption: 'c', hook: 'h', sub: '' });
+  assert.equal(tokenOf({ slides, caption: 'c', hook: 'h', sub: '', extra: { captionIg: '', keywords: [], subject: {}, cta: '' } }), before);
+  assert.notEqual(tokenOf({ slides, caption: 'c', hook: 'h', sub: '', extra: { keywords: ['x'] } }), before);
+});
+
+test("a group's documents are always numbered the same way, whatever order they were read in", () => {
+  const docs = [
+    { id: 9, key: 'mint-2', group_key: 'mint' },
+    { id: 4, key: 'pothos' },
+    { id: 7, key: 'mint-1', group_key: 'mint' },
+  ];
+  const c = candidatesOf(docs).find((x) => x.key === 'mint');
+  assert.deepEqual(c.docs.map((d) => d.key), ['mint-1', 'mint-2']);
+  assert.deepEqual(candidatesOf(docs.slice().reverse()).find((x) => x.key === 'mint').docs.map((d) => d.key), ['mint-1', 'mint-2']);
+});
+
+test('facts that fail verification take their slides with them, by the rules of the kind', () => {
+  const good = new Set(['f1', 'f3']);
+  const mf = keepItems(fmt('myth-fact'), [{ role: 'myth', facts: [] }, { role: 'fact', facts: ['f1'] }, { role: 'myth', facts: [] }, { role: 'fact', facts: ['f2'] }, { role: 'myth', facts: [] }, { role: 'fact', facts: ['f3'] }], good);
+  assert.deepEqual(mf.map((x) => x.role), ['myth', 'fact', 'myth', 'fact'], 'a myth goes with its fact');
+  const h = keepItems(fmt('head-to-head'), [{ role: 'stat', facts: ['f2'] }, { role: 'stat', facts: ['f1'] }, { role: 'verdict', facts: [] }], good);
+  assert.deepEqual(h.map((x) => x.role), ['stat', 'verdict'], 'a verdict carries no fact and stays');
+  const r = keepItems(fmt('ranking'), [{ role: 'rank', facts: ['f1'] }, { role: 'rank', facts: ['f2'] }], good);
+  assert.equal(r.length, 1, 'a ranking that loses a place is short, and its shape check refuses it');
+});
+
+test('an on-this-day document is one that names the day, in any of the ways sources write a date', () => {
+  const day = '2026-10-27';
+  assert.ok(mentionsDay('Israel and Austria drew on 27 October 2001 in Ramat Gan', day));
+  assert.ok(mentionsDay('The game was played on October 27, 2001.', day));
+  assert.ok(mentionsDay('ב-27 באוקטובר 2001 שיחקה ישראל מול אוסטריה', day));
+  assert.ok(mentionsDay('27/10/2001 Austria Home 1-1 World Cup 2002 Qualifying', day));
+  assert.ok(mentionsDay('date: 2001-10-27T00:00:00Z', day));
+  assert.ok(!mentionsDay('27 November 2001, and 7 October', day), 'another month is another day');
+  assert.ok(!mentionsDay('On 127 October nothing happened', day));
+  assert.ok(!mentionsDay('anything', 'not a date'));
+});
+
+test('the demo pack builds a post of every kind through the real pipeline, offline', { timeout: 300_000 }, async () => {
+  const { home, cleanup } = tempHome();
+  try {
+    const db = new Db(path.join(home, 'data.db'));
+    opened.push(db);
+    const ctx = makeContext({ db, packs: loadAll({ dir: path.join(home, 'packs') }), log: () => {} });
+    ctx.mediaDir = path.join(home, 'media');
+    const pack = ctx.pack('demo');
+    const byKind = {};
+    for (const f of pack.formats.formats) if (f.kind) byKind[f.kind] = f.id;
+    assert.equal(Object.keys(byKind).length, 10, 'the demo has a format of every kind');
+    for (const [kind, formatKey] of Object.entries(byKind)) {
+      const res = await buildPost(ctx, { pack, formatKey, day: kind === 'on-this-day' ? '2026-10-14' : null });
+      assert.equal(res.status, 'queued', `${kind}: ${res.reason}`);
+      const post = loadPost(db, res.postId);
+      assert.equal(post.kind, kind);
+      const n = post.slides.length;
+      assert.ok(n >= 5 && n <= 8, `${kind}: ${n} slides`);
+      assert.ok(post.caption.length >= 200 && post.caption_ig?.startsWith(post.hook), `${kind}: two captions, the Instagram one led by the cover line`);
+      assert.ok(post.hook_pattern && post.data.cta?.text, `${kind}: a cover pattern and a call to action`);
+      for (const p of ['tiktok', 'instagram']) assert.equal(post.media[p].length, n, `${kind}: every slide on ${p}`);
+    }
+  } finally {
+    cleanup();
+  }
+});
+
+test('a post of every kind renders on both platforms, nothing cut, in its own template', { timeout: 240_000 }, async () => {
+  const { home, cleanup } = tempHome();
+  try {
+    const dir = copyPack(home, 'demo');
+    const pack = loadPack(dir);
+    for (const [kind, sample] of Object.entries(SAMPLES)) {
+      const format = fmt(kind);
+      const slides = [{ kind: 'cover', role: 'cover', title: '', body: '', factKeys: [] }, ...sample.slides.map((x) => ({ ...x, sources: ['ספריית הצמחים לדוגמה'] }))];
+      const extra = { captionIg: '', keywords: ['צמחי בית', 'houseplants'], subject: { a: '', b: '', answer: '', date: '', ...(sample.subject || {}) }, cta: 'שמרו לפני ההשקיה הבאה' };
+      const post = { id: `t-${kind}`, hook: kind === 'hot-take' ? 'רוב הצמחים מתים מאהבה' : 'שער לבדיקה של הסוג הזה', sub: 'שורה שנייה', caption: 'c', extra, ctaKind: 'save' };
+      post.token = tokenOf({ slides, caption: post.caption, hook: post.hook, sub: post.sub, extra });
+      const files = await renderPost({ pack, format, post, slides, photoOn: KINDS[kind].photo, outDir: path.join(home, 'media', kind) });
+      for (const platform of ['tiktok', 'instagram']) {
+        assert.equal(files[platform].length, slides.length, `${kind} ${platform}`);
+        for (const f of files[platform]) assert.ok(existsSync(f));
+      }
+    }
+  } finally {
+    cleanup();
+  }
+});
+
+test('the review is told which slides make no claim of their own: a myth is not the post saying it', () => {
+  const m = SAMPLES['myth-fact'];
+  const texts = textsOf({ hook: 'כן או לא', sub: '', slides: [{ kind: 'cover', title: '', body: '' }, ...m.slides], caption: 'c', captionShort: '' });
+  const user = reviewUser({ meta: { displayName: 'דמו' }, voice: '# קול\n\n## מי מדבר\n\nגנן.' }, texts, []);
+  assert.match(user, /\(slide 1 title: a myth as people say it, corrected on the next slide\) צריך להשקות כל יום/);
+  assert.doesNotMatch(user, /\(slide 2 title: a myth/);
+});
+
+test("a slide names the article it was sourced from, except a guess-who's clue, whose article is the answer", () => {
+  const db = { get: () => ({ name: 'English Wikipedia: houseplants', config_json: JSON.stringify({ api: { kind: 'wikipedia' } }), title: 'Aloe vera' }) };
+  assert.equal(sourceLabel(db, { document_id: 1, source_id: 1 }), 'ויקיפדיה: Aloe vera');
+  assert.equal(sourceLabel(db, { document_id: 1, source_id: 1 }, { article: false }), 'ויקיפדיה');
+  const other = { get: () => ({ name: 'משרד החקלאות', config_json: '{}', title: 'x' }) };
+  assert.equal(sourceLabel(other, { document_id: 1, source_id: 1 }, { article: false }), 'משרד החקלאות');
+});
+
+test("a headline in a face with hard-to-read digits takes its digits from another face, at the same weights", () => {
+  assert.equal(headlineFamily('Heebo'), "'Heebo'");
+  assert.equal(headlineFaces('Heebo'), '');
+  assert.equal(headlineFamily('Karantina'), "'Karantina Headline'");
+  const css = headlineFaces('Karantina');
+  // One letters face and one digits face per weight: the browser picks a weight before a range.
+  for (const w of ['400', '700']) {
+    assert.ok(css.includes(`font-weight:${w};font-style:normal;font-display:block;unicode-range:U+0000-002F,U+003A-10FFFF;`), `letters at ${w}`);
+    assert.ok(css.includes(`font-weight:${w};font-style:normal;font-display:block;unicode-range:U+0030-0039;size-adjust:`), `digits at ${w}`);
+  }
+});
+
+test('mixed Hebrew lines: a Latin run stops at the end of a sentence, and a title opening with its number draws it once', () => {
+  assert.equal(he('ל-Gnrgy. 450,000 דולר'), 'ל-<bdi>Gnrgy</bdi>. 450,000 דולר');
+  assert.equal(he('ב-UFC 193 היא ניצחה'), 'ב-<bdi>UFC 193</bdi> היא ניצחה');
+  assert.equal(he('monday.com הודיעה'), '<bdi>monday.com</bdi> הודיעה');
+  assert.deepEqual(splitLead('7,703 שקל בחודש'), { lead: { value: '7,703', pre: '', post: '' }, rest: 'שקל בחודש' });
+  assert.deepEqual(splitLead('עד 7,703 שקל'), { lead: null, rest: 'עד 7,703 שקל' });
+});
+
+test('a niche hashtag goes on a post that names it, as whole words, not as letters inside another word', () => {
+  const pack = { formats: { hashtags: { broad: ['#גינון'], niche: ['#מנטה', '#גינהבמרפסת'] } } };
+  const tags = (text) => hashtagsFor(pack, { hashtags: [] }, 's', text);
+  assert.ok(tags('השתלנו מנטה בעציץ').includes('#מנטה'));
+  assert.ok(tags('ריח של למנטה טרייה').includes('#מנטה'), 'a one-letter prefix');
+  assert.ok(tags('גינה במרפסת קטנה').includes('#גינהבמרפסת'), 'words joined as a hashtag joins them');
+  assert.ok(!tags('הדקורמנטה של הבית').includes('#מנטה'), 'letters inside another word');
+});
+
+test("the review sees each fact with the source's own words, so a summary that misread its quote is caught", () => {
+  const texts = textsOf({ hook: 'h', sub: '', slides: [{ kind: 'cover', title: '', body: '' }], caption: 'c', captionShort: '' });
+  const user = reviewUser({ meta: { displayName: 'דמו' }, voice: '# קול\n\n## מי מדבר\n\nגנן.' }, texts, [{ claim: 'הבזיליקום אוהב צל', quote: 'Basil needs full sun' }]);
+  assert.match(user, /- הבזיליקום אוהב צל \(source: "Basil needs full sun"\)/);
+});

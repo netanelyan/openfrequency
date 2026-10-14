@@ -17,14 +17,18 @@ export function exportPost(db, postId, dir) {
     const sub = ensureDir(path.join(dir, platform));
     for (const f of files) copyFileSync(f, path.join(sub, path.basename(f)));
   }
-  const caption = [post.caption, imageCredit(db, post), (post.hashtags || []).join(' ')].filter(Boolean).join('\n\n');
+  const tail = [imageCredit(db, post), (post.hashtags || []).join(' ')].filter(Boolean);
+  const caption = [post.caption, ...tail].filter(Boolean).join('\n\n');
   writeFileSync(path.join(dir, 'caption.txt'), `${caption}\n`);
+  // Instagram's own caption: shorter, and it repeats the cover line.
+  if (post.caption_ig) writeFileSync(path.join(dir, 'caption-instagram.txt'), `${[post.caption_ig, ...tail].join('\n\n')}\n`);
 
-  const lines = [`# ${post.hook || post.topic || post.id}`, '', `Status: ${post.status}${post.reason ? ` (${post.reason})` : ''}`, `Format: ${post.format_id}`, ''];
+  const lines = [`# ${post.hook || post.topic || post.id}`, '', `Status: ${post.status}${post.reason ? ` (${post.reason})` : ''}`, `Format: ${post.format_id}${post.kind ? ` (${post.kind})` : ''}`, ''];
   lines.push('## Sources', '');
   const items = post.slides.filter((s) => s.kind === 'item');
   items.forEach((s, i) => {
-    lines.push(`### Slide ${i + 1}: ${s.title}`, '', s.body, '');
+    const values = s.data?.a || s.data?.b ? ['', `${post.data?.subject?.a || 'a'}: ${s.data.a} | ${post.data?.subject?.b || 'b'}: ${s.data.b}`] : [];
+    lines.push(`### Slide ${i + 1}${s.role && s.role !== 'item' ? ` (${s.role})` : ''}: ${s.title}`, '', s.body, ...values, '');
     for (const k of s.factKeys) {
       const f = post.facts.find((x) => x.key === k);
       if (!f) continue;
@@ -48,12 +52,16 @@ export function exportPost(db, postId, dir) {
         topic: post.topic,
         hook: post.hook,
         sub: post.sub,
+        kind: post.kind,
+        hookPattern: post.hook_pattern,
         caption: post.caption,
+        captionInstagram: post.caption_ig,
+        data: post.data,
         hashtags: post.hashtags,
         reviewScore: post.review_score,
         checks: post.checks,
         cost: { usd: Number(post.cost_usd.toFixed(5)), estimated: Boolean(post.cost_estimated), calls: spend },
-        slides: post.slides.map((s) => ({ kind: s.kind, title: s.title, body: s.body, facts: s.factKeys })),
+        slides: post.slides.map((s) => ({ kind: s.kind, role: s.role, title: s.title, body: s.body, ...(s.data ? { data: s.data } : {}), facts: s.factKeys })),
         facts: post.facts.map((f) => ({ key: f.key, claim: f.claim, quote: f.quote, source: f.source_name, url: f.doc_url, verified: f.verified, error: f.error })),
         steps: steps.map(({ step, status, detail, cost_usd, at }) => ({ step, status, detail, cost: cost_usd, at })),
       },

@@ -6,8 +6,8 @@ import { dataDir, ensureDir, outDir } from '../core/paths.js';
 import { audit, settings, step } from '../core/store.js';
 import { restAt } from '../schedule/shabbat.js';
 import { israelDate } from '../schedule/israel.js';
-import { gate, verifyFact } from '../verify/claims.js';
-import { loadPost } from '../pipeline/build.js';
+import { verifyFact } from '../verify/claims.js';
+import { formatOfPost, gateDraft, loadPost, postDraft } from '../pipeline/build.js';
 import { exportPost } from '../pipeline/export.js';
 import { imageCredit } from '../images/index.js';
 import { canRun, pauseAccount, publishErrorStreak } from '../autonomy/rails.js';
@@ -74,7 +74,7 @@ export function recheck(db, post, pack) {
     if (!v.ok && post.slides.some((s) => s.factKeys.includes(f.key))) problems.push(`${f.key}: ${v.error}`);
     return { ...f, verified: v.ok };
   });
-  const g = gate({ slides: post.slides, facts, caption: post.caption, hook: post.hook, sub: post.sub || '' });
+  const g = gateDraft(formatOfPost(db, pack, post), postDraft(post), facts);
   problems.push(...g.problems);
   if (post.checks?.token && g.token !== post.checks.token) problems.push('the text changed after it was checked');
   return problems;
@@ -104,6 +104,9 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
   const run = canRun(db, pack.id);
   if (!run.ok) throw new PublishRefused(run.why, 'paused');
   if (post.status !== 'approved') throw new PublishRefused(`the post is ${post.status}, not approved`, 'not_approved');
+  // A photograph the screen could not clear waits for a person to look at it.
+  const img = post.checks?.image ? db.get('SELECT safety, reviewed_at FROM images WHERE id = ?', post.checks.image) : null;
+  if (img && img.safety && img.safety !== 'ok' && !img.reviewed_at) throw new PublishRefused('התמונה מחכה לבדיקה של אדם (דם, פציעה, סימן מים): אשרו אותה בדף הפוסט', 'image_review');
 
   const problems = recheck(db, post, pack);
   if (problems.length) {
@@ -114,7 +117,8 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
   }
 
   db.update('posts', postId, { status: 'publishing', updated_at: nowIso() });
-  const caption = [post.caption, imageCredit(db, post), (post.hashtags || []).join(' ')].filter(Boolean).join('\n\n');
+  // TikTok gets the long caption; Instagram the short one, which repeats the cover line.
+  const captionFor = (platform) => [platform === 'instagram' && post.caption_ig ? post.caption_ig : post.caption, imageCredit(db, post), (post.hashtags || []).join(' ')].filter(Boolean).join('\n\n');
   const results = { ...(post.publish || {}) };
   const attempts = (Number(results._attempts) || 0) + 1;
   delete results._attempts;
@@ -130,14 +134,14 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
         results[platform] = await publishZernio({
           platform,
           accountId: pack.meta.zernio?.accounts?.[platform],
-          caption,
+          caption: captionFor(platform),
           imageUrls: publicUrls(post, platform),
           privacy: pack.meta.zernio?.tiktokPrivacy || 'SELF_ONLY',
           aiLabel: Boolean(post.ai_label),
           title: post.hook,
         });
       } else if (via === 'instagram') {
-        results[platform] = await publishInstagram(db, pack, { caption, imageUrls: publicUrls(post, platform), aiLabel: Boolean(post.ai_label), priorCreationId: results[platform]?.creationId || null });
+        results[platform] = await publishInstagram(db, pack, { caption: captionFor(platform), imageUrls: publicUrls(post, platform), aiLabel: Boolean(post.ai_label), priorCreationId: results[platform]?.creationId || null });
       } else {
         const dir = path.join(outDir(), 'published', pack.id, israelDate(t), postId);
         exportPost(db, postId, dir);
@@ -145,8 +149,8 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
         const want = wantedPublisher(pack, platform);
         const body =
           want === 'instagram'
-            ? { graph: 'POST /{ig-user-id}/media for each slide (is_carousel_item), then media_type=CAROUSEL with children and caption, then POST /{ig-user-id}/media_publish', userId: pack.meta.instagram?.userId || '<instagram user id>', slides: urls, caption: `${caption}${post.ai_label ? '\n\n<AI line>' : ''}`.slice(0, 2200) }
-            : postBody({ platform, accountId: pack.meta.zernio?.accounts?.[platform] || '<account id>', caption, imageUrls: urls, privacy: pack.meta.zernio?.tiktokPrivacy || 'SELF_ONLY', aiLabel: Boolean(post.ai_label), title: post.hook });
+            ? { graph: 'POST /{ig-user-id}/media for each slide (is_carousel_item), then media_type=CAROUSEL with children and caption, then POST /{ig-user-id}/media_publish', userId: pack.meta.instagram?.userId || '<instagram user id>', slides: urls, caption: `${captionFor(platform)}${post.ai_label ? '\n\n<AI line>' : ''}`.slice(0, 2200) }
+            : postBody({ platform, accountId: pack.meta.zernio?.accounts?.[platform] || '<account id>', caption: captionFor(platform), imageUrls: urls, privacy: pack.meta.zernio?.tiktokPrivacy || 'SELF_ONLY', aiLabel: Boolean(post.ai_label), title: post.hook });
         writeFileSync(path.join(dir, `${want === 'instagram' ? 'instagram' : 'zernio'}-request.${platform}.json`), `${JSON.stringify(body, null, 2)}\n`);
         results[platform] = { via: 'dry', path: dir, status: 'written', wanted: want };
       }

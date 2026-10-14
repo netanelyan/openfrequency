@@ -1,153 +1,157 @@
-# Report: open-frequency after phase 2, live on $15 a month
+# Report: open-frequency with three real accounts
 
-2026-10-13. The engine, the website, the tests and the docs are in this public
-repository; the real packs, the comparison files and the keys are in `$OF_HOME`
-(`./private/`), its own private repository. Nothing was published and the
-project's Anthropic key was not spent: the owner asked mid-session that nothing
-Claude Code can do go on the key, and the key was in any case refused by the API
-(it is not scoped to a workspace, and `ANTHROPIC_WORKSPACE_ID` is empty).
+2026-10-14. The engine, the website, the tests, the docs and the demo pack are in
+this public repository. The three real accounts live in `$OF_HOME` (`./private/`),
+its own private repository: their packs, research, launch set, account decisions
+(`decisions.md`) and their own report (`REPORT.md`). Nothing in this repository
+names them, and `npm run check:public` refuses anything that does. Nothing was
+published and no money was spent. The project's Anthropic key was not spent (the
+owner's instruction: nothing Claude Code can do goes on the key), and it is still
+refused by the API without `ANTHROPIC_WORKSPACE_ID`, checked again today with a
+model listing that bills nothing.
 
 ## The definition of done
 
 | Asked for | Where it stands |
 |---|---|
-| `docs/costs.md`: fixed costs with sources, per post before and after each change, the month at 180 posts at or under $15 without Zernio, Zernio on its own | Done. Fixed costs inside the cap: $0 (every other service is free at this volume). Per post, estimated: **$0.081 to $0.131 before**, **$0.021 to $0.036 per published post after**. At 180 posts: **$3.80 to $6.50 a month** expected, $9.90 to $14.80 if neither batching nor caching worked. Zernio: $6 a month for the 3 TikTok accounts alone, more with other projects' accounts (table in costs.md) |
-| Instagram through the official Graph API, TikTok through Zernio, chosen per pack | Done: `"publishers": { "tiktok": "zernio", "instagram": "instagram" }` in each real pack. Carousels, the long-lived token and its refresh, insights (reach, views, saves, shares, likes, comments) into the metrics. README section *Instagram* |
-| The budget cap in code, and tested | Done. `OF_BUDGET_MONTHLY_USD=15`; every call reserves its worst case first; a test bills every call at its worst case (one by one, concurrently, through batches, after a fallback to the dearest model) and the cap holds. Shares, cuts weakest first, 80% warning, 100% stop, the Settings panel |
-| Quality comparison files for review | `private/cost-compare/`: one file per topic with every version side by side, `summary.md` |
-| The money pack makes varied posts from official sources and the facts file | Done: 7 of 8 dry-run posts rendered, each from a different source (the school grant from the facts file, fuel excise, the Accountant General's rates, controlled milk prices, the average wage, housing prices, maternity pay) |
-| Holidays blocked and tested | Done: Shabbat and every yom tov from candle lighting the evening before to nightfall, tested against Hebcal for Oct 2026 to Oct 2028 |
-| `npm test` and `npm run check:public` pass | 127 tests and `check:public` (on everything staged), all passing |
-| This report | This file |
+| Three packs, complete | Done, in the private folder. Each pack has its brand, theme, voice (more than 10 lines it would write and 10 it never would), rules, formats, sources and schedule. One pack also has hand-checked tax and national-insurance figures (`facts/`), and one has an event calendar, a fight-week rhythm and the owner's photos with where each came from. The two retired accounts are archived, not deleted |
+| The ten formats, tested | Done. Story, what-happened, on-this-day, guess-who, head-to-head, ranking, iceberg, hot-take, myth-fact and meme are each a shape checked in code (`src/formats/kinds.js`). The demo pack has one format of every kind, and `test/formats.test.js` builds each of them through the real pipeline and renders it |
+| Every post: 5 to 8 slides, the payoff last, keywords in Hebrew and English, a varied call to action, a long TikTok caption and a short Instagram one | Done, and checked in code: the shape, the caption lengths (TikTok 200 to 900 characters, Instagram up to 260, led by the cover line), keywords in both languages, the call to action rotated by the code. The tell checks still run on every text |
+| About 60% entertaining, moved by the results within 40% to 80%; results per format and per cover pattern; 70/30 proven and trial; a format dropped after 3 losses in a row; the Results page in plain words | Done (`src/formats/rotation.js`, `src/metrics/collect.js`, the Results page's learning panel); tested with synthetic results, since there are no real ones yet |
+| The cap enforced; the month at 180 posts at or under $15 without Zernio, Zernio on its own line | The cap: done in phase 2, verified. The forecast, measured again on the launch set with the engine's review and rewrite and the share of posts the checks stop (`docs/costs.md`): **$7.20 to $12.20** expected at 180 posts, inside $15. The worst cases are not (a tokenizer that counts Hebrew 35% higher: up to $16.50; no batching or caching: about $26); the cap still holds, and the planner publishes fewer posts. Zernio: $6 a month for the three TikTok accounts |
+| Instagram through the Graph API, TikTok through Zernio, per pack | Done in phase 2 and verified (`publishers` in each `pack.json`). New: an Instagram post can be deleted through the Graph API, for a takedown |
+| Holidays, the takedown log, the violent-image check: working and tested | Holidays: phase 2, tested against Hebcal for Oct 2026 to Oct 2028. Takedowns and the image screen: new, tested in `test/content.test.js` (a notice, a delete, a second notice pausing the account; refusing words, the red share, a person's review, publishing refused until then) |
+| `npm test`, `npm run check:public`, a fresh clone with nothing about the accounts | 159 tests pass; `check:public` passes on everything staged and now also refuses a current pack id written as a word in any Markdown file; a fresh clone of the committed repository has none of the accounts' handles, names or ids |
+| Fresh screenshots from the demo pack | Done: 38 screenshots of the website on the demo pack, phone and desktop, light and dark (`docs/screenshots/`) |
+| The launch set: 9 posts per account, both platforms, a blind review | Done, in the private folder (`out/launch/<pack>/`): 27 posts, each with 7 or 8 kinds of post per account and at least 6 entertaining, rendered for TikTok and Instagram, both captions, sources, cost, the engine's review and the blind reviewer's notes. Three rounds of blind review; in the last, 3 of 27 passed a deliberately strict bar (stop the scroll, swipe to the end, a reason to save, send or comment). The reviews found more than 20 engine and design faults, all fixed with tests (decisions.md); the rest of what they found is content, written down per post for the owner |
+| This report, the private report, the session log | This file, `private/REPORT.md`, `docs/session-log/2026-10-14.md` |
 
-## What changed
+## What works
 
-**The budget** (`src/budget/`). The cap moved from a website setting ($60) to
-`OF_BUDGET_MONTHLY_USD` in `.env` ($15); the website can lower it, never raise
-it. Every paid call reserves the most it could cost (the prompt's bytes and
-`max_tokens`, at the dearest rate it can be billed at) against the cap and the
-account's share, in one transaction, and the real cost from the API's usage
-block replaces the reservation. The month is planned before each day's drafting:
-spent, held, the slots still to draft (Shabbat and festivals excluded) times the
-measured cost per post. If it does not fit, the weakest account drops to one post
-a day first, and every page says so. 80% warns; 100% stops drafting until the
-next month. The Settings page shows the spend, the forecast and the posts left.
+- **Drafting to rendering**, for every kind: the outline, the fact gate, the
+  slides, the checks in code, the review, one redraft, rendering for TikTok
+  (1080×1920) and Instagram (1080×1350). The same pipeline built the launch set
+  from recorded documents.
+- **The schedule**: two posts a day per account, none on Shabbat or a festival.
+  The fight-week slots work too: the tale of the tape three days before a card,
+  the prediction the day before, the recap the morning after, drafted only once a
+  document has the result.
+- **Learning**: each post is scored at 72 hours, with results kept per format and
+  per cover pattern. The rotation is 70/30 between proven and trial, a format is
+  dropped after 3 losses in a row, and the mix shifts between entertaining and
+  number posts.
+- **Publishing**, dry until the keys are in: TikTok through Zernio and Instagram
+  through the Graph API, each one chosen per pack.
+- **Takedowns** and **the image screen**: both are visible on the website. A
+  post's page has a takedown panel and a button to confirm a photo, and every
+  page shows a banner when something is waiting for a person.
+- **Sources**: Wikipedia sections through the REST HTML, with tables. Also
+  Wikidata by date, CSV, JSON, data.gov.il, the CBS and the Bank of Israel's
+  series, and hand-checked facts.
 
-**Cheaper posts** (`src/llm/`, `src/pipeline/`):
-- Model roles: Claude Sonnet 5.5 drafts and rewrites, Sonnet 5.5 reviews, Claude
-  Haiku 5.5 (released 7 October) scores sources and reads trends. Opus is not used:
-  the comparison found nothing it did that Sonnet did not.
-- A day's posts are drafted the day before through the Message Batches API, all
-  of them in one batch per step, at half price. A batch that a restart interrupts
-  is still recorded.
-- Prompts are built for the cache: the pack's voice, rules and formats first (one
-  cached block shared by the outline, slides and rewrite calls), then the task,
-  then only what changes.
-- Documents are narrowed to their content in code (37% fewer characters sent).
-- Punctuation tells are fixed in code instead of by a redraft; a generic closing
-  question ("ידעתם את זה?") is dropped in code; the slides get one redraft at
-  most; the review runs after every code check passed; the lines it flags get
-  one rewrite; anything still wrong drops the post.
-- The reviewer's "says more than its facts" finding, ignored since phase 1, now
-  sends the line to the rewrite and blocks the post if it is not fixed. This is
-  the only check of the sentence around a quoted number.
-- Source discovery and trend searches are cached (30 and 7 days).
+## What is not automatic, by design or by the platforms
 
-**Publishing** (`src/publish/`). Instagram goes out through Meta's Graph API:
-the network door allows exactly two Graph writes (a media container, publishing
-it) and refuses every comment, mention, tag, message, hashtag and other-account
-edge by name. Each platform publishes on its own and is never sent twice; an
-Instagram throttle waits for the next tick. `npm run instagram:token`,
-`npm run instagram:check`, `npm run zernio:check`.
+- **TikTok has no delete** for a third party, neither through Zernio nor through
+  TikTok's APIs. A takedown on TikTok is listed for the owner, who confirms it
+  once the post is deleted by hand.
+- **Photos the screen cannot clear** wait for a person. Without a live key that
+  means every photo with a large share of deep red; with one, Claude Haiku looks
+  first.
+- **The launch set was not drafted by the API.** Claude Code subagents answered
+  the engine's exact requests. The live drafting path is tested against stubs and
+  recordings, and has not yet run against the real API (it needs the workspace
+  ID).
 
-**Sources** (`src/sources/`). A CSV reader, data.gov.il's CKAN API, the Bank of
-Israel's series API, the CBS APIs, Hebrew labels for coded columns, and
-hand-checked facts (`facts/` in a pack) that expire and are edited on the website.
+## What needs a key, and where to get it
 
-**Schedule** (`src/schedule/hebrew.js`). The Hebrew calendar and Israel's festivals.
+| Variable | What it does | Where to get it | Without it |
+|---|---|---|---|
+| `ANTHROPIC_API_KEY` | drafting, the review, rewrites, judging | console.anthropic.com > API keys | drafts come from recordings |
+| `ANTHROPIC_WORKSPACE_ID` | names the workspace for a key that is not scoped to one | console.anthropic.com > Settings > Workspaces (`wrkspc_...`) | **the current key is refused** |
+| `ZERNIO_API_KEY` | TikTok publishing and analytics | zernio.com > Settings > API | TikTok publishes dry |
+| `PUBLISH_MODE` | `live` lets posts leave; anything else keeps every account dry | you | dry |
+| `MEDIA_PUBLIC_BASE_URL` | the https address Zernio and Meta fetch slides from | the media host in the README's deploy steps | nothing can publish |
+| `META_APP_ID`, `META_APP_SECRET` | a long-lived Instagram token, and when it expires | developers.facebook.com > your app > App settings > Basic | no Instagram token |
+| `IG_TOKEN_<PACK>` | each account's Instagram token | `npm run instagram:token -- --pack <id> --short <token>` | that account's Instagram publishes dry |
+| `GRAPH_API_VERSION` | the Graph API version | leave empty (v25.0) | |
+| `OF_USER_AGENT` | how the engine names itself to Wikimedia and others: a contact | your site and email | a generic name; Wikimedia may throttle it |
+| `SEC_USER_AGENT` | a name and an email for EDGAR | you | EDGAR sources are refused |
+| `BRAVE_API_KEY` | finding sources for a new account | brave.com/search/api | onboarding skips discovery |
+| `YOUTUBE_API_KEY` | trends: Shorts with their view counts | console.cloud.google.com, YouTube Data API v3 | trends skipped |
+| `PEXELS_API_KEY`, `UNSPLASH_ACCESS_KEY` | stock photos | pexels.com/api, unsplash.com/developers | Commons and the pack's own photos only (the three accounts use only these) |
+| `OF_BUDGET_MONTHLY_USD` | the monthly cap | you | $15 |
+| `OF_BATCH` | `off` drafts with direct calls | you | batches when Claude is live |
+| `MODEL_DRAFT`, `MODEL_REWRITE`, `MODEL_REVIEW`, `MODEL_JUDGE` | the model per role | | Sonnet 5.5, Sonnet 5.5, Sonnet 5.5, Haiku 5.5 |
+| `OF_HOME`, `OF_MODE`, `OF_LLM`, `ZERNIO_BASE` | where the private folder is; live or recorded; force recordings; Zernio's base URL | | `./private`; live with a key; off; zernio.com |
+| `PORT`, `PUBLIC_HOST`, `SESSION_SECRET`, `OF_ADMIN_USER`, `OF_ADMIN_PASSWORD` | the website | you | 127.0.0.1:4700, no public name |
 
-**Deploy** (`deploy/test/`). The README's VPS steps rewritten in full and run in
-a clean Ubuntu 24.04 container with systemd: Node 24 and Caddy from their
-repositories, both repositories cloned, `npm ci`, Chromium, `.env`, the unit, the
-site through Caddy over HTTPS (and refused over plain HTTP under its public name),
-the media host, the backup and its timer, Hebrew slides rendered as the service
-user, a restart.
+New in this phase: `OF_USER_AGENT`, and the Meta permission
+`instagram_manage_contents` (Facebook Login) for deleting a post.
+`npm run instagram:check` reports whether a token has it.
 
-## The measured costs
+## Cost per post, and the month
 
-`docs/costs.md` has the full tables and the method. In short: every configuration
-answered the same 15 topics (5 recorded documents per pack), written by Claude
-Code subagents on the matching model, with the engine's checks replayed and
-every call priced from its token counts. Estimates, not bills: tokens are counted
-from characters and thinking is given as a range. `npm run live-day` measures the
-real thing.
+Measured on the launch set: every request exactly what the engine sends, the
+engine's review and its rewrite included, every call priced from its token counts
+(`docs/costs.md` has the method and its limits):
 
-| | Per post | Queued of 15 |
+| | Per post | 180 posts a month |
 |---|---|---|
-| Before: Opus 5.5 everywhere | $0.081 to $0.131 | 15, two of them with a false sentence the review found and the engine ignored |
-| Model routing only | $0.025 to $0.039 | 13 |
-| Plus the new prompts, batch, cache | $0.011 to $0.018 | 13 (with a review too lenient to trust) |
-| After, as built (Sonnet review, rewrites, fact problems acted on) | **$0.017 to $0.027** | 11; with the date fix 12. The rest rightly stopped, or a document that could not carry its format (the engine tries the next one) |
+| Each account, batched and cached, per attempt | $0.022 to $0.041 (the three within half a cent) | |
+| Per published post, counting redrafts and the posts the checks stop | $0.040 to $0.068 | **$7.20 to $12.20** |
+| If Hebrew counts 35% more tokens | $0.054 to $0.092 | $9.70 to $16.50 |
+| No batch, no cache | about $0.145 | about $26 |
+| Zernio, outside the cap | | $6 |
 
-## What needs a key
+Higher than the first estimate of this phase ($3.80 to $6.70): the review is
+strict and flags most of a post's lines, so nearly every post pays for a rewrite,
+and about 30% of drafted posts were stopped by the checks in the round drafted
+without help. The expected month fits; the worst cases do not, and then the cap
+holds and the planner publishes fewer posts. The split per account is in the
+private report.
 
-| Part | Key | Without it |
-|---|---|---|
-| Drafting, the review, rewrites, judging | `ANTHROPIC_API_KEY`, and `ANTHROPIC_WORKSPACE_ID` for the current key | Drafts come from recordings |
-| TikTok | `ZERNIO_API_KEY`, `PUBLISH_MODE=live`, each pack's `zernio.accounts.tiktok` | Dry |
-| Instagram | `META_APP_ID`, `META_APP_SECRET`, each pack's token (`IG_TOKEN_<PACK>`) and `instagram.userId`, `PUBLISH_MODE=live` | Dry |
-| Slides for both | `MEDIA_PUBLIC_BASE_URL` (Caddy's media host) | Nothing can publish |
-| Discovery, trends, photos | `BRAVE_API_KEY`, `YOUTUBE_API_KEY`, `PEXELS_API_KEY`, `UNSPLASH_ACCESS_KEY` | Skipped, said so |
+## Uncertainties, and how they were decided
 
-New variables, all in `.env.example`: `OF_BUDGET_MONTHLY_USD`, `OF_BATCH`,
-`MODEL_REWRITE`, `META_APP_ID`, `META_APP_SECRET`, `GRAPH_API_VERSION`, and one
-`IG_TOKEN_<PACK>` per Instagram account.
-
-## Uncertainties
-
-1. **Live costs are unmeasured.** Thinking length and Hebrew token counts are the
-   two unknowns. The worst case in costs.md (no batch, no cache) still fits, and
-   the planner cuts volume before the cap is reached.
-2. **The reviewer's strictness varies.** Two Sonnet runs on nearly the same drafts
-   disagreed on slide titles (one flagged almost all of them). The fact problems
-   and the stock captions were found consistently. The live run will show which is
-   typical; a too-strict reviewer costs rewrites, not quality.
-3. **Haiku for judging is unmeasured.** It is used where little rides on it
-   (scoring candidate sources for the owner to approve, reading a trend's shape).
-4. **The comparison is not the API.** A subagent standing in for a model is close,
-   not identical, and the `haiku` alias may not be Haiku 5.5. Every limit is
-   listed in costs.md.
-5. **Instagram is untested against Meta.** The flow follows Meta's documentation
-   and is tested against a stub behind the real network rules; whether a
-   Standard Access app must be switched to Live mode to publish is not documented.
-   `instagram:check` will say.
-6. **The Bank of Israel's terms** could not be read (bot protection). Its numbers
-   are facts, quoted with the source named, but the owner should read the terms.
-7. **Inherited from phase 1:** the fact gate proves traceability, not truth (the
-   review now covers more of that gap); the investment-advice check is patterns.
+1. **Live costs are unmeasured.** The unknowns are thinking length, the Hebrew
+   token count, how strict the live review is, and how many posts the live model
+   gets stopped. The expected month fits; the worst case does not, so the planner
+   cuts volume before the cap is reached. `npm run live-day -- --confirm` measures it.
+2. **Wikipedia's robots.txt disallows its API paths**, while its robot policy
+   describes how bots should use those same APIs. Decided: the APIs are the
+   sanctioned door. The engine identifies itself, waits on a 429, and reads a few
+   requests at a time (decisions.md).
+3. **News sites** forbid automated reading or use with AI in their terms. Decided:
+   none is a source, which makes Wikipedia the main source for two of the accounts.
+4. **Event photos**: the owner allowed them. They come in by hand, each with where
+   it came from, and they pass the screen. A takedown notice deletes the post.
+5. **Instagram deletion** needs Facebook Login and `instagram_manage_contents`. It
+   is tested against a stub only, not against Meta.
+6. **A blind reviewer is one opinion.** The launch set's reviewer is a Claude Code
+   subagent playing a skeptical Israeli viewer, strict by instruction, and a fresh
+   one each round. Its verdicts swing on the same post from round to round (a post
+   passed and then failed twice), so they are saved with each post for the owner
+   to weigh, not used as a gate.
+7. **TikTok's search reading on-slide keywords** is the research's claim; it is
+   not something the engine can test. The keywords sit on the last slide, where
+   they cost the cover nothing.
+8. **Inherited**: the fact gate proves that a fact can be traced, not that it is
+   true. The review covers more of that gap.
 
 ## What I need from you
 
-1. **`ANTHROPIC_WORKSPACE_ID`** in `private/.env` (console.anthropic.com > Settings
-   > Workspaces, `wrkspc_...`), or a key scoped to a workspace. Without it every
-   live call is refused.
-2. Then **`npm run live-day -- --confirm`** once: one day of posts on real calls (a
-   few tens of cents), in Approve mode. It prints the real cost per post; approve
-   or reject the six posts on the website. Send me the numbers if they differ from
-   costs.md and I will adjust the planner's default.
-3. **Read `private/cost-compare/`** (start with `summary.md`, then any topic file)
-   and say whether the "after" posts hold the quality bar for you.
-4. **Confirm or delete the two seeded fact topics** on the website (*Sources* >
-   *עובדות שנבדקו ביד*): copied word for word from Bituach Leumi by Claude, marked
-   "checked by Claude", expiring 2026-12-31.
-5. **Instagram**, per account: the professional account linked to a Page, the Meta
-   app, then `npm run instagram:token` and `npm run instagram:check` (README).
-6. **Zernio**: connect the three TikTok accounts, put their ids in each
-   `pack.json` (`zernio.accounts.tiktok`), run `npm run zernio:check`, then one
-   private post with `--send-private --confirm` before anything goes public.
-7. **One decision to confirm**: a post gets one redraft of its slides *and*, after
-   the review, one rewrite of the flagged lines, then it is dropped. Without the
-   second step half the posts a strong reviewer flagged were lost (decisions.md).
-   If you want strictly one model call to fix a post, say so: it is one line.
-8. Push `private/` to its private remote, add the remaining keys, deploy with the
-   README's steps, approve the first posts.
+1. **Push `private/`** to its private remote (it is committed, not pushed).
+2. **`ANTHROPIC_WORKSPACE_ID`** in `private/.env`, then `npm run live-day --
+   --confirm` once, for real numbers per post.
+3. **Register the six handles** (three on TikTok, three on Instagram; they are
+   listed in `private/REPORT.md`), and **switch the TikTok accounts to Business**.
+4. **The Meta app**: link each Instagram professional account to a Page, set up
+   Facebook Login with `instagram_manage_contents`, then run `npm run
+   instagram:token` and `npm run instagram:check` (README, *Instagram*).
+5. **Zernio**: connect the three TikTok accounts, put their ids in each
+   `pack.json`, run `npm run zernio:check`, then send one private post with
+   `--send-private --confirm`.
+6. **`OF_USER_AGENT`** with your contact, before the engine reads Wikipedia on a
+   schedule.
+7. **Approve the launch posts** (`private/out/launch/<pack>/`, start with
+   `README.md` there). Read each post's `reviewer-notes.md` with it.
+8. Deploy with the README's steps; every account starts in Approve mode.

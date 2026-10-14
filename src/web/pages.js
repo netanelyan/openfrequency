@@ -1,5 +1,8 @@
 import { accDot, csrfField, dayHe, esc, icon, k, layout, MODE_HE, postButton, shortDate, stamp, statusChip, timeHe, usd, weekdayNarrow } from './ui.js';
 import { PAUSE_REASONS } from '../autonomy/rails.js';
+import { KINDS, MIX } from '../formats/kinds.js';
+
+const KIND_HE = Object.fromEntries(Object.entries(KINDS).map(([k2, v]) => [k2, v.name]));
 
 // Every page, as a function from data to HTML.
 //
@@ -9,13 +12,19 @@ import { PAUSE_REASONS } from '../autonomy/rails.js';
 const REJECT_REASONS = ['לא מעניין', 'טעות בעובדה', 'הקול לא נכון', 'נושא שכבר היה', 'העיצוב לא עובד'];
 const STEP_HE = {
   format: 'פורמט', topic: 'בחירת נושא', outline: 'מתווה ועובדות', facts: 'אימות עובדות', slides: 'כתיבת שקפים', redraft: 'כתיבה מחדש', rewrite: 'שכתוב מה שנשמע כמו בוט', review: 'בדיקת "נשמע כמו בוט"', verify: 'שער העובדות',
-  image: 'תמונה', render: 'רינדור', queue: 'לתור', publish: 'פרסום', blocked: 'נחסם', error: 'שגיאה', edit: 'עריכה',
+  image: 'תמונה', render: 'רינדור', queue: 'לתור', publish: 'פרסום', blocked: 'נחסם', error: 'שגיאה', edit: 'עריכה', subject: 'נושא השבוע', takedown: 'הודעת הסרה',
 };
+const ROLE_NAME = {
+  beat: 'בנייה', payoff: 'הסוף', then: 'אז', turn: 'התפנית', now: 'היום', context: 'רקע', moment: 'הרגע', after: 'אחרי', clue: 'רמז', reveal: 'התשובה',
+  stat: 'נתון', verdict: 'השורה התחתונה', ranks: 'מקומות 10 עד 6', rank: 'מקום', layer: 'שכבה', case: 'נימוק', ask: 'השאלה', myth: 'מיתוס', fact: 'עובדה', joke: 'בדיחה', truth: 'בלי צחוק',
+};
+const PLATFORM_DELETE = { deleted: 'נמחק דרך ה-API', deleted_by_hand: 'נמחק ידנית', by_hand: 'צריך למחוק ידנית', not_published: 'לא פורסם שם', failed: 'נכשל' };
 const PLATFORM_HE = { tiktok: 'טיקטוק', instagram: 'אינסטגרם' };
 const ROLE_HE = { owner: 'בעלים', editor: 'עורך', viewer: 'צופה' };
 const AUDIT_HE = {
   login: 'כניסה', approve: 'אישור פוסט', unapprove: 'ביטול אישור', reject: 'דחיית פוסט', edit: 'עריכה', publish_now: 'פרסום ידני', published: 'פורסם', publish_failed: 'פרסום נכשל',
   auto_approved: 'אושר אוטומטית', mode: 'שינוי מצב', pause: 'השהיה', resume: 'חידוש', global_kill_on: 'כיבוי כללי', global_kill_off: 'הפעלה מחדש', global_budget: 'תקציב כללי',
+  takedown: 'הודעת הסרה', takedown_deleted: 'נמחק ידנית אחרי הודעה', image_ok: 'תמונה נבדקה בעין', mix_changed: 'יחס בידור ומספרים זז',
   generate_at: 'שעת ייצור', source_approved: 'מקור אושר', source_removed: 'מקור הוסר', source_added: 'מקור נוסף', user_added: 'משתמש נוסף',
   publish_retry: 'פרסום יחזור על עצמו', fact_added: 'עובדה נוספה', fact_confirmed: 'עובדה נבדקה שוב', fact_removed: 'עובדה הוסרה', format_dropped: 'פורמט נשר', format_promoted: 'פורמט הוכח', format_returned: 'פורמט חזר', onboarding: 'חשבון חדש', went_live: 'חשבון עלה לאוויר',
 };
@@ -50,7 +59,7 @@ function factsBlock(post, { open = false } = {}) {
 <ol class="factlist">${items
     .map((s, i) => {
       const facts = s.factKeys.map((key) => post.facts.find((f) => f.key === key)).filter(Boolean);
-      return `<li id="s-${post.id}-${i + 1}"><div class="slide-n">שקף ${i + 1}: ${esc(s.title)}</div>${facts
+      return `<li id="s-${post.id}-${i + 1}"><div class="slide-n">שקף ${i + 1}${ROLE_NAME[s.role] ? ` (${ROLE_NAME[s.role]})` : ''}: ${esc(s.title)}${s.data?.a || s.data?.b ? ` <span class="muted num">${esc(s.data.a)} · ${esc(s.data.b)}</span>` : ''}</div>${facts.length ? '' : '<div class="muted small">בלי עובדה משלו: דעה, מיתוס או בדיחה, וכל מספר בו מצוטט</div>'}${facts
         .map(
           (f) => `<details class="fact"><summary>${f.verified ? `<span class="ok">${icon('check')}</span>` : `<span class="no">${icon('x')}</span>`}<span>${esc(f.claim)}</span></summary>
 <div class="src"><blockquote class="q" dir="auto">${esc(f.quote)}</blockquote>
@@ -63,7 +72,9 @@ ${f.error ? `<div class="muted">${esc(f.error)}</div>` : ''}</div></details>`
 }
 
 function captionBlock(post) {
-  return `<p class="caption">${esc(post.caption)} <span class="tags">${esc((post.hashtags || []).join(' '))}</span></p>`;
+  const tags = `<span class="tags">${esc((post.hashtags || []).join(' '))}</span>`;
+  if (!post.caption_ig) return `<p class="caption">${esc(post.caption)} ${tags}</p>`;
+  return `<p class="caption"><span class="chip ghost">טיקטוק</span> ${esc(post.caption)} ${tags}</p><p class="caption"><span class="chip ghost">אינסטגרם</span> ${esc(post.caption_ig).replace(/\n/g, '<br>')}</p>`;
 }
 
 /** One post as a card, with its decision buttons. */
@@ -102,6 +113,12 @@ export function todayPage(ctx, d) {
   for (const g of d.groups) {
     if (g.acc?.status === 'paused') banners.push(`<div class="banner warn">${icon('alert')}<div><b>${esc(g.pack.meta.displayName)} מושהה: ${esc(PAUSE_REASONS[g.acc.paused_reason] || g.acc.paused_reason)}</b>${g.acc.paused_detail ? `<p>${esc(g.acc.paused_detail)}</p>` : ''}</div><a class="btn sm" href="/accounts#acc-${esc(g.pack.id)}">לחשבון</a></div>`);
     else if (g.reached) banners.push(`<div class="banner warn">${icon('alert')}<div><b>${esc(g.pack.meta.displayName)}: הנתח שלו מהתקציב נגמר.</b><p>לא נכתבים בו פוסטים חדשים עד שהתוכנית החודשית מפנה לו כסף, או עד החודש הבא.</p></div></div>`);
+  }
+  for (const t of d.attention?.waitingDeletes || []) {
+    banners.push(`<div class="banner bad">${icon('alert')}<div><b>הודעת הסרה: צריך למחוק ידנית ב${t.waiting.map((w) => PLATFORM_HE[w.platform] || w.platform).join(' וב')}</b><p>${esc(t.hook || t.post_id)}</p></div><a class="btn sm" href="/post/${esc(t.post_id)}">לפוסט</a></div>`);
+  }
+  for (const im of d.attention?.images || []) {
+    banners.push(`<div class="banner warn">${icon('alert')}<div><b>תמונה מחכה לעין של אדם לפני פרסום</b><p>${esc(im.hook || im.id)}${im.screen?.why ? ` · ${esc(im.screen.why)}` : ''}</p></div><a class="btn sm" href="/post/${esc(im.id)}">לבדיקה</a></div>`);
   }
   const body = `<div class="head"><h1>היום</h1><span class="sub">${esc(dayHe(Date.now()))}</span></div>
 ${banners.join('')}
@@ -155,8 +172,28 @@ ${items
     return `<fieldset><legend>שקף ${i + 1}</legend><label class="f">כותרת<input type="text" name="title_${i}" value="${esc(val.title)}" maxlength="80"></label><label class="f">טקסט<textarea name="body_${i}" maxlength="300">${esc(val.body)}</textarea></label></fieldset>`;
   })
   .join('')}
-<label class="f">כיתוב<textarea name="caption" maxlength="400">${esc(v.caption)}</textarea></label>
+<label class="f">${post.caption_ig ? 'כיתוב לטיקטוק (200 תווים ומעלה)' : 'כיתוב'}<textarea name="caption" maxlength="${post.caption_ig ? 900 : 400}">${esc(v.caption)}</textarea></label>
+${post.caption_ig ? `<label class="f">כיתוב קצר לאינסטגרם (הכותרת נכנסת לפניו)<textarea name="caption_short" maxlength="260">${esc(values ? values.caption_short : post.data?.captionShort || '')}</textarea></label>` : ''}
 <div><button class="btn primary" type="submit">${icon('check')}שמור ורנדר מחדש</button></div></form></details>`;
+  const screen = d.image ? (() => {
+    try {
+      return JSON.parse(d.image.safety_json || 'null');
+    } catch {
+      return null;
+    }
+  })() : null;
+  const imageHold = d.image && d.image.safety && d.image.safety !== 'ok' && !d.image.reviewed_at;
+  const tds = d.takedowns || [];
+  const takedownPanel = ['published', 'taken_down', 'publishing'].includes(post.status) || tds.length
+    ? `<section class="panel"><header><h2>הודעות הסרה</h2></header>
+${tds.map((t) => `<div class="banner bad">${icon('alert')}<div><b>${esc(stamp(t.received_at))}${t.claimant ? ` · ${esc(t.claimant)}` : ''}</b><p dir="auto">${esc(t.notice.slice(0, 300))}</p><ul class="factlist">${Object.entries(t.deleted).map(([pl, x]) => `<li>${esc(PLATFORM_HE[pl] || pl)}: <b>${esc(PLATFORM_DELETE[x.state] || x.state)}</b>${x.why ? `<div class="muted small">${esc(x.why)}</div>` : ''}${x.state === 'by_hand' ? postButton(ctx, `/takedowns/${t.id}/deleted`, 'מחקתי ידנית', { cls: 'btn sm', fields: { platform: pl } }) : ''}</li>`).join('')}</ul></div></div>`).join('')}
+${post.status !== 'taken_down' ? `<details><summary class="muted">${icon('alert')}התקבלה הודעת הסרה על הפוסט הזה</summary><form method="post" action="/post/${esc(post.id)}/takedown" class="formgrid">${csrfField(ctx)}
+<p class="muted small">הפוסט יורד מיד: באינסטגרם נמחק דרך ה-API כשאפשר, בטיקטוק צריך למחוק ידנית (אין לזה API). הודעה שנייה תוך 90 יום משהה את החשבון.</p>
+<label class="f">פלטפורמה<select name="platform"><option value="">שתיהן</option><option value="tiktok">טיקטוק</option><option value="instagram">אינסטגרם</option></select></label>
+<label class="f">ממי<input type="text" name="claimant" maxlength="200"></label>
+<label class="f">נוסח ההודעה<textarea name="notice" maxlength="4000" required></textarea></label>
+<div><button class="btn danger" type="submit">רשום והורד את הפוסט</button></div></form></details>` : ''}</section>`
+    : '';
 
   const body = `<div class="head"><div><a class="muted small back" href="/">${icon('chev')}חזרה להיום</a><h1>${esc(post.hook || post.topic || 'פוסט')}</h1></div><span class="end">${statusChip(post.status)}</span></div>
 ${post.reason ? `<div class="banner ${post.status === 'blocked' || post.status === 'failed' ? 'bad' : 'info'}">${icon('alert')}<div><b>${esc(post.reason)}</b></div></div>` : ''}
@@ -179,9 +216,15 @@ ${['queued', 'approved', 'sample'].includes(post.status) ? edit : ''}
 ${scores.length ? `<dt>ציון הכי גבוה</dt><dd><span class="num ltr">${Math.max(...scores)}/10</span></dd>` : ''}
 ${(post.checks?.rewrites || []).length ? `<dt>שכתובים</dt><dd>${post.checks.rewrites.length}</dd>` : ''}
 <dt>עלות</dt><dd>${usd(post.cost_usd, 4)}${post.cost_estimated ? ' <span class="muted small">הערכה, בלי מפתח API</span>' : ''}</dd>
-${d.image ? `<dt>תמונה</dt><dd>${esc(d.image.provider)} · ${esc(d.image.license)}${d.image.author ? ` · ${esc(d.image.author)}` : ''}${d.image.ai_generated ? ' · <span class="chip warn">AI</span>' : ''}</dd>` : ''}
+${post.kind && post.kind !== 'list' ? `<dt>סוג</dt><dd>${esc(KIND_HE[post.kind] || post.kind)} · ${post.grp === 'entertaining' ? 'בידור' : 'מספרים'}</dd>` : ''}
+${post.hook_pattern ? `<dt>תבנית השער</dt><dd><span class="ltr">${esc(post.hook_pattern)}</span></dd>` : ''}
+${post.data?.cta?.text ? `<dt>קריאה לפעולה</dt><dd>${esc(post.data.cta.text)}</dd>` : ''}
+${post.data?.keywords?.length ? `<dt>מילות חיפוש</dt><dd>${post.data.keywords.map((x) => `<bdi>${esc(x)}</bdi>`).join(' · ')}</dd>` : ''}
+${d.image ? `<dt>תמונה</dt><dd>${esc(d.image.provider)} · ${esc(d.image.license)}${d.image.author ? ` · ${esc(d.image.author)}` : ''}${d.image.source_url ? ` · <a href="${esc(d.image.source_url)}" target="_blank" rel="noopener noreferrer">מקור ${icon('ext')}</a>` : ''}${d.image.ai_generated ? ' · <span class="chip warn">AI</span>' : ''}</dd>
+<dt>בדיקת התמונה</dt><dd>${d.image.safety === 'ok' || d.image.reviewed_at ? `<span class="chip ok">${d.image.reviewed_at ? `נבדקה על ידי ${esc(d.image.reviewed_by)}` : 'עברה'}</span>` : d.image.safety ? `<span class="chip warn">מחכה לעין של אדם</span>` : '<span class="chip ghost">לא נבדקה</span>'}${screen?.why ? `<div class="muted small" dir="auto">${esc(screen.why)}</div>` : ''}${imageHold ? postButton(ctx, `/post/${post.id}/image-ok`, 'הסתכלתי: אין דם, פציעה או סימן מים', { cls: 'btn sm' }) : ''}</dd>` : ''}
 ${d.metrics.length ? d.metrics.slice(0, 2).map((m) => `<dt>${esc(PLATFORM_HE[m.platform] || m.platform)}</dt><dd class="num">${k(m.views)} צפיות · ${k(m.likes)} לייקים · ${k(m.shares)} שיתופים${m.saves != null ? ` · ${k(m.saves)} שמירות` : ''}</dd>`).join('') : ''}
 </dl></section>
+${takedownPanel}
 <section class="panel"><header><h2>איך הפוסט נוצר</h2></header><ol class="trace">${trace}</ol></section>
 </div></div>`;
   return layout({ ...ctx, title: post.hook || 'פוסט', active: 'today' }, body);
@@ -228,7 +271,15 @@ export function resultsPage(ctx, d) {
   const dropped = d.formats.flatMap((f) => f.rows.filter((r) => r.status === 'dropped' || r.atRisk).map((r) => ({ ...r, pack: f.pack })));
   const body = `<div class="head"><h1>תוצאות</h1><span class="sub">30 הימים האחרונים</span></div>
 ${d.demo ? `<div class="banner info">${icon('alert')}<div><b>נתוני הדגמה בדויים.</b><p>המספרים בדף הזה נזרעו לחשבון הדמו כדי להראות איך הדף נראה. מספרים אמיתיים מגיעים רק מ-Zernio, 72 שעות אחרי פרסום.</p></div></div>` : ''}
-<p class="lede">כל פוסט נמדד 72 שעות אחרי שעלה, מול החציון של אותה פלטפורמה: בטיקטוק שיתופים ולייקים לצפייה (טיקטוק לא מדווחת שמירות), באינסטגרם שמירות לצפייה. 70% מהפוסטים בפורמטים מוכחים, 30% בניסיונות, ופורמט נושר אחרי 3 תוצאות ברצף מתחת ל-70% מהחציון.</p>
+<p class="lede">כל פוסט נמדד 72 שעות אחרי שעלה, מול החציון של אותה פלטפורמה: בטיקטוק שיתופים ולייקים לצפייה (טיקטוק לא מדווחת שמירות), באינסטגרם שמירות לחשיפה (reach). 70% מהפוסטים בפורמטים מוכחים, 30% בניסיונות, ופורמט נושר אחרי 3 תוצאות ברצף מתחת ל-70% מהחציון.</p>
+${(d.learning || []).filter((l) => l.share != null).map((l) => `<section class="panel"><header>${accDot(l.pack.id)}<h2>${esc(l.pack.meta.displayName)}: בידור מול מספרים</h2></header>
+<p>עכשיו <b class="num">${Math.round(l.share * 100)}%</b> מהפוסטים בפורמטים של בידור (סיפור, נחשו מי, קרחון...) ו-<b class="num">${Math.round((1 - l.share) * 100)}%</b> בפורמטים של מספרים (ראש בראש, דירוג).${l.recent ? ` מתוך ${l.recent} הפוסטים האחרונים, ${l.recentEnt} היו בידור.` : ''}</p>
+<p class="muted small">${l.learned?.why ? `השינוי האחרון (${esc(shortDate(l.learned.at))}): ${esc(l.learned.why)}.` : `עוד לא זז: היחס זז ב-5 נקודות בכל פעם, לכל היותר פעם בשבוע, בין ${Math.round(MIX.min * 100)}% ל-${Math.round(MIX.max * 100)}% בידור, לכיוון הקבוצה שהפוסטים שלה עושים יותר טוב, ורק כשיש לפחות 3 תוצאות בכל קבוצה.`}</p>
+${l.hooks.some((h) => h.used) ? `<table class="table stack"><thead><tr><th>תבנית שער</th><th>פורמט</th><th>שימושים</th><th>ממוצע מול החציון</th></tr></thead><tbody>${l.hooks
+  .filter((h) => h.used)
+  .sort((a, b) => (b.avg ?? -1) - (a.avg ?? -1))
+  .map((h) => `<tr><td data-k="">${esc(h.pattern)}</td><td data-k="פורמט">${esc(h.format)}</td><td class="n" data-k="שימושים">${h.used}</td><td class="n" data-k="ממוצע">${h.avg != null ? `${h.avg.toFixed(2)}× (${h.n})` : 'אין עוד מספרים'}</td></tr>`)
+  .join('')}</tbody></table>` : '<p class="muted small">אין עדיין פוסטים לפי תבניות השער: כל תבנית מקבלת קודם שני תורות, ואז נבחרת לפי התוצאות.</p>'}</section>`).join('')}
 ${d.scored.length ? `<div class="cols even"><section class="panel"><header><h2>מנצחים</h2></header>${table(d.winners)}</section><section class="panel"><header><h2>מפסידים</h2></header>${table(d.losers)}</section></div>` : `<div class="empty">${icon('results')}<b>אין עדיין מספרים</b>מספרים נקראים מ-Zernio רק מפוסטים שפורסמו באמת, והציון נקבע 72 שעות אחרי הפרסום. שום מספר לא מומצא כדי למלא את הדף.</div>`}
 <section class="panel mt16"><header><h2>מה נושר ולמה</h2></header>${dropped.length ? `<ul class="factlist">${dropped.map((r) => `<li>${accDot(r.pack.id)} <b>${esc(r.name)}</b> ${r.status === 'dropped' ? '<span class="chip bad">נשר</span>' : '<span class="chip warn">בסכנה</span>'}<div class="muted small">${esc(r.dropped_why || 'שתי התוצאות האחרונות מתחת ל-70% מהחציון: עוד אחת והוא נושר')}</div></li>`).join('')}</ul>` : '<p class="muted">אף פורמט לא נשר ואף אחד לא בסכנה.</p>'}</section>
 ${d.formats

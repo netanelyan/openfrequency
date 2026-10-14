@@ -95,7 +95,7 @@ const menuLike = (l) => l.length <= 40 && !/\d/.test(l) && !/[.:?!,;]$/.test(l) 
  * is sent is narrowed: every quote is still checked against the whole stored
  * text, and every kept line is a line of it.
  */
-export function focusText(text, { maxChars = 7000 } = {}) {
+export function focusText(text, { maxChars = 7000, numbersFirst = false } = {}) {
   const lines = String(text || '').split('\n').map((l) => l.trim()).filter(Boolean);
   const seen = new Set();
   const out = [];
@@ -115,6 +115,20 @@ export function focusText(text, { maxChars = 7000 } = {}) {
   }
   let size = 0;
   const kept = [];
+  if (numbersFirst && out.reduce((n, l) => n + l.length + 1, 0) > maxChars) {
+    // A head-to-head or a ranking stands on numbers: when the document is longer
+    // than its room, its lines with a number go in first, the rest after, and all
+    // in the document's own order.
+    const take = new Set();
+    for (const pass of [(l) => /\d/.test(l), (l) => !/\d/.test(l)]) {
+      for (const [i, l] of out.entries()) {
+        if (!pass(l) || size + l.length + 1 > maxChars) continue;
+        take.add(i);
+        size += l.length + 1;
+      }
+    }
+    return out.filter((_, i) => take.has(i)).join('\n');
+  }
   for (const l of out) {
     if (size + l.length + 1 > maxChars) break;
     kept.push(l);

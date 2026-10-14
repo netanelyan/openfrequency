@@ -1,12 +1,17 @@
 import { DAY, now } from '../core/clock.js';
 import { j } from '../db/index.js';
+import { getSetting, setSetting } from '../core/store.js';
+import { groupOf, hookPatterns, MIX } from './kinds.js';
 
 // Which format the next post gets, and what the account's own numbers say about
 // each one.
 //
 //   - a post is scored 72 hours after it went out, per platform, against that
 //     platform's own median: TikTok by (shares + likes) / views, Instagram by
-//     saves / views. TikTok reports no saves, and none is ever made up.
+//     saves / reach. TikTok reports no saves, and none is ever made up.
+//   - first the group: entertaining or number formats, by the account's mix (60%
+//     entertaining to start). The mix moves 5 points at a time, at most once a
+//     week, within 40% to 80%, towards the group whose posts do better.
 //   - 70% of posts use proven formats, weighted by configured weight times
 //     results; 30% are trials, which take turns.
 //   - a format whose last 3 results all sit under 70% of the median drops out,
@@ -15,15 +20,18 @@ import { j } from '../db/index.js';
 //   - a trial with 3 results averaging at or above the median becomes proven.
 //   - at least 2 proven formats always stay, so there is always something to build.
 //   - a dropped format of the pack's own rests 14 days and returns as a trial.
+//   - the cover pattern is chosen the same way inside a format: the less tried
+//     patterns get their turns, the rest by their results.
 
 export const RULES = { provenShare: 0.7, dropAfter: 3, lossBelow: 0.7, minPosts: 3, keepProven: 2, restDays: 14, windowDays: 30 };
 
 /**
  * One post's score on one platform, or null when there is nothing to divide by.
- * Instagram divides by views where Meta reports them, else by reach.
+ * Instagram divides saves by reach (the accounts that saw it), or by views where
+ * Meta reports no reach.
  */
 export function postScore(platform, m) {
-  const views = Number(m?.views) || (platform === 'instagram' ? Number(m?.reach) || 0 : 0);
+  const views = platform === 'instagram' ? Number(m?.reach) || Number(m?.views) || 0 : Number(m?.views) || 0;
   if (views <= 0) return null;
   if (platform === 'tiktok') return ((Number(m.shares) || 0) + (Number(m.likes) || 0)) / views;
   if (platform === 'instagram') return m.saves == null ? null : (Number(m.saves) || 0) / views;
@@ -143,14 +151,22 @@ export function judge(db, accountId, { t = now(), ...opts } = {}) {
  * proven format weighted by weight x relative score (clamped 0.5 to 2). The
  * format of the previous post is avoided when anything else is available.
  */
-export function pickFormat(db, accountId, { recent = null, rand = Math.random, exclude = [], t = now() } = {}) {
-  const rows = rowsOf(db, accountId).filter((f) => f.status === 'active' && !exclude.includes(f.format_key));
+export function pickFormat(db, accountId, { recent = null, rand = Math.random, exclude = [], t = now(), groups = null, mix = null } = {}) {
+  let rows = rowsOf(db, accountId).filter((f) => f.status === 'active' && !exclude.includes(f.format_key));
   if (!rows.length) return null;
   const picks =
     recent ||
     db
-      .all("SELECT p.format_id AS format, f.kind FROM posts p LEFT JOIN formats f ON f.account_id = p.account_id AND f.format_key = p.format_id WHERE p.account_id = ? AND p.status NOT IN ('blocked','sample') ORDER BY p.created_at DESC LIMIT 20", accountId)
+      .all("SELECT p.format_id AS format, p.grp, f.kind FROM posts p LEFT JOIN formats f ON f.account_id = p.account_id AND f.format_key = p.format_id WHERE p.account_id = ? AND p.status NOT IN ('blocked','sample') ORDER BY p.created_at DESC LIMIT 20", accountId)
       .reverse();
+  // The group first: whichever is under its share of the recent posts.
+  const g = (key) => groups?.[key] || 'number';
+  if (groups && mix != null && new Set(rows.map((f) => g(f.format_key))).size > 1) {
+    const recentGroups = picks.map((p) => p.grp || groups[p.format]).filter(Boolean);
+    const share = recentGroups.length ? recentGroups.filter((x) => x === 'entertaining').length / recentGroups.length : 0;
+    const want = share < mix ? 'entertaining' : 'number';
+    rows = rows.filter((f) => g(f.format_key) === want);
+  }
   const last = picks[picks.length - 1]?.format;
   const avoid = (list) => {
     const kept = list.filter((f) => f.format_key !== last);
@@ -177,4 +193,103 @@ export function pickFormat(db, accountId, { recent = null, rand = Math.random, e
     if (x <= 0) return f.format_key;
   }
   return pool[pool.length - 1].format_key;
+}
+
+/** format_key -> 'entertaining' | 'number', from the pack's formats. */
+export const groupsOf = (pack) => Object.fromEntries((pack.formats.formats || []).map((f) => [f.id, groupOf(f)]));
+
+const clampMix = (x) => Math.min(MIX.max, Math.max(MIX.min, Math.round(x * 100) / 100));
+
+/**
+ * The account's share of entertaining posts now: what its results moved it to,
+ * or the pack's own setting (formats.json "mix"), or 60%. Null when the pack has
+ * formats of one group only.
+ */
+export function mixOf(db, pack) {
+  if (new Set(Object.values(groupsOf(pack))).size < 2) return null;
+  const learned = getSetting(db, `mix:${pack.id}`, null);
+  if (learned?.share != null) return clampMix(learned.share);
+  return clampMix(Number(pack.formats.mix?.entertaining ?? MIX.default));
+}
+
+const pct = (x) => `${Math.round(x * 100)}%`;
+
+/**
+ * Move the mix towards the group that does better: at least 3 results in each
+ * group inside the window, a 10% difference between their median scores, 5
+ * points a step, at most once a week, within 40% to 80%. Returns the change with
+ * its reason in plain Hebrew, or null.
+ */
+export function learnMix(db, pack, { t = now(), minResults = 3, margin = 1.1, everyDays = 7 } = {}) {
+  const current = mixOf(db, pack);
+  if (current == null) return null;
+  const last = getSetting(db, `mix:${pack.id}`, null);
+  if (last?.at && t - Date.parse(last.at) < everyDays * DAY) return null;
+  const groups = groupsOf(pack);
+  const rel = relative(rowsOf(db, pack.id), { t });
+  const by = { entertaining: [], number: [] };
+  for (const [key, list] of Object.entries(rel)) for (const r of list) by[groups[key] || 'number'].push(r.rel);
+  if (by.entertaining.length < minResults || by.number.length < minResults) return null;
+  const e = median(by.entertaining);
+  const n = median(by.number);
+  let next = current;
+  if (e > n * margin) next = clampMix(current + MIX.step);
+  else if (n > e * margin) next = clampMix(current - MIX.step);
+  if (next === current) return null;
+  const why =
+    next > current
+      ? `פוסטים של בידור עשו פי ${(e / n).toFixed(1)} מפוסטים של מספרים (חציון של ${by.entertaining.length} מול ${by.number.length} תוצאות), אז יותר בידור: ${pct(current)} ← ${pct(next)}`
+      : `פוסטים של מספרים עשו פי ${(n / e).toFixed(1)} מפוסטים של בידור (חציון של ${by.number.length} מול ${by.entertaining.length} תוצאות), אז פחות בידור: ${pct(current)} ← ${pct(next)}`;
+  setSetting(db, `mix:${pack.id}`, { share: next, from: current, at: new Date(t).toISOString(), why });
+  return { from: current, to: next, why };
+}
+
+/**
+ * Each cover pattern's results, per format: { [format]: { [hook]: { n, avg } } },
+ * where avg is the mean score over its platform's median (1 = typical).
+ */
+export function hookStats(db, accountId, { t = now() } = {}) {
+  const rel = relative(rowsOf(db, accountId), { t });
+  const hookOf = new Map(db.all('SELECT id, hook_pattern FROM posts WHERE account_id = ? AND hook_pattern IS NOT NULL', accountId).map((r) => [r.id, r.hook_pattern]));
+  const out = {};
+  for (const [format, list] of Object.entries(rel)) {
+    for (const r of list) {
+      const h = hookOf.get(r.post);
+      if (!h) continue;
+      const cell = ((out[format] ??= {})[h] ??= { n: 0, sum: 0 });
+      cell.n++;
+      cell.sum += r.rel;
+    }
+  }
+  for (const f of Object.values(out)) for (const c of Object.values(f)) c.avg = c.sum / c.n;
+  return out;
+}
+
+/**
+ * The cover pattern for the next post of a format. A pattern used fewer than
+ * `minTries` times gets its turn first (the least used); after that, one post in
+ * three tries the least used pattern and the rest are weighted by results
+ * (clamped 0.5 to 2), so a pattern that keeps losing fades without vanishing.
+ * Returns { id, pattern, examples } or null.
+ */
+export function pickHook(db, accountId, format, { rand = Math.random, t = now(), minTries = 2 } = {}) {
+  const list = hookPatterns(format);
+  if (!list.length) return null;
+  const used = new Map(
+    db
+      .all("SELECT hook_pattern AS h, COUNT(*) AS n FROM posts WHERE account_id = ? AND format_id = ? AND hook_pattern IS NOT NULL AND status NOT IN ('blocked') GROUP BY hook_pattern", accountId, format.id)
+      .map((r) => [r.h, r.n])
+  );
+  const n = (h) => used.get(h.id) || 0;
+  const least = list.slice().sort((a, b) => n(a) - n(b))[0];
+  if (n(least) < minTries || rand() < 0.3) return least;
+  const stats = hookStats(db, accountId, { t })[format.id] || {};
+  const w = (h) => (stats[h.id] ? Math.min(2, Math.max(0.5, stats[h.id].avg)) : 1);
+  const total = list.reduce((s, h) => s + w(h), 0);
+  let x = rand() * total;
+  for (const h of list) {
+    x -= w(h);
+    if (x <= 0) return h;
+  }
+  return list[list.length - 1];
 }

@@ -31,6 +31,32 @@ export const FONTS = {
 
 export const isFont = (name) => Object.prototype.hasOwnProperty.call(FONTS, name);
 
+// A display face whose digits read badly inside a line of text: Karantina's 7 has a
+// crossbar and its 1 a flag, so "177 שערים" reads as letters (the launch set's
+// reviewers caught it twice). As a big counter they are the look; in a headline the
+// digits come from another face, scaled to sit level with the letters.
+const DIGITS_FROM = { Karantina: { family: 'Rubik', sizeAdjust: '88%' } };
+
+/** The family a headline is set in: the display face, or its composite with readable digits. */
+export const headlineFamily = (display) => (DIGITS_FROM[display] ? `'${display} Headline'` : `'${display}'`);
+
+/** The composite headline face, when the display face needs one: its own glyphs, another face's digits. */
+export function headlineFaces(display) {
+  const d = DIGITS_FROM[display];
+  if (!d || !isFont(display) || !isFont(d.family)) return '';
+  const fam = `${display} Headline`;
+  // The browser narrows a family by weight before it looks at unicode-range, so each
+  // display face gets a digits face with exactly its weight (a "300 900" range is a
+  // different set, and the digits fell back to a serif).
+  const digitsFile = FONTS[d.family][0].file;
+  return FONTS[display]
+    .flatMap((f) => [
+      `@font-face{font-family:'${fam}';src:url(${dataUri(f.file)}) format('truetype');font-weight:${f.weight};font-style:normal;font-display:block;unicode-range:U+0000-002F,U+003A-10FFFF;}`,
+      `@font-face{font-family:'${fam}';src:url(${dataUri(digitsFile)}) format('truetype');font-weight:${f.weight};font-style:normal;font-display:block;unicode-range:U+0030-0039;size-adjust:${d.sizeAdjust};}`,
+    ])
+    .join('\n');
+}
+
 const cache = new Map();
 function dataUri(file) {
   if (!cache.has(file)) {

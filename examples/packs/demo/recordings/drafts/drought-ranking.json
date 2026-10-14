@@ -1,0 +1,44 @@
+{
+  "document": "drought-ranking",
+  "format": "plant-ranking",
+  "outline": {
+    "usable": true,
+    "why": "the page gives one number for every plant, days between waterings in summer under the same conditions, so the top five follow it",
+    "topic": "הצמחים שהכי פחות צריכים מים",
+    "subject": { "a": "", "b": "", "answer": "", "date": "" },
+    "imageQuery": "",
+    "facts": [
+      { "id": "f1", "claim": "הממוצעים הם לקיץ, לצמח בעציץ פלסטיק של 15 סנטימטר בחדר מואר", "quote": "These are summer averages for a plant in a 15 cm plastic pot in a bright room", "doc": "D1" },
+      { "id": "f2", "claim": "פוטוס מחזיק בערך 10 ימים, והעלים שלו מתקפלים קצת כשהאדמה יבשה", "quote": "Pothos can wait about 10 days, and its leaves curl slightly when the soil is dry.", "doc": "D1" },
+      { "id": "f3", "claim": "אלוורה מחזיקה בערך 14 ימים, כי העלים העבים שלה מחזיקים מים", "quote": "Aloe vera can wait about 14 days, because its thick leaves hold water.", "doc": "D1" },
+      { "id": "f4", "claim": "קקטוס קטן מחזיק בערך 18 ימים בקיץ, כשהוא בצמיחה, והרבה יותר בחורף", "quote": "A small cactus can wait about 18 days in summer, when it is growing, and much longer in winter.", "doc": "D1" },
+      { "id": "f5", "claim": "סנסיווריה מחזיקה בערך 25 ימים בין השקיה להשקיה", "quote": "A snake plant can wait about 25 days between waterings.", "doc": "D1" },
+      { "id": "f6", "claim": "זמיוקולקס מחזיק בערך 30 ימים, הכי הרבה ברשימה, כי הוא אוגר מים בקני שורש עבים מתחת לאדמה", "quote": "The ZZ plant can wait about 30 days, the longest on this list, because it stores water in thick rhizomes under the soil.", "doc": "D1" },
+      { "id": "f7", "claim": "עציץ חרס, מרפסת חמה או עציץ קטן יותר מתייבשים מהר יותר מהממוצעים האלה", "quote": "A clay pot, a hot balcony or a smaller pot will dry out sooner than these averages.", "doc": "D1" }
+    ],
+    "items": [
+      { "role": "rank", "point": "פוטוס, 10 ימים", "facts": ["f2"] },
+      { "role": "rank", "point": "אלוורה, 14 ימים", "facts": ["f3"] },
+      { "role": "rank", "point": "קקטוס קטן, 18 ימים", "facts": ["f4"] },
+      { "role": "rank", "point": "סנסיווריה, 25 ימים", "facts": ["f5", "f1"] },
+      { "role": "rank", "point": "זמיוקולקס, 30 ימים", "facts": ["f6"] }
+    ]
+  },
+  "slides": {
+    "hook": "5 צמחי הבית שהכי פחות צריכים מים, והראשון הוא לא קקטוס",
+    "sub": "כמה ימים כל אחד מחזיק בקיץ בין השקיה להשקיה",
+    "hookPattern": "top-five",
+    "subject": { "a": "", "b": "", "answer": "", "date": "" },
+    "slides": [
+      { "role": "rank", "title": "פוטוס", "body": "בערך 10 ימים בין השקיה להשקיה. כשהאדמה יבשה, העלים שלו מתקפלים קצת.", "a": "", "b": "", "facts": ["f2"] },
+      { "role": "rank", "title": "אלוורה", "body": "בערך 14 ימים. העלים העבים שלה מחזיקים מים.", "a": "", "b": "", "facts": ["f3"] },
+      { "role": "rank", "title": "קקטוס קטן", "body": "בערך 18 ימים בקיץ, כשהוא בצמיחה. בחורף הוא מחכה הרבה יותר.", "a": "", "b": "", "facts": ["f4"] },
+      { "role": "rank", "title": "סנסיווריה", "body": "בערך 25 ימים בין השקיה להשקיה, בעציץ פלסטיק של 15 סנטימטר בחדר מואר.", "a": "", "b": "", "facts": ["f5", "f1"] },
+      { "role": "rank", "title": "זמיוקולקס (ZZ)", "body": "בערך 30 ימים, הכי הרבה ברשימה. הוא אוגר מים בקני שורש עבים מתחת לאדמה.", "a": "", "b": "", "facts": ["f6"] }
+    ],
+    "caption": "המספרים הם ימים בין השקיה להשקיה בקיץ, לצמח בעציץ פלסטיק של 15 סנטימטר בחדר מואר. הקקטוס רק שלישי, ומי שמנצח אוגר את המים שלו מתחת לאדמה. בעציץ חרס, במרפסת חמה או בעציץ קטן יותר, האדמה מתייבשת מהר יותר.",
+    "captionShort": "כמה ימים כל אחד מהם מחזיק בלי מים בקיץ. הקקטוס רק שלישי.",
+    "question": "איזה מהחמישה כבר גר אצלכם?",
+    "keywords": ["צמחי בית", "השקיה", "סנסיווריה", "ZZ plant", "snake plant"]
+  }
+}

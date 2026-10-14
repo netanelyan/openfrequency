@@ -25,7 +25,8 @@
     "zernio:check": "node scripts/zernio-check.js",
     "instagram:check": "node scripts/instagram-check.js",
     "instagram:token": "node scripts/instagram-token.js",
-    "live-day": "node scripts/live-day.js"
+    "live-day": "node scripts/live-day.js",
+    "launch": "node scripts/launch.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",

@@ -6,9 +6,10 @@
 // place the door opens onto:
 //
 //   - WRITES (anything but GET) are allowed to exactly these endpoints: Claude's
-//     messages and batches endpoints, Zernio's create-post endpoint, and Meta's
-//     two publishing endpoints for an Instagram account (create a media
-//     container, publish it). Nothing else.
+//     messages and batches endpoints, Zernio's create-post endpoint, Meta's two
+//     publishing endpoints for an Instagram account (create a media container,
+//     publish it), and deleting a post of ours after a takedown notice. Nothing
+//     else.
 //   - READS from a social platform are allowed only through the official read
 //     APIs listed below (YouTube Data API search/videos; Meta's Graph API for a
 //     container's status, our own account and media, their insights, the
@@ -60,6 +61,7 @@ export const WRITE_RULES = [
   { method: 'POST', host: 'zernio.com', path: /^\/api\/v1\/posts$/, why: 'Zernio: create a post on our own account' },
   { method: 'POST', host: 'graph.facebook.com', path: new RegExp(`^${V}\\/\\d+\\/(media|media_publish)$`), why: 'Instagram (Facebook Login): a media container on our own account, and publishing it' },
   { method: 'POST', host: 'graph.instagram.com', path: new RegExp(`^${V}\\/\\d+\\/(media|media_publish)$`), why: 'Instagram (Instagram Login): a media container on our own account, and publishing it' },
+  { method: 'DELETE', host: 'graph.facebook.com', path: new RegExp(`^${V}\\/\\d+$`), why: 'Instagram (Facebook Login): deleting our own post after a takedown notice' },
 ];
 
 /** Reads that are allowed even though the host is special. */
@@ -113,7 +115,10 @@ export function assertAllowed(method, url) {
   return { host, why: 'the open web: a source, a feed, an image library' };
 }
 
-const UA = 'open-frequency/0.1 (+https://github.com/open-frequency)';
+// Who is reading, for the sites that ask (Wikimedia, SEC): OF_USER_AGENT in .env,
+// with a contact ("open-frequency/0.1 (+https://your.site; you@your.site)").
+// The default names the engine and no one, so it never points at someone else's page.
+export const userAgent = () => String(process.env.OF_USER_AGENT || '').trim() || 'open-frequency/0.1 (self-hosted social publishing engine)';
 
 /**
  * fetch, through the rules. Redirects are followed by hand so every hop is
@@ -123,9 +128,10 @@ export async function doorFetch(input, init = {}) {
   const method = String(init.method || (typeof input === 'object' && input?.method) || 'GET').toUpperCase();
   let url = typeof input === 'string' ? input : input instanceof URL ? input.href : input?.url;
   const headers = new Headers(init.headers || (typeof input === 'object' ? input?.headers : undefined) || {});
-  if (!headers.has('user-agent')) headers.set('user-agent', UA);
+  if (!headers.has('user-agent')) headers.set('user-agent', userAgent());
   const timeoutMs = init.timeoutMs ?? 30_000;
 
+  let waited = 0;
   for (let hop = 0; hop < 6; hop++) {
     assertAllowed(method, url);
     let res;
@@ -139,6 +145,15 @@ export async function doorFetch(input, init = {}) {
       });
     } catch (e) {
       throw new NetError(e.name === 'TimeoutError' ? `timed out: ${url}` : `${e.message}: ${url}`, { code: 'network' });
+    }
+    // Too many requests: a site that says so is waited for (its Retry-After, at most a
+    // minute), twice at most, and a read only: a write is never sent again blind.
+    if (res.status === 429 && method === 'GET' && waited < 2) {
+      const after = Number(res.headers.get('retry-after'));
+      await new Promise((r) => setTimeout(r, Math.min(60, Number.isFinite(after) && after > 0 ? after : 5 * (waited + 1)) * 1000));
+      waited++;
+      hop--;
+      continue;
     }
     if (res.status >= 300 && res.status < 400 && res.headers.get('location') && method === 'GET') {
       url = new URL(res.headers.get('location'), url).href;
@@ -205,6 +220,23 @@ export async function getBytes(url, { maxBytes = 12_000_000, timeoutMs, headers 
   const buf = Buffer.from(await res.arrayBuffer());
   if (buf.length > maxBytes) throw new NetError(`too large (${buf.length} bytes): ${url}`, { code: 'too_large' });
   return { buf, type };
+}
+
+/** DELETE (an Instagram post a takedown notice named). Throws like postJson, with the body attached. */
+export async function deleteJson(url, { headers = {}, timeoutMs } = {}) {
+  const res = await doorFetch(url, { method: 'DELETE', headers: { accept: 'application/json', ...headers }, timeoutMs });
+  const text = await res.text();
+  let body = null;
+  try {
+    body = text ? JSON.parse(text) : null;
+  } catch {
+    /* the status says enough */
+  }
+  if (!res.ok || body?.error) {
+    const err = body?.error && typeof body.error === 'object' ? body.error : body;
+    throw Object.assign(new NetError(String(err?.message || `HTTP ${res.status}`).slice(0, 300), { status: res.status, code: err?.code ?? 'http' }), { body });
+  }
+  return body;
 }
 
 /** POST form-encoded parameters (Meta's Graph API takes them this way). Throws like postJson, with the body attached. */

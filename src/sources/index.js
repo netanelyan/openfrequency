@@ -2,8 +2,9 @@ import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { getJson, getText } from '../core/net.js';
-import { nowIso } from '../core/clock.js';
+import { now, nowIso } from '../core/clock.js';
 import { j } from '../db/index.js';
+import { israelDate } from '../schedule/israel.js';
 import { parseFeed } from './rss.js';
 import { htmlToText, mainHtml, titleOf } from './text.js';
 import { parseCsv } from './csv.js';
@@ -36,12 +37,27 @@ import { factDocuments, factsDir } from './facts.js';
 const MAX_TEXT = 16_000;
 const sha = (s) => createHash('sha256').update(String(s)).digest('hex');
 
+/**
+ * A dated list, narrowed to one day of the year: the lines that carry the day the
+ * post goes out on, written the source's way (hints.onlyDay "DD/MM/" keeps
+ * "27/10/2001 Austria Home 1-1"). What an on-this-day post is drafted from.
+ */
+export function onlyDay(text, day, pattern) {
+  const [, , mm, dd] = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day || '') || [];
+  if (!mm) return text;
+  const want = pattern.replace('DD', dd).replace('MM', mm).replace('D', String(Number(dd))).replace('M', String(Number(mm)));
+  // The page's own first lines stay as the header, so the document says what its lines are.
+  const lines = String(text || '').split('\n');
+  return [...lines.slice(0, 3), ...lines.slice(3).filter((l) => l.includes(want))].join('\n');
+}
+
 export function liveSources() {
   return {
     kind: 'live',
-    async read(src) {
+    async read(src, { day = null, events = [] } = {}) {
       const cfg = j(src.config_json, {}) || {};
       const hints = cfg.hints || {};
+      const forDay = (text) => (hints.onlyDay ? onlyDay(text, day || israelDate(now()), hints.onlyDay) : text);
       if (src.type === 'rss') {
         const { body } = await getText(src.url, { accept: 'application/rss+xml,application/atom+xml,application/xml,text/xml;q=0.9,*/*;q=0.8' });
         const items = parseFeed(body).slice(0, hints.max || 6);
@@ -61,15 +77,16 @@ export function liveSources() {
         return out;
       }
       if (src.type === 'web') {
-        const page = await getText(src.url);
-        const docs = [{ url: page.finalUrl, title: titleOf(page.body), text: htmlToText(mainHtml(page.body, hints.selector)).slice(0, MAX_TEXT), publishedAt: null }];
+        // Some old pages are Latin-1 (RSSSF): hints.encoding reads them as written.
+        const page = await getText(src.url, { encoding: hints.encoding || null });
+        const docs = [{ url: page.finalUrl, title: titleOf(page.body), text: forDay(htmlToText(mainHtml(page.body, hints.selector))).slice(0, MAX_TEXT), publishedAt: null }];
         if (hints.follow?.pattern) {
           const re = new RegExp(hints.follow.pattern, 'i');
           const links = [...new Set([...page.body.matchAll(/href=["']([^"']+)["']/gi)].map((m) => new URL(m[1], page.finalUrl).href).filter((u) => re.test(u)))];
           for (const url of links.slice(0, hints.follow.max || 5)) {
             try {
-              const p = await getText(url);
-              docs.push({ url: p.finalUrl, title: titleOf(p.body), text: htmlToText(mainHtml(p.body, hints.selector)).slice(0, MAX_TEXT), publishedAt: null });
+              const p = await getText(url, { encoding: hints.encoding || null });
+              docs.push({ url: p.finalUrl, title: titleOf(p.body), text: forDay(htmlToText(mainHtml(p.body, hints.selector))).slice(0, MAX_TEXT), publishedAt: null });
             } catch {
               /* one dead link is not a dead source */
             }
@@ -77,22 +94,41 @@ export function liveSources() {
         }
         return docs;
       }
-      if (src.type === 'api') return fetchApi(src, cfg);
+      if (src.type === 'api') return fetchApi(src, cfg, { day, events });
       throw new Error(`unknown source type ${src.type}`);
     },
   };
 }
 
-async function fetchApi(src, cfg) {
+/** A query's {MONTH} and {DAY}: the post's day, so a birthday query asks about the day the post goes out. */
+const dayInQuery = (q, day) => {
+  const [, , mm, dd] = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day || '') || [];
+  return mm ? String(q).replace(/\{MONTH\}/g, String(Number(mm))).replace(/\{DAY\}/g, String(Number(dd))) : String(q);
+};
+
+/** Headers a source asks for: SEC's EDGAR wants a User-Agent naming who reads and how to reach them (api.uaEnv names the .env variable). */
+function apiHeaders(api) {
+  const h = { ...(api.headers || {}) };
+  if (api.uaEnv) {
+    const ua = String(process.env[api.uaEnv] || '').trim();
+    if (!ua) throw new Error(`${api.uaEnv} is not set in .env: this source wants a User-Agent with a contact`);
+    h['user-agent'] = ua;
+  }
+  return h;
+}
+
+async function fetchApi(src, cfg, { day = null, events = [] } = {}) {
   const api = cfg.api || {};
   if (api.kind === 'wikidata-sparql') {
-    const url = `https://query.wikidata.org/sparql?format=json&query=${encodeURIComponent(api.query)}`;
+    const url = `https://query.wikidata.org/sparql?format=json&query=${encodeURIComponent(dayInQuery(api.query, day || israelDate(now())))}`;
     const body = await getJson(url, { headers: { accept: 'application/sparql-results+json' } });
     const vars = body?.head?.vars || [];
     const lines = (body?.results?.bindings || []).map((b) => vars.map((v) => `${v}: ${b[v]?.value ?? ''}`).join(' | '));
     return [{ url: src.url, title: api.title || src.name, text: lines.join('\n').slice(0, MAX_TEXT), publishedAt: null }];
   }
   if (api.kind === 'facts') return factDocuments(factsDir(src.account_id));
+  // "{EVENTS}" among a Wikipedia source's titles: the pages of the events this week (a fight card).
+  if (api.kind === 'wikipedia') return wikipediaDocs(src, { ...api, titles: (api.titles || [api.title]).flatMap((x) => (x === '{EVENTS}' ? events : [x])) });
   if (api.kind === 'csv') {
     const { body } = await getText(api.url || src.url, { accept: 'text/csv,text/plain;q=0.9,*/*;q=0.5', encoding: api.encoding || null });
     let rows = parseCsv(body, { delimiter: api.delimiter || null });
@@ -113,10 +149,125 @@ async function fetchApi(src, cfg) {
   }
   // A JSON endpoint: each record becomes one line of "field: value", which keeps
   // the numbers quotable verbatim.
-  const body = await getJson(api.url || src.url);
+  const body = await getJson(api.url || src.url, { headers: apiHeaders(api) });
   const records = api.path ? api.path.split('.').reduce((o, k) => o?.[k], body) : body;
-  const list = Array.isArray(records) ? records : [records];
+  let list = Array.isArray(records) ? records : [records];
+  // api.where keeps the records that have a value there (a fixture list, only the games played);
+  // api.last keeps the newest.
+  const get = (r, f) => f.split('.').reduce((o, k) => o?.[k], r);
+  if (api.where) list = list.filter((r) => { const v = get(r, api.where); return v != null && v !== '' && !(Array.isArray(v) && !v.length); });
+  if (api.last) list = list.slice(-api.last);
   return [{ url: src.url, title: api.title || src.name, text: linesOf(list.slice(0, api.max || 200), api).join('\n').slice(0, MAX_TEXT), publishedAt: null }];
+}
+
+/** A Wikipedia article's address, from its title. */
+export const wikiUrl = (lang, title) => `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(String(title).replace(/ /g, '_'))}`;
+
+/**
+ * The part of a plain-text extract under the given section headings ("== History
+ * =="), each down to the next heading of the same or a higher level. Without
+ * sections, the whole text.
+ */
+export function wikiSections(text, sections = []) {
+  const s = String(text || '');
+  if (!sections.length) return s.replace(/^=+\s*(.*?)\s*=+$/gm, '$1').trim();
+  const out = [];
+  const lines = s.split('\n');
+  for (const want of sections) {
+    const i = lines.findIndex((l) => new RegExp(`^(=+)\\s*${want.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*=+$`, 'i').test(l.trim()));
+    if (i < 0) continue;
+    const level = /^(=+)/.exec(lines[i].trim())[1].length;
+    const body = [lines[i].replace(/=+/g, '').trim()];
+    for (let k = i + 1; k < lines.length; k++) {
+      const h = /^(=+)\s*(.*?)\s*=+$/.exec(lines[k].trim());
+      if (h && h[1].length <= level) break;
+      body.push(h ? h[2] : lines[k]);
+    }
+    out.push(body.join('\n').trim());
+  }
+  return out.join('\n\n');
+}
+
+/** A rendered wiki page to text, each table row on one line ("a | b | c") so a row can be quoted as it reads. */
+export function wikiHtmlToText(html) {
+  let s = String(html || '').replace(/<span[^>]*class="[^"]*mw-editsection[^"]*"[^>]*>[\s\S]*?<\/span>\s*<\/span>|<span[^>]*class="[^"]*mw-editsection[^"]*"[^>]*>[\s\S]*?<\/span>/gi, '');
+  s = s.replace(/<sup[^>]*class="[^"]*reference[^"]*"[^>]*>[\s\S]*?<\/sup>/gi, '');
+  s = s.replace(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi, (_, row) => {
+    const cells = row.split(/<\/t[dh]>/i).map((c) => htmlToText(c).replace(/\n+/g, ' ').trim()).filter(Boolean);
+    return `<p>${cells.join(' | ').replace(/</g, '&lt;')}</p>`;
+  });
+  return htmlToText(s);
+}
+
+/**
+ * One section of a Wikipedia page's REST HTML (Parsoid), by its heading, with its
+ * subsections and tables, as text with each table row on one line. "intro" is the
+ * lead. Null when the page has no such section.
+ */
+export function restSection(html, heading) {
+  const s = String(html || '');
+  if (!heading || heading === 'intro') {
+    const m = /<section[^>]*data-mw-section-id="0"[^>]*>([\s\S]*?)<\/section>/.exec(s);
+    return m ? wikiHtmlToText(m[1]) : null;
+  }
+  const want = String(heading).trim().toLowerCase();
+  for (const m of s.matchAll(/<section\b[^>]*data-mw-section-id="(-?\d+)"[^>]*>\s*<h([2-6])\b[^>]*>([\s\S]*?)<\/h\2>/g)) {
+    if (htmlToText(m[3]).trim().toLowerCase() !== want) continue;
+    let depth = 0;
+    let end = s.length;
+    const re = /<\/?section\b[^>]*>/g;
+    re.lastIndex = m.index;
+    for (let x; (x = re.exec(s)); ) {
+      depth += x[0].startsWith('</') ? -1 : 1;
+      if (depth === 0) {
+        end = x.index;
+        break;
+      }
+    }
+    return wikiHtmlToText(s.slice(m.index, end));
+  }
+  return null;
+}
+
+/**
+ * Wikipedia through its own API, never the page: one document per title, as
+ * plain text (api.mode "extract", the default: TextExtracts, no tables) or from
+ * the REST page HTML with its tables (api.mode "rest"). api.sections narrows each
+ * to those sections, and so does a title written "Title#Section" or "Title#intro;Section" (that title only).
+ * Titles read together (api.group) are one candidate for a post, as two articles
+ * for a head-to-head are.
+ */
+export async function wikipediaDocs(src, api) {
+  const lang = api.lang || src.lang || 'en';
+  const base = `https://${lang}.wikipedia.org/w/api.php`;
+  const titles = api.titles || [api.title];
+  const docs = [];
+  for (const spec of titles) {
+    const [title, own] = String(spec).split('#');
+    const sections = own ? own.split(';').map((x) => x.trim()).filter(Boolean) : api.sections || [];
+    let text = '';
+    let resolved = title;
+    if ((api.mode || 'extract') === 'extract') {
+      const q = new URLSearchParams({ action: 'query', prop: 'extracts', explaintext: '1', exsectionformat: 'wiki', redirects: '1', format: 'json', formatversion: '2', titles: title });
+      const body = await getJson(`${base}?${q}`);
+      const page = body?.query?.pages?.[0];
+      if (!page || page.missing) throw new Error(`Wikipedia (${lang}): no article "${title}"`);
+      resolved = page.title;
+      text = wikiSections(page.extract, sections);
+    } else {
+      // The REST page HTML, the Robot policy's own recommendation for a page's HTML:
+      // every section is a <section> there, so one section comes with its tables.
+      const html = await getText(`https://${lang}.wikipedia.org/api/rest_v1/page/html/${encodeURIComponent(String(title).replace(/ /g, '_'))}`, { accept: 'text/html' });
+      resolved = /<title>([^<]*)<\/title>/i.exec(html.body)?.[1]?.replace(/_/g, ' ') || title;
+      text = (sections.length ? sections : ['intro'])
+        .map((want) => restSection(html.body, want))
+        .filter(Boolean)
+        .join('\n\n');
+    }
+    if (!text.trim()) continue;
+    docs.push({ url: wikiUrl(lang, resolved), title: `${resolved} (Wikipedia${lang === 'he' ? ' בעברית' : ''})`, text: text.slice(0, MAX_TEXT), publishedAt: null, group: api.group ? `${src.key}:${titles.join('|')}` : null });
+  }
+  return docs;
 }
 
 /**
@@ -166,7 +317,7 @@ export function recordedSources(pack) {
       if (j(src.config_json, {})?.api?.kind === 'facts') return factDocuments(path.join(pack.dir, 'facts'));
       return load()
         .filter((d) => d.source === src.key)
-        .map((d) => ({ key: d.key, url: d.url, title: d.title, text: d.text, publishedAt: d.publishedAt || null, fetchedAt: d.fetchedAt || null }));
+        .map((d) => ({ key: d.key, url: d.url, title: d.title, text: d.text, publishedAt: d.publishedAt || null, fetchedAt: d.fetchedAt || null, group: d.group || null }));
     },
   };
 }
@@ -176,10 +327,10 @@ export function recordedSources(pack) {
  * that fails records its error and returns [] rather than failing the run: one
  * dead feed is not a dead account.
  */
-export async function refreshSource(db, impl, src) {
+export async function refreshSource(db, impl, src, opts = {}) {
   let docs;
   try {
-    docs = await impl.read(src);
+    docs = await impl.read(src, opts);
     db.update('sources', src.id, { last_ok_at: nowIso(), last_error: null });
   } catch (e) {
     db.update('sources', src.id, { last_error: String(e.message).slice(0, 300) });
@@ -203,8 +354,12 @@ export async function refreshSource(db, impl, src) {
         fetched_at: d.fetchedAt || nowIso(),
         recorded: impl.kind === 'recorded' ? 1 : 0,
         expires_at: d.expiresAt || null,
+        group_key: d.group || null,
       });
       row = db.get('SELECT * FROM documents WHERE id = ?', id);
+    } else if ((d.group || null) !== (row.group_key || null)) {
+      db.update('documents', row.id, { group_key: d.group || null });
+      row = db.get('SELECT * FROM documents WHERE id = ?', row.id);
     }
     out.push(row);
   }

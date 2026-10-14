@@ -27,7 +27,19 @@ You get the texts of one slideshow post: the cover line, each slide, the caption
 
 - botScore: 0 means clearly a person wrote it, 10 means obviously a bot. Be strict: a text that is balanced, complete and polished, that sounds like a brochure or a school summary, that praises in general terms or opens with a stock phrase scores high. Translated-sounding Hebrew scores high.
 - tells: only what gives it away, a few English words each ("stock opener", "translated Hebrew", "too polished", "brochure tone"). Empty when nothing does.
-- factProblem: if the text states something its facts do not support, say what; else an empty string.`;
+- factProblem: if the text states something its facts do not support, say what; else an empty string. The source's own words decide: a fact whose summary says more than its source supports nothing. A text marked as a myth, a joke, an opinion or a question to the reader is not the post's claim: a myth is wrong on purpose (the next slide corrects it). Flag it only when a fact inside it (a number, a name, a result) is wrong.`;
+
+/**
+ * What a slide that carries no fact of its own is doing, so the review does not
+ * take a myth for the post's claim (the launch set's review did: it flagged "there
+ * are no rules in that sport", the myth its next slide corrects).
+ */
+const ROLE_NOTE = {
+  myth: 'a myth as people say it, corrected on the next slide',
+  joke: "a joke's setup",
+  verdict: "the account's opinion, labelled as one",
+  ask: 'a question to the reader',
+};
 
 export const REVIEW_SCHEMA = {
   type: 'object',
@@ -62,11 +74,14 @@ export const reviewUser = (pack, texts, facts = []) =>
     `ACCOUNT: ${pack.meta.displayName}. Who is talking, from the account's voice guide:`,
     whoTalks(pack),
     '',
-    'FACTS THE POST STANDS ON:',
-    ...facts.map((f) => `- ${f.claim}`),
+    // Each fact with the source's own words: a claim is the drafting model's paraphrase of its
+    // quote, and one that misread it ("middleweight" for a quote that says welterweight) was
+    // invisible to a review that saw only the claims.
+    'FACTS THE POST STANDS ON (each with what the source says):',
+    ...facts.map((f) => `- ${f.claim}${f.quote ? ` (source: "${f.quote}")` : ''}`),
     '',
     'TEXTS:',
-    ...texts.map((t, i) => `[${i}] (${t.where}) ${t.text}`),
+    ...texts.map((t, i) => `[${i}] (${t.where}${ROLE_NOTE[t.role] ? `: ${ROLE_NOTE[t.role]}` : ''}) ${t.text}`),
   ].join('\n');
 
 /**

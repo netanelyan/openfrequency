@@ -16,7 +16,10 @@ function repo() {
   const home = mkdtempSync(path.join(os.tmpdir(), 'of-private-'));
   mkdirSync(path.join(home, 'packs', 'zz-real-pack'), { recursive: true });
   writeFileSync(path.join(home, 'packs', 'zz-real-pack', 'pack.json'), JSON.stringify({ id: 'zz-real-pack', handle: 'zz.real.handle', displayName: 'שם אמיתי לגמרי' }));
-  writeFileSync(path.join(home, 'public-denylist.txt'), 'secretsourcename\n');
+  // An archived account's names stay private too.
+  mkdirSync(path.join(home, 'packs', '_archive', 'zz-old-pack'), { recursive: true });
+  writeFileSync(path.join(home, 'packs', '_archive', 'zz-old-pack', 'pack.json'), JSON.stringify({ id: 'zz-old-pack', handle: 'zz.old.handle', displayName: 'שם ישן לגמרי' }));
+  writeFileSync(path.join(home, 'public-denylist.txt'), 'secretsourcename\nid:gardening\n');
   execFileSync('git', ['init', '-q'], { cwd: dir });
   return { dir, home, cleanup: () => [dir, home].forEach((d) => rmSync(d, { recursive: true, force: true })) };
 }
@@ -33,7 +36,8 @@ function check(r, files) {
 test('a clean repository passes check:public', () => {
   const r = repo();
   try {
-    const out = check(r, { 'src/a.js': 'export const x = 1;\n', '.env.example': 'ANTHROPIC_API_KEY=\n' });
+    // A pack id that is an ordinary word ("id:gardening" in the denylist) is fine as a word.
+    const out = check(r, { 'src/a.js': 'export const x = 1; // gardening tips\n', '.env.example': 'ANTHROPIC_API_KEY=\n' });
     assert.equal(out.status, 0, out.stderr);
   } finally {
     r.cleanup();
@@ -45,6 +49,10 @@ for (const [why, files, expect] of [
   ['a real pack id', { 'src/a.js': "const p = 'zz-real-pack';\n" }, /real pack id/],
   ['a real display name', { 'README.md': 'שם אמיתי לגמרי\n' }, /real account name/],
   ['a denylisted word', { 'docs/b.md': 'from secretsourcename\n' }, /denylisted/],
+  ['an archived account handle', { 'docs/c.md': 'the old @zz.old.handle\n' }, /real account handle/],
+  ['an archived pack id', { 'scripts/x.js': "run('--pack zz-old-pack');\n" }, /real pack id/],
+  ['a denylisted pack id used as one', { 'scripts/y.js': "const p = { pack: 'gardening' };\n" }, /real pack id/],
+  ['a denylisted pack id in the docs', { 'docs/d.md': 'the Gardening account draws its own covers\n' }, /real pack id/],
   // Assembled at run time, so this file itself carries no key-shaped string.
   ['a key', { 'config.js': `const k = "${['sk', 'ant', 'api03', 'abcdefghijklmnopqrstuvwxyz0123'].join('-')}";\n` }, /Anthropic key/],
   ['a filled .env.example', { '.env.example': 'ZERNIO_API_KEY=abcdef123456\n' }, /empty values/],

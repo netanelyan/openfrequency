@@ -5,7 +5,7 @@ import { tellsIn } from '../src/voice/tells.js';
 import { experienceIn, fakeProofIn, badgeNextTo } from '../src/voice/honesty.js';
 import { heuristicReview, REWRITE_AT } from '../src/voice/review.js';
 import { checkRules } from '../src/rules/check.js';
-import { commonsLicenseOk, imageCredit, needsCredit } from '../src/images/index.js';
+import { commonsLicenseOk, imageCredit, namesIn, needsCredit, once } from '../src/images/index.js';
 import { Db } from '../src/db/index.js';
 import { DEMO } from './helpers.js';
 
@@ -25,6 +25,23 @@ test('stock connectives, formal words, filler, exclamation marks and long dashes
   assert.ok(t('השקיה — פעם בשבוע').includes('structure'));
   assert.ok(t('ככה זה עובד...').includes('structure'));
   assert.ok(t('פרטים ב-www.example.com').includes('url'));
+  assert.ok(t('הכול ב-example.com/sale עכשיו').includes('url'));
+  // A company named for its domain is a name, not a link.
+  assert.ok(!t('monday.com שינתה את השם שלה ב-2017').includes('url'));
+  // A list of four short things is a tell; one score written the way fans read it is one thing.
+  assert.ok(t('פוטוס, זמיה, קקטוס, אלוורה וסנסיווריה.').includes('structure'));
+  assert.ok(!t('ב-23 במרץ 1988, בוולינגטון, ישראל 9, טייוואן 0.').includes('structure'));
+  assert.ok(t('מכבי 5, הפועל 4, בית"ר 0, בני 1.').includes('structure'), 'four scores in a row are still a list');
+});
+
+test('lengths fit the text: a long TikTok caption, a short Instagram one, a body of lines, a name as a title', () => {
+  const codes = (s, kind) => tellsIn(s, { kind }).map((x) => x.code);
+  const long = 'גוגל קנתה את וייז ב-2013, אחרי שנים שבהן המפה נבנתה מהנהגים עצמם ומהדיווחים שלהם בכביש. '.repeat(5);
+  assert.ok(codes(long, 'caption').includes('length'), 'a phase 1 caption stays short');
+  assert.ok(!codes(long, 'captionLong').includes('length'), 'the TikTok caption has room');
+  assert.ok(!codes('פוטוס\nזמיה\nסנסיווריה\nקקטוס\nאלוורה', 'slideLines').includes('length'), 'five places are five lines, not five sentences');
+  assert.ok(!codes('Fiverr', 'slideTitle').includes('language'), 'the answer of a guess-who is a name');
+  assert.ok(codes('This is an English sentence on a slide.', 'slideBody').includes('language'));
 });
 
 test('the audience is addressed in the plural: a singular "you" is a tell', () => {
@@ -75,4 +92,20 @@ test('a photo whose licence asks for credit is credited in the caption, and othe
   } finally {
     db.close();
   }
+});
+
+test("a photo found for a person names that person, not just a word of the name", () => {
+  assert.ok(!namesIn('File:Rudder_Rock,_Steep_Holm_Island.jpg', ['Holly', 'Holm']), 'a rock on Steep Holm is not Holly Holm');
+  assert.ok(!namesIn('File:Senecio_serra_-_tall_ragwort.jpg', ['Matt', 'Serra', 'Georges', 'St-Pierre']), 'a plant is not Matt Serra');
+  assert.ok(!namesIn('File:Holly_with_very_unevenly_distributed_berries,_Holm_Hill.jpg', ['Holly', 'Holm']), 'both words, apart, are not the name');
+  assert.ok(namesIn('File:Georges_St-Pierre_2014.jpg', ['Matt', 'Serra', 'Georges', 'St-Pierre']), 'either person in the query');
+  assert.ok(namesIn('File:Holly_Holm_at_UFC_Fight_Night.jpg', ['Holly', 'Holm']));
+  assert.ok(namesIn('File:Khabib_nurmagomedov_interview_2022.jpg', ['Khabib', 'Nurmagomedov', 'Gaethje']));
+  assert.ok(namesIn('Pele.jpg', ['Pele']), 'a query with one name needs that one');
+});
+
+test("a photo's author is named once, even when the source's markup names them twice", () => {
+  assert.equal(once('Unknown author Unknown author'), 'Unknown author');
+  assert.equal(once('Airotcivss'), 'Airotcivss');
+  assert.equal(once('Matt Lavin'), 'Matt Lavin');
 });

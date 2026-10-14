@@ -14,6 +14,8 @@ import { perDayFor, planMonth, savePlan } from '../budget/plan.js';
 import { makeBatcher, recoverBatches } from '../llm/batch.js';
 import { wantedPublisher } from '../publish/index.js';
 import { currentToken, igConfig, refreshToken } from '../publish/instagram.js';
+import { fightWeekSlots, parseEvents, recapsDue, saveEvents } from '../schedule/events.js';
+import { refreshSource } from '../sources/index.js';
 
 // The engine running on its own: one tick a minute.
 //
@@ -74,10 +76,10 @@ export async function generate(ctx, plans, report) {
   const { db } = ctx;
   const useBatch = ctx.llm.kind === 'claude' && ctx.batchApi && process.env.OF_BATCH !== 'off';
   const stopped = new Set();
-  const one = async (gctx, { pack, slotAt }) => {
+  const one = async (gctx, { pack, slotAt, formatKey = null, subject = null }) => {
     if (stopped.has(pack.id)) return;
     try {
-      const res = await buildPost(gctx, { pack, slotAt });
+      const res = await buildPost(gctx, { pack, slotAt, formatKey, subject });
       db.update('posts', res.postId, { mode_at_queue: db.get('SELECT mode FROM accounts WHERE id = ?', pack.id)?.mode });
       report.generated.push({ account: pack.id, post: res.postId, status: res.status, reason: res.reason, cost: res.cost });
       if (res.kind === 'fact_check') pauseAccount(db, pack.id, 'fact_check', res.reason);
@@ -99,6 +101,66 @@ export async function generate(ctx, plans, report) {
   return report;
 }
 
+/**
+ * The day-ahead plans for these slots, with a fight week laid over them: the
+ * tale of the tape and the prediction take their day's first slot, with their
+ * format and the event as the subject; the recap's slot is held back, to be
+ * drafted on the morning after, once the results exist.
+ */
+export function fightWeekPlans(db, pack, slots) {
+  if (!pack.meta.schedule?.fightWeek) return slots.map((slotAt) => ({ slotAt }));
+  const out = [];
+  for (const day of [...new Set(slots.map((s) => israelDate(Date.parse(s))))]) {
+    const ofDay = slots.filter((s) => israelDate(Date.parse(s)) === day);
+    const { assign, reserved } = fightWeekSlots(db, pack, day, ofDay);
+    for (const slotAt of ofDay) {
+      if (reserved.has(slotAt)) continue;
+      const w = assign.get(slotAt);
+      out.push(w ? { slotAt, formatKey: w.formatKey, subject: w.subject } : { slotAt });
+    }
+  }
+  return out;
+}
+
+/** The calendar of a pack that follows events, read from its listing once a day. */
+export async function syncEvents(ctx, pack, { t = now() } = {}) {
+  const cfg = pack.meta.events;
+  if (!cfg?.source) return 0;
+  const key = `events:synced:${pack.id}`;
+  const last = getSetting(ctx.db, key);
+  if (last && t - Date.parse(last) < 20 * 3_600_000) return 0;
+  setSetting(ctx.db, key, new Date(t).toISOString());
+  const src = ctx.db.get("SELECT * FROM sources WHERE account_id = ? AND key = ? AND status = 'approved'", pack.id, cfg.source);
+  if (!src) return 0;
+  let n = 0;
+  for (const d of await refreshSource(ctx.db, ctx.sourcesFor ? ctx.sourcesFor(pack) : ctx.sources, src)) n += saveEvents(ctx.db, pack.id, parseEvents(d.text), { sourceId: src.id, url: d.url });
+  return n;
+}
+
+/**
+ * The morning after a card: once it is over, its recap is drafted directly (a
+ * batch could take hours), and drafted again every 45 minutes until there is a
+ * post, if the results were not in the sources yet.
+ */
+export async function generateRecaps(ctx, report, { t = now() } = {}) {
+  const { db } = ctx;
+  const today = israelDate(t);
+  for (const pack of ctx.packs) {
+    if (!pack.meta.schedule?.fightWeek || !canRun(db, pack.id).ok) continue;
+    for (const w of recapsDue(db, pack, t)) {
+      const slots = slotsFor(today, pack.meta.schedule).slots.map((s) => s.toISOString());
+      const slot = [...fightWeekSlots(db, pack, today, slots).assign].find(([, x]) => x.role === 'recap')?.[0];
+      if (!slot || t > Date.parse(slot) - 30 * 60_000) continue;
+      if (db.get("SELECT id FROM posts WHERE account_id = ? AND slot_at = ? AND status NOT IN ('blocked')", pack.id, slot)) continue;
+      const key = `recap:${pack.id}:${w.event.key}`;
+      const last = getSetting(db, key);
+      if (last && t - Date.parse(last) < 45 * 60_000) continue;
+      setSetting(db, key, new Date(t).toISOString());
+      await generate({ ...ctx, batchApi: null }, [{ pack, slotAt: slot, formatKey: w.formatKey, subject: w.subject }], report);
+    }
+  }
+}
+
 export async function tick(ctx, { t = now() } = {}) {
   const { db } = ctx;
   const today = israelDate(t);
@@ -115,6 +177,9 @@ export async function tick(ctx, { t = now() } = {}) {
     }
   }
 
+  // ---- 1a. the calendars of the packs that follow events, once a day
+  for (const pack of ctx.packs) await syncEvents(ctx, pack, { t }).catch((e) => report.errors.push({ account: pack.id, step: 'events', error: e.message }));
+
   // ---- 2. generate, a day ahead, once a day
   const plans = [];
   if (!ctx.generating && t >= israelInstant(today, cfg.generateAt).getTime()) {
@@ -129,7 +194,7 @@ export async function tick(ctx, { t = now() } = {}) {
       if (!plans.length) savePlan(db, plan, { t });
       setSetting(db, genKey, nowIso());
       const lead = ctx.llm.kind === 'claude' && ctx.batchApi && process.env.OF_BATCH !== 'off' ? CATCH_UP_LEAD_MS : 0;
-      for (const slotAt of generationTargets(db, pack, { t, lead })) plans.push({ pack, slotAt });
+      for (const p of fightWeekPlans(db, pack, generationTargets(db, pack, { t, lead }))) plans.push({ pack, ...p });
     }
   }
   if (plans.length) {
@@ -143,6 +208,9 @@ export async function tick(ctx, { t = now() } = {}) {
       report.generating = plans.length;
     } else await job;
   }
+
+  // ---- 2a. the morning after a card: its recap, once the results exist
+  await generateRecaps(ctx, report, { t }).catch((e) => report.errors.push({ step: 'recap', error: e.message }));
 
   for (const pack of ctx.packs) {
     const acc = db.get('SELECT * FROM accounts WHERE id = ?', pack.id);

@@ -51,7 +51,13 @@ const MORAL = /^(?:בקיצור|בסופו של דבר|בשורה התחתונה
 const EMOJI = /\p{Extended_Pictographic}/gu;
 const LONG_DASH = /[—–]/;
 const ARTEFACTS = /\*\*|^\s*[#*]\s|\{[a-z_]+\}|\[[^\]]*\]\(|<\/?[a-z]+>/im;
-const URL_LIKE = /https?:\/\/|www\.|\.(?:com|co\.il|org|net|io|ai|gov\.il)(?:\/|\b)/i;
+// A link: a scheme, "www.", or a domain with a path. A company named for its domain
+// ("monday.com", "Wix.com") is a name, not a link, and neither platform makes it one.
+const URL_LIKE = /https?:\/\/|www\.|[\p{L}\p{N}-]+\.(?:com|co\.il|org|net|io|ai|gov\.il)\/\S/iu;
+
+// The comma inside one score written the way fans read it ("ישראל 9, טייוואן 0"):
+// a number, a comma, a name and a number, not chained to another score on either side.
+const SCORE_COMMA = /(\d+)(?<!\d\s*,\s*[^,\d]{1,30}\s\d+)\s*,\s+(?=[^,\d]{1,30}\s\d+(?!\d)(?!\s*,\s*[^,\d]{1,30}\s\d))/gu;
 
 /** Sentences, the way a reader counts them. */
 export function sentencesOf(text) {
@@ -80,18 +86,23 @@ export const LIMITS = {
   slideTitle: { maxChars: 60, emoji: 1, sentences: 2 },
   slideBody: { maxChars: 230, emoji: 1, sentences: 3 },
   caption: { maxChars: 320, emoji: 2, sentences: 4 },
+  // A post with two captions: TikTok's long one (its search reads it) and Instagram's short one.
+  captionLong: { maxChars: 900, emoji: 2, sentences: 8 },
+  captionShort: { maxChars: 260, emoji: 2, sentences: 3 },
+  // A body of short lines (places 10 to 6, an iceberg's layer): each line is one item, not a run-on.
+  slideLines: { maxChars: 260, emoji: 1, sentences: 6 },
 };
 
 /**
  * Every tell in one text, as { code, msg }. Empty means it reads like a person.
- * kind: 'cover' | 'slideTitle' | 'slideBody' | 'caption'
+ * kind: 'cover' | 'slideTitle' | 'slideBody' | 'slideLines' | 'caption' | 'captionLong' | 'captionShort'
  * extra: the pack's own banned phrases (rules.json bannedPhrases)
  */
 export function tellsIn(text, { kind = 'slideBody', extra = [] } = {}) {
   const out = [];
   const add = (code, msg) => out.push({ code, msg });
   const raw = String(text || '').trim();
-  if (!raw) return kind === 'slideBody' ? [] : [{ code: 'empty', msg: 'empty' }];
+  if (!raw) return kind === 'slideBody' || kind === 'slideLines' ? [] : [{ code: 'empty', msg: 'empty' }];
   const norm = normHe(raw);
   const lim = LIMITS[kind] || LIMITS.slideBody;
 
@@ -106,7 +117,7 @@ export function tellsIn(text, { kind = 'slideBody', extra = [] } = {}) {
   if (URL_LIKE.test(raw)) add('url', 'a web address (a link in a post is a demotion and is never tappable)');
   const emoji = (raw.match(EMOJI) || []).length;
   if (emoji > lim.emoji) add('register', `${emoji} emoji, ${lim.emoji} at most`);
-  if (kind === 'caption') {
+  if (/^caption/.test(kind)) {
     // In a caption the colon of a brochure ("שלושה דברים: א, ב, ג") is a tell.
     const colon = sentencesOf(raw).some((s) => {
       const at = s.replace(/\d:\d/g, '').indexOf(':');
@@ -115,8 +126,11 @@ export function tellsIn(text, { kind = 'slideBody', extra = [] } = {}) {
     if (colon) add('structure', 'a colon after a whole clause: say it as a sentence');
   }
 
-  const sentences = sentencesOf(raw);
-  for (const s of sentences) {
+  // Lines are items: each is counted on its own, so five places are five lines, not one long sentence.
+  const sentences = kind === 'slideLines' ? raw.split(/\n+/).flatMap((l) => sentencesOf(l)) : sentencesOf(raw);
+  for (const raw1 of sentences) {
+    // A score as fans write it ("ישראל 9, טייוואן 0") is one thing, not two; four scores in a row are still a list.
+    const s = raw1.replace(SCORE_COMMA, '$1 ');
     const parts = s.split(/,|\s+ו(?=\S)/).map((p) => p.trim()).filter(Boolean);
     if (s.split(',').length >= 4 && parts.filter((p) => p.split(/\s+/).length <= 3).length >= 4) {
       add('structure', 'a list of four or more things in one sentence');
@@ -134,7 +148,9 @@ export function tellsIn(text, { kind = 'slideBody', extra = [] } = {}) {
     const words = raw.split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length;
     if (words < lim.minWords || words > lim.maxWords) add('length', `${words} words on the cover, ${lim.minWords} to ${lim.maxWords}`);
   }
-  if (hebrewShare(raw) < 0.5) add('language', 'mostly not Hebrew');
+  // A short title that is a name ("Fiverr", "Real Madrid", the answer of a guess-who) is not a sentence in English.
+  const aName = (kind === 'slideTitle' || kind === 'cover') && raw.split(/\s+/).length <= 3 && !/[.?]$/.test(raw);
+  if (hebrewShare(raw) < 0.5 && !aName) add('language', 'mostly not Hebrew');
   return out;
 }
 

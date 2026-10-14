@@ -1,15 +1,267 @@
 {
+  "mix": {
+    "entertaining": 0.6
+  },
   "formats": [
+    {
+      "id": "plant-story",
+      "kind": "story",
+      "name": "סיפור של צמח",
+      "about": "A true story about one plant or one garden from the sources: how it started, what went wrong, how it ended.",
+      "weight": 3,
+      "hooks": [
+        {
+          "id": "came-back",
+          "pattern": "ה{צמח} ש{מה קרה}, ואיך הוא חזר",
+          "examples": [
+            "הבזיליקום שכולם קברו, ואיך הוא חזר"
+          ]
+        },
+        {
+          "id": "nobody-expected",
+          "pattern": "אף אחד לא ציפה ש{משהו} יקרה במרפסת הזאת",
+          "examples": [
+            "אף אחד לא ציפה שעציץ אחד יאכיל בניין שלם"
+          ]
+        }
+      ],
+      "ctas": [
+        {
+          "kind": "send",
+          "text": "שלחו למי שוויתר על העציץ שלו"
+        },
+        {
+          "kind": "save",
+          "text": "שמרו לעונה הבאה"
+        }
+      ]
+    },
+    {
+      "id": "what-happened",
+      "kind": "what-happened",
+      "name": "מה קרה ל...",
+      "about": "What happened to a plant that everyone had a few years ago, from the sources: its peak, the turn, where it is now.",
+      "weight": 2,
+      "hooks": [
+        {
+          "id": "everyone-had",
+          "pattern": "פעם לכולם היה {צמח}. מה קרה לו?",
+          "examples": [
+            "פעם לכולם היה פיקוס. מה קרה לו?"
+          ]
+        }
+      ],
+      "ctas": [
+        {
+          "kind": "comment",
+          "text": "היה לכם כזה? ספרו בתגובות"
+        }
+      ]
+    },
+    {
+      "id": "garden-day",
+      "kind": "on-this-day",
+      "name": "היום לפני",
+      "about": "One moment from the fictional garden history in the sources that happened on this date.",
+      "weight": 1,
+      "hooks": [
+        {
+          "id": "the-date",
+          "pattern": "{תאריך}: {מה קרה}",
+          "examples": [
+            "14 באוקטובר 2018: מרפסת אחת שינתה עיר"
+          ]
+        }
+      ],
+      "ctas": [
+        {
+          "kind": "send",
+          "text": "שלחו למי שמגדל משהו על אדן החלון"
+        }
+      ]
+    },
+    {
+      "id": "guess-plant",
+      "kind": "guess-who",
+      "name": "נחשו את הצמח",
+      "about": "Guess the plant from three clues from the sources; the answer on the last slide.",
+      "weight": 2,
+      "hooks": [
+        {
+          "id": "three-clues",
+          "pattern": "תנחשו את הצמח לפי 3 רמזים",
+          "examples": [
+            "תנחשו את הצמח לפי 3 רמזים"
+          ]
+        },
+        {
+          "id": "only-real",
+          "pattern": "רק מי שמגדל באמת יזהה אותו",
+          "examples": [
+            "רק מי שמגדל באמת יזהה אותו"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "plant-vs",
+      "kind": "head-to-head",
+      "name": "ראש בראש",
+      "about": "Two plants side by side on four to six numbers from the sources, and which one fits a small balcony.",
+      "weight": 3,
+      "hooks": [
+        {
+          "id": "answer-last",
+          "pattern": "{צמח} או {צמח}? התשובה בשקופית האחרונה",
+          "examples": [
+            "נענע או בזיליקום? התשובה בשקופית האחרונה"
+          ]
+        }
+      ],
+      "ctas": [
+        {
+          "kind": "comment",
+          "text": "מי מנצח אצלכם? כתבו בתגובות"
+        },
+        {
+          "kind": "send",
+          "text": "שלחו למי שמתלבט מה לשתול"
+        }
+      ]
+    },
+    {
+      "id": "plant-ranking",
+      "kind": "ranking",
+      "name": "דירוג",
+      "about": "The top five plants by one number from the sources (light, water, growth), number one last.",
+      "weight": 2,
+      "hooks": [
+        {
+          "id": "top-five",
+          "pattern": "5 ה{צמחים} ש{משהו}, והראשון מפתיע",
+          "examples": [
+            "5 הצמחים שהכי פחות צריכים מים, והראשון מפתיע"
+          ]
+        }
+      ],
+      "ctas": [
+        {
+          "kind": "save",
+          "text": "שמרו לפני שקונים שתיל"
+        }
+      ]
+    },
+    {
+      "id": "plant-iceberg",
+      "kind": "iceberg",
+      "name": "הקרחון",
+      "about": "What everyone knows about one plant down to what almost nobody knows, layer by layer, all from the sources.",
+      "weight": 1,
+      "hooks": [
+        {
+          "id": "iceberg",
+          "pattern": "הקרחון של ה{צמח}",
+          "examples": [
+            "הקרחון של הבזיליקום"
+          ]
+        }
+      ],
+      "ctas": [
+        {
+          "kind": "save",
+          "text": "שמרו, יש פה דברים ששוכחים"
+        }
+      ]
+    },
+    {
+      "id": "hot-take",
+      "kind": "hot-take",
+      "name": "דעה",
+      "about": "One opinion about balcony gardening, with the case made from sourced facts.",
+      "weight": 1,
+      "hooks": [
+        {
+          "id": "unpopular",
+          "pattern": "דעה לא פופולרית: {דעה}",
+          "examples": [
+            "דעה לא פופולרית: רוב הצמחים מתים מאהבה"
+          ]
+        }
+      ],
+      "ctas": [
+        {
+          "kind": "comment",
+          "text": "מסכימים? כתבו למה"
+        }
+      ]
+    },
+    {
+      "id": "myth-fact",
+      "kind": "myth-fact",
+      "name": "מיתוס ועובדה",
+      "about": "Two or three things people believe about houseplants, and what the sources say instead.",
+      "weight": 2,
+      "hooks": [
+        {
+          "id": "still-believe",
+          "pattern": "{מספר} דברים שעדיין מאמינים בהם על צמחי בית",
+          "examples": [
+            "3 דברים שעדיין מאמינים בהם על צמחי בית"
+          ]
+        }
+      ],
+      "ctas": [
+        {
+          "kind": "send",
+          "text": "שלחו למי שמשקה כל יום"
+        }
+      ]
+    },
+    {
+      "id": "balcony-meme",
+      "kind": "meme",
+      "name": "מם של מרפסת",
+      "about": "Jokes about the pain every balcony gardener knows, ending with the real fact behind them from the sources.",
+      "weight": 1,
+      "hooks": [
+        {
+          "id": "when-you",
+          "pattern": "כשאתם {מצב שכולם מכירים}",
+          "examples": [
+            "כשאתם קונים צמח רביעי כי השלישי מת"
+          ]
+        }
+      ],
+      "ctas": [
+        {
+          "kind": "send",
+          "text": "שלחו למי שזה הוא"
+        }
+      ]
+    },
     {
       "id": "care-guide",
       "name": "מדריך טיפול",
       "about": "How to keep one plant alive and growing, a step per slide, from the source's care instructions.",
       "weight": 3,
-      "items": [3, 5],
-      "hooks": ["{plant} במרפסת: {n} דברים שקובעים אם הוא ישרוד", "ככה {plant} נשאר ירוק כל העונה", "{n} דברים ש{plant} צריך מכם"],
+      "items": [
+        3,
+        5
+      ],
+      "hooks": [
+        "{plant} במרפסת: {n} דברים שקובעים אם הוא ישרוד",
+        "ככה {plant} נשאר ירוק כל העונה",
+        "{n} דברים ש{plant} צריך מכם"
+      ],
       "closers": [
-        { "title": "שמרו את זה לעונה הבאה", "body": "ותשלחו למי שגם מגדל משהו על אדן החלון" },
-        { "title": "שמרו לפני שקונים שתיל", "body": "זה הרבה יותר קל כשיודעים מה הוא צריך" }
+        {
+          "title": "שמרו את זה לעונה הבאה",
+          "body": "ותשלחו למי שגם מגדל משהו על אדן החלון"
+        },
+        {
+          "title": "שמרו לפני שקונים שתיל",
+          "body": "זה הרבה יותר קל כשיודעים מה הוא צריך"
+        }
       ]
     },
     {
@@ -17,10 +269,20 @@
       "name": "טעויות נפוצות",
       "about": "The common mistakes that kill a plant, each with what to do instead, all from the source.",
       "weight": 2,
-      "items": [3, 5],
-      "hooks": ["{n} טעויות שהורגות צמחים בעציץ", "הצמח לא מת מצמא. הוא מת מזה", "לפני ההשקיה הבאה, תבדקו את זה"],
+      "items": [
+        3,
+        5
+      ],
+      "hooks": [
+        "{n} טעויות שהורגות צמחים בעציץ",
+        "הצמח לא מת מצמא. הוא מת מזה",
+        "לפני ההשקיה הבאה, תבדקו את זה"
+      ],
       "closers": [
-        { "title": "איזו מהן הכי מוכרת לכם?", "body": "שמרו את הרשימה לפני ההשקיה הבאה" }
+        {
+          "title": "איזו מהן הכי מוכרת לכם?",
+          "body": "שמרו את הרשימה לפני ההשקיה הבאה"
+        }
       ]
     },
     {
@@ -28,22 +290,57 @@
       "name": "עובדות קצרות",
       "about": "A few short, surprising and useful facts about one plant or one season, one per slide.",
       "weight": 2,
-      "items": [3, 5],
-      "hooks": ["{n} דברים שלא ידעתם על {plant}", "מה {plant} עושה כשאף אחד לא מסתכל", "{season} במרפסת: מה משתנה"],
+      "items": [
+        3,
+        5
+      ],
+      "hooks": [
+        "{n} דברים שלא ידעתם על {plant}",
+        "מה {plant} עושה כשאף אחד לא מסתכל",
+        "{season} במרפסת: מה משתנה"
+      ],
       "closers": [
-        { "title": "עוד צמח, עוד רשימה", "body": "שמרו ותחזרו כשהעציץ הבא מגיע" }
+        {
+          "title": "עוד צמח, עוד רשימה",
+          "body": "שמרו ותחזרו כשהעציץ הבא מגיע"
+        }
       ]
     }
   ],
   "caption": {
-    "questions": ["מה גדל אצלכם במרפסת?", "איזה צמח הכי קשה לכם לשמור בחיים?", "לאיזה צמח תרצו רשימה כזו?"]
+    "questions": [
+      "מה גדל אצלכם במרפסת?",
+      "איזה צמח הכי קשה לכם לשמור בחיים?",
+      "לאיזה צמח תרצו רשימה כזו?"
+    ]
   },
   "hashtags": {
-    "broad": ["#גינון", "#צמחים", "#צמחיבית"],
-    "niche": ["#גינהבמרפסת", "#צמחיתבלין", "#עציצים", "#גינהעירונית"]
+    "broad": [
+      "#גינון",
+      "#צמחים",
+      "#צמחיבית"
+    ],
+    "niche": [
+      "#גינהבמרפסת",
+      "#צמחיתבלין",
+      "#עציצים",
+      "#גינהעירונית"
+    ]
   },
   "trends": {
-    "queries": { "he": ["טיפים לצמחי בית", "גינה במרפסת"], "en": ["houseplant care tips", "balcony herb garden"] },
-    "minViews": { "he": 1000, "en": 20000 }
+    "queries": {
+      "he": [
+        "טיפים לצמחי בית",
+        "גינה במרפסת"
+      ],
+      "en": [
+        "houseplant care tips",
+        "balcony herb garden"
+      ]
+    },
+    "minViews": {
+      "he": 1000,
+      "en": 20000
+    }
   }
 }

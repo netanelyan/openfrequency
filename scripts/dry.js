@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// npm run dry -- --pack <id> --count 5 [--live] [--format <id>]
+// npm run dry -- --pack <id> --count 5 [--live] [--format <id>] [--day YYYY-MM-DD]
 //
 // Builds posts for one pack and writes each to disk: the slides for every
 // platform, the caption, every fact with its quote and source (sources.md), and
@@ -79,7 +79,7 @@ console.log(`dry run: ${pack.meta.displayName} (${pack.id}), ${count} posts, mod
 const rows = [];
 const t0 = Date.now();
 for (let i = 0; i < count; i++) {
-  const res = await buildPost(ctx, { pack, formatKey: opt('format') });
+  const res = await buildPost(ctx, { pack, formatKey: opt('format'), day: opt('day') });
   const folder = path.join(runOut, `${String(i + 1).padStart(2, '0')}-${res.postId}`);
   exportPost(db, res.postId, folder);
   const post = db.get('SELECT hook, format_id, review_score, cost_usd, cost_estimated FROM posts WHERE id = ?', res.postId);

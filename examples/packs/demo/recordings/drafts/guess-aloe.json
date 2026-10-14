@@ -1,0 +1,41 @@
+{
+  "document": "guess-aloe",
+  "format": "guess-plant",
+  "outline": {
+    "usable": true,
+    "why": "the care sheet has three clues that go from hard to easy without naming the plant, and a sourced line for the reveal",
+    "topic": "נחשו את הצמח לפי 3 רמזים",
+    "subject": { "a": "", "b": "", "answer": "אלוורה", "date": "" },
+    "imageQuery": "",
+    "facts": [
+      { "id": "f1", "claim": "אלוורה היא סוקולנט שאוגר מים בעלים העבים, ולכן משקים אותה רק כשהאדמה יבשה לגמרי", "quote": "Aloe vera is a succulent that stores water in its thick leaves, so it needs water only when the soil has dried completely", "doc": "D1" },
+      { "id": "f2", "claim": "בקיץ זה אומר השקיה בערך פעם ב-3 שבועות", "quote": "In summer that means watering about every 3 weeks", "doc": "D1" },
+      { "id": "f3", "claim": "היא פורחת בדרך כלל רק אחרי 4 שנים, על גבעול של עד 90 סנטימטר עם פרחים צהובים בצורת צינור", "quote": "aloe vera usually flowers only after 4 years, sending up a stalk up to 90 cm tall with yellow tube-shaped flowers", "doc": "D1" },
+      { "id": "f4", "claim": "צמחים חדשים גדלים מסביב לבסיס של צמח האם, ואפשר להפריד אחד כשיש לו 4 או 5 עלים משלו", "quote": "New plants grow as pups around the base of the mother plant, and a pup can be separated once it has 4 or 5 leaves of its own", "doc": "D1" },
+      { "id": "f5", "claim": "לעלים יש שיניים רכות בשוליים, ובתוך כל עלה יש ג'ל שקוף", "quote": "The leaves have soft teeth along their edges, and inside each leaf is a clear gel", "doc": "D1" },
+      { "id": "f6", "claim": "שותלים אותה בעציץ חרס עם חור ניקוז ובאדמה לקקטוסים, לא באדמת גינה רגילה", "quote": "Plant it in a clay pot with a drainage hole and a gritty cactus mix, never in plain garden soil", "doc": "D1" }
+    ],
+    "items": [
+      { "role": "clue", "point": "פורח רק אחרי 4 שנים", "facts": ["f3"] },
+      { "role": "clue", "point": "הצמחים החדשים גדלים לידו", "facts": ["f4"] },
+      { "role": "clue", "point": "שיניים רכות וג'ל שקוף", "facts": ["f5"] },
+      { "role": "reveal", "point": "אלוורה, ומתי משקים אותה", "facts": ["f1", "f2"] }
+    ]
+  },
+  "slides": {
+    "hook": "תנחשו איזה צמח זה מתוך 3 רמזים",
+    "sub": "הרמז הראשון הוא הכי קשה",
+    "hookPattern": "three-clues",
+    "subject": { "a": "", "b": "", "answer": "אלוורה", "date": "" },
+    "slides": [
+      { "role": "clue", "title": "פורח רק אחרי 4 שנים", "body": "וכשהוא כבר פורח, יוצא ממנו גבעול של עד 90 סנטימטר, עם פרחים צהובים בצורת צינור.", "a": "", "b": "", "facts": ["f3"] },
+      { "role": "clue", "title": "הילדים שלו גדלים לידו", "body": "צמחים חדשים צומחים מסביב לבסיס של צמח האם. מפרידים אחד כשיש לו 4 או 5 עלים משלו.", "a": "", "b": "", "facts": ["f4"] },
+      { "role": "clue", "title": "שיניים רכות וג'ל שקוף", "body": "לאורך השוליים של העלים יש שיניים רכות. ובתוך כל עלה עבה יש ג'ל שקוף.", "a": "", "b": "", "facts": ["f5"] },
+      { "role": "reveal", "title": "אלוורה", "body": "סוקולנט שאוגר מים בעלים העבים, אז משקים רק כשהאדמה יבשה לגמרי. בקיץ זה בערך פעם ב-3 שבועות.", "a": "", "b": "", "facts": ["f1", "f2"] }
+    ],
+    "caption": "שלושה רמזים על צמח בית אחד, מהקשה לקל. עוד רמז קטן שלא נכנס לשקופיות, שותלים אותו בעציץ חרס עם חור ובאדמה לקקטוסים. בשקופית האחרונה מחכה התשובה, וגם כל כמה זמן משקים אותו בקיץ.",
+    "captionShort": "שלושה רמזים על צמח בית אחד, מהקשה לקל. נסו לזהות אותו לפני השקופית האחרונה.",
+    "question": "מה הצמח הכי עמיד שיש לכם בבית?",
+    "keywords": ["נחשו את הצמח", "צמחי בית", "houseplants", "plant quiz"]
+  }
+}

@@ -1,5 +1,5 @@
 import { bestInk, rgbList } from './color.js';
-import { fontFaces } from './fonts.js';
+import { fontFaces, headlineFaces, headlineFamily } from './fonts.js';
 
 // The page every slide is drawn on, whatever the template.
 //
@@ -25,7 +25,10 @@ export const esc = (s) =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 
-const LATIN_RUN = /([A-Za-z][A-Za-z0-9 .+#&:/_-]*[A-Za-z0-9+#]|[A-Za-z])/;
+// A run joins words with a space ("UFC 193", "Better Place") and parts of a name with a
+// point, a colon, a slash or a dash ("monday.com"), never across a sentence's end: as
+// one run, "Gnrgy. 450,000" put the period and half the number on the wrong side.
+const LATIN_RUN = /([A-Za-z](?:[A-Za-z0-9+#&_]|[.:/-](?=[A-Za-z0-9])|(?<![.!?]) (?=[A-Za-z0-9]))*)/;
 
 /**
  * Escape, and isolate every Latin run so bidi cannot reorder punctuation around it.
@@ -43,6 +46,18 @@ export function he(text) {
 export function leadNumber(text) {
   const m = /(₪\s?)?(\d+(?:[.,]\d+)*)(\s?%|\s?₪)?/.exec(String(text || ''));
   return m ? { value: m[2], pre: (m[1] || '').trim(), post: (m[3] || '').trim() } : null;
+}
+
+/**
+ * A title that opens with its number: the number, to draw big, and the rest of the
+ * title without it. A number inside the title stays in it and nothing is drawn big:
+ * drawing it big above a title that also holds it showed "7,703" twice, stacked.
+ */
+export function splitLead(text) {
+  const t = String(text || '').trim();
+  const m = /^(₪\s?)?(\d+(?:[.,]\d+)*)(\s?%|\s?₪)?(?![\d.,])/.exec(t);
+  if (!m) return { lead: null, rest: t };
+  return { lead: { value: m[2], pre: (m[1] || '').trim(), post: (m[3] || '').trim() }, rest: t.slice(m[0].length).replace(/^[\s:,.–-]+/, '').trim() };
 }
 
 export const two = (n) => String(n).padStart(2, '0');
@@ -70,7 +85,7 @@ export function rootCss(theme, size) {
   --bg:${c.bg}; --surface:${c.surface}; --ink:${c.ink}; --muted:${c.muted}; --accent:${c.accent}; --accent2:${c.accent2};
   --on-accent:${onAccent}; --on-accent2:${onAccent2};
   --bg-rgb:${rgbList(c.bg)}; --ink-rgb:${rgbList(c.ink)}; --accent-rgb:${rgbList(c.accent)}; --accent2-rgb:${rgbList(c.accent2)};
-  --display:'${theme.fonts.display}'; --text:'${theme.fonts.text}';
+  --display:'${theme.fonts.display}'; --text:'${theme.fonts.text}'; --headline:${headlineFamily(theme.fonts.display)};
   --radius:${Number(theme.options?.radius ?? 28)}px;
 }
 *{box-sizing:border-box;margin:0;padding:0}
@@ -88,6 +103,11 @@ body.has-photo .frame{z-index:2}
 `;
 }
 
+// Lines of text set in the display face take the headline family: the same face, or its
+// composite with readable digits (fonts.js), and so do the small slide counters ("01 / 07"):
+// at that size a crossbarred 7 reads as a letter. Big numbers on their own keep the face's digits.
+const HEADLINE_CSS = '.hook,.title,.rtitle,.k-closer h2,.versus,.answer,.myth-text,.meme .punch,.vs .val,.q,.count,.cnt,.head .n{font-family:var(--headline)}';
+
 /** The whole page for one slide. `parts` is what a template returns. */
 export function page({ theme, size, slide, parts, photo }) {
   const families = [theme.fonts.display, theme.fonts.text, 'Heebo'];
@@ -96,10 +116,12 @@ export function page({ theme, size, slide, parts, photo }) {
 <head><meta charset="utf-8"><title>${esc(slide.title || slide.hook || '')}</title>
 <style>
 ${fontFaces(families)}
+${headlineFaces(theme.fonts.display)}
 ${rootCss(theme, size)}
 ${parts.css}
+${HEADLINE_CSS}
 </style></head>
-<body class="t-${theme.template} v-${theme.variant || 'a'} k-${slide.kind} s-${size}${photo ? ' has-photo' : ''}">
+<body class="t-${theme.template} v-${theme.variant || 'a'} k-${slide.kind} s-${size}${photo ? ' has-photo' : ''}${parts.bodyClass ? ` ${parts.bodyClass}` : ''}"${parts.bodyStyle ? ` style="${esc(parts.bodyStyle)}"` : ''}>
 ${photo ? `<img class="photo" src="${photo}" alt=""><div class="scrim" data-scrim></div>` : ''}
 ${parts.html}
 <div class="probe">א</div>
@@ -111,7 +133,13 @@ export function sourceLine(slide) {
   const names = [...new Set((slide.sources || []).filter(Boolean))];
   // Each name is one isolated run with its own direction: "Wikipedia (English)"
   // must not have its parenthesis pulled across a Latin word by the Hebrew line.
-  return names.length ? `<div class="src">מקור: ${names.map((n) => `<bdi dir="auto">${esc(n)}</bdi>`).join(' · ')}</div>` : '';
+  // An article after the source's name ("ויקיפדיה: 2002–03 UEFA Champions League")
+  // is a run of its own: inside the Hebrew run its years came out reversed ("03–2002").
+  const one = (n) => {
+    const at = n.indexOf(': ');
+    return at > 0 ? `<bdi dir="auto">${esc(n.slice(0, at))}</bdi>: <bdi dir="auto">${esc(n.slice(at + 2))}</bdi>` : `<bdi dir="auto">${esc(n)}</bdi>`;
+  };
+  return names.length ? `<div class="src">מקור: ${names.map(one).join(' · ')}</div>` : '';
 }
 
 /** The counter on a content slide: "2/5". */

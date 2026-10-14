@@ -322,3 +322,295 @@ README's steps in it with podman. The container runs privileged because the
 unit's hardening needs mount namespaces, which a VM has and an unprivileged
 container does not ("Failed to keep CAP_SYS_ADMIN"); under WSL it also needs the
 host's network (`NET=host`), since WSL has no nftables.
+
+## The three accounts (2026-10-14): the content model
+
+### The kind owns the shape, the pack owns the voice
+
+The accounts are entertaining first: the research behind them found that stories,
+not stats, carry the biggest accounts. A post is now one of ten kinds (story,
+what-happened, on-this-day, guess-who, head-to-head, ranking, iceberg, hot-take,
+myth-fact, meme), each a shape in `src/formats/kinds.js`: which slides, in what
+order, which of them carry a fact, what the drafting model is told, and what is
+checked in code (a guess-who that names its answer before the reveal, a ranking
+that writes its own place numbers, a myth that holds a number its fact does not).
+A pack's format names a kind and brings its own name, cover patterns and calls to
+action, so a new account is still configuration only. Alternative: a free-form
+"post type" the model fills as it likes, which would leave nothing for the code to
+check.
+
+### The payoff is the last slide; the call to action is drawn on it
+
+The research said 5 to 8 slides, the payoff on the last one. Phase 1's closing
+slide (a call to action of its own) would push the payoff off the end, so a new
+kind has no closing slide: the design draws the call to action on the last slide,
+and the model is told not to write one. The phase 1 shape stays as the `list`
+kind, with its closer, for the packs and tests that use it.
+
+### Slides without a fact of their own
+
+A myth as people say it, a verdict, a joke's setup and "agree?" state no sourced
+fact, and a post of these kinds needs them. The gate lets those roles stand
+without a fact, and still holds every number on them to the post's quotes. Every
+other content slide must cite a fact, as before.
+
+### One schema for every kind, for the cache
+
+The outline and slides schemas are the same for every kind (roles, the two values
+of a head-to-head stat, the subject, both captions, the keywords), and each kind's
+instructions live in the pack's cached block. A schema per kind would break the
+cached prefix every time the account changed kinds.
+
+### The code picks the cover pattern and the call to action
+
+So the results can be credited to them: the model is told which pattern to follow,
+and the pattern's id is stored with the post whatever the answer says. Each pattern
+gets two turns, then one post in three tries the least used and the rest follow the
+results (clamped 0.5 to 2). The calls to action rotate so two posts in a row do not
+end the same way.
+
+### The mix moves with the results, slowly
+
+Each account starts at 60% entertaining posts (formats.json `mix`), chooses the
+group under its share first, and moves 5 points at most once a week, within 40% to
+80%, when one group's median result beats the other's by 10% with at least 3
+results each. Faster would chase noise at two posts a day.
+
+### Instagram is scored by saves per reach
+
+As the brief asks: saves over the accounts that saw it (reach), views only where
+Meta reports no reach. TikTok stays shares and likes per view.
+
+### Two captions, and their limits
+
+TikTok's search reads a long caption, Instagram shows the start of a short one: a
+post has a 200 to 600 character TikTok caption and a short Instagram one that the
+code leads with the cover line. The tell checks had capped every caption at 320
+characters and 4 sentences, which made a valid TikTok caption impossible (the demo
+content found it): the long caption has its own limit (900, 8 sentences), and a
+slide body of lines (places 10 to 6, an iceberg's layer) is counted line by line.
+
+### Hebrew number words on the cover are numbers too
+
+Phase 1 left Hebrew number words on the cover and in captions unchecked, because
+"שלושת הטיפים" is the post's own count. The post's own counts are now known in code
+(the number of slides, a top 5 or 10, 3 clues), so the cover and the captions are
+held to the quotes like the slides: "היום לפני שמונה שנים" is arithmetic no quote
+holds, and is refused.
+
+### Takedowns: delete what the APIs can, the rest by hand
+
+Meta added a delete for Instagram media in December 2025 (Facebook Login only, the
+`instagram_manage_contents` permission); TikTok has none for a third party, not
+through Zernio (whose delete only removes its own record of a published post) and
+not through TikTok's APIs. A notice takes the post down where an API can, lists
+the rest for the owner with a confirm button, and a second notice for the same
+account within 90 days pauses it. The network door gains exactly one write: DELETE
+of a numeric Graph object, never an edge.
+
+### The image screen, and a person when it cannot tell
+
+Words in a photo's description refuse it (blood, knockout, a watermark, a belt); a
+share of deep red sends it to a person, since red gloves and a red corner look like
+blood to a counter; with a live key Claude Haiku looks. What nothing clears waits:
+the post can be approved but not published until someone confirms the photo on
+its page. A pack set to `safety: strict` screens every photo it uses.
+
+### Event photos are the owner's decision, and they stay traceable
+
+An owner can allow event photos for an account. They come in by hand
+(`<pack>/photos/photos.json`, with what is in each, where it came from and whom to
+credit), still pass the screen, and a takedown notice deletes the post. Commons
+first when it has a good one: a JPEG at least 1000 px a side whose file title
+names the person the query names (video stills, the wrong person and a sponsor's
+logo came through before that filter). The engine fetches no photo from a news or
+agency site.
+
+### A pack can draw its own covers
+
+Licensed photos of athletes nearly all show a kit: a crest, a sponsor, a brand on
+the boots. One of the launch builds put exactly that on a cover, for an account
+whose look is "no crests or logos". A theme can turn the cover photo off
+(`coverPhoto: false`) and draw its covers from type and numbers; turning photos on
+is one line, and with a strict screen every photo waits for a person before it is
+published.
+
+### The fight week, and a recap only once the results exist
+
+The calendar is a list of events on Wikipedia, read through its API; the next
+week's event pages are read the same way. The tale of the tape takes the first
+slot three days before a card, the prediction the day before, and the recap's slot
+is held back from the day-ahead drafts and drafted the morning after, every 45
+minutes until a document names both fighters with the results. Drafting it the day
+before would mean writing results that do not exist yet.
+
+### Wikipedia and Wikidata through their APIs
+
+Wikipedia's robots.txt disallows `/w/` and `/api/`, and Wikidata's `/sparql`, for
+all agents, while the Wikimedia Robot policy sets out how bots should use exactly
+those APIs (a few requests at a time, back off on 429, an identifying User-Agent)
+and recommends the REST page HTML for a page's content. The reading here:
+robots.txt is aimed at crawlers of pages, the APIs are the sanctioned door. The
+engine reads sections through the REST HTML (tables kept, one row a line), waits
+on a 429 (recording the launch documents hit one), and names itself with a contact
+the owner sets (`OF_USER_AGENT`): the old default pointed at a GitHub organisation
+that is not this project. Strictest alternative: only `/wiki/` pages, which would
+lose Wikidata.
+
+### News sites are out, on their own terms
+
+The international and Israeli news and sports sites checked for the accounts all
+answer a plain client, and all forbid automated reading, business use or use with
+AI in their terms, or block AI agents in robots.txt. None is a source. What the
+accounts read: Wikipedia, Wikidata, data sets that are free to copy or in the
+public domain, official data, companies' own releases, and outlets whose terms
+allow it. The list, with each site's terms, is in the private folder.
+
+### An opinion is labelled as one
+
+A head-to-head's verdict and a hot take are the account's own opinion: labelled so,
+with the numbers of both sides next to them. "The facts prove that" is still
+refused, since numbers do not prove an opinion. A pack's voice can also refuse
+invented experience ("פתחתי עסק", "ניסיתי"): an account can sound like someone who has
+been there and still say only what its sources say.
+
+### The old accounts are archived, and still private
+
+The two retired accounts moved to `$OF_HOME/packs/_archive/`, with a copy of a
+rewritten pack's previous version; the engine never loads them, and
+`check:public` still reads their names. The public denylist takes `id:<word>` for a
+pack id that is also an ordinary word (the engine's API catalog uses one such word
+legitimately): refused in code where it is used as an id, and as a word in the
+docs, which have no reason to say it but to describe the account. The decisions
+that describe the accounts themselves are in the private folder.
+
+### The launch set is drafted by Claude Code and reviewed blind
+
+As in phase 2, the project's key is not spent on drafts: `npm run launch` writes
+the exact requests the engine would send, a Claude Code subagent on Sonnet answers
+them, the script checks every answer with the engine's code, and the real pipeline
+builds the posts from them. A second subagent that never saw the drafting reviews
+each rendered post as a skeptical viewer. The one addition to the engine's prompt
+is a failed post's redo, which carries the reviewer's notes, the way the owner's
+notes would.
+
+### What the first blind review changed in the engine
+
+The first review passed 2 of 27 posts. Most failures were the drafts (fixed by a
+second round with the reviewer's notes), but several were the engine's, and those
+were fixed for every account:
+
+- **The keywords moved from the cover to the last slide.** A row of keywords
+  under the hook read as clutter on the one slide that has to stop the scroll.
+  They sit above the call to action now, where TikTok's search still reads them.
+- **Hashtags only where the post names them.** A post about one match carried
+  the account's whole niche list (the Champions League, the Premier League); a
+  niche tag is now kept only when its words appear in the post.
+- **A source is named by its article.** "ויקיפדיה" alone told a viewer nothing; the
+  source line now gives the article's title.
+- **The fit check reads the baseline.** A half-cut last line passed as a tall
+  face's descender: the overflow measure saw both the same. A line now overflows
+  when its baseline (the line's box less 0.28 em) falls below its block.
+- **Type and colour.** Bigger type on TikTok's taller slides, softer stripes on
+  the `corner` template, no card inside a meme's card, no ghost number on the last
+  slide of a `scoreboard`.
+
+Photos, layout and links in a reviewer's notes went to the design, not to the
+redraft: the drafting model cannot move a photo.
+
+### The launch set takes the engine's review too
+
+A build from recordings cannot take the engine's second look: without a live client
+the review is the offline heuristic, which can find tells but cannot tell a sentence
+that says more than its facts, and the rewrite never runs. The first launch round
+went out without it, and a slide said the cars were "sold" where the source says
+"deployed". `npm run launch` now writes the engine's exact review request for every
+drafted post, then the exact rewrite request for what it flags, keeps a rewrite only
+if the post still passes every check, and blocks a post whose fact problem is not
+fixed, the way the engine does. Each post's folder has the review (`engine-review.md`)
+next to the blind one. A request is tied to the text it was written for, so an
+answer to an older draft is set aside.
+
+### The review knows a myth from a claim
+
+The review sees each text and the facts, and flags a text that says more than its
+facts. On a myth-fact post it flagged the myths themselves ("in that sport there are no
+rules"), which the next slide corrects: a live run would have rewritten the myth
+away or blocked the post. Each text now tells the review what it is doing: a myth, a
+joke's setup, the account's opinion, a question to the reader. Such a text is
+flagged only when a fact inside it is wrong.
+
+### A guess-who does not number its clues
+
+The design draws a badge on each clue. A draft that wrote "רמז 1" said it twice, and
+the fact gate refused it with a message about the number 1 not being in the quotes,
+which told the model nothing. The kind's prompt says so now, and the check names it.
+
+### A score is one thing
+
+The "list of four or more things in one sentence" tell splits a sentence on its
+commas. A score written the way fans read it ("ישראל 9, טייוואן 0") has a comma
+inside it, so a date, a place and one score made a "list" and a correct slide was
+refused. One score pair now counts as one item; four scores in a row are still a
+list.
+
+### What the second blind review changed in the engine
+
+- **A guess-who's clues name the source, not the article.** Round 1's fix gave every
+  source line its article, and an article is usually the answer: every clue of a
+  guess-who said "ויקיפדיה: <the player's name>". A clue now says "ויקיפדיה"; the
+  reveal names the article.
+- **An English article title is its own run of text.** Inside the Hebrew source line,
+  "2002–03 UEFA Champions League" came out as "03–2002".
+- **Headline digits that read as digits.** The display face of one theme draws a 7
+  with a crossbar and a 1 with a flag; as a big counter that is the look, in a headline
+  "177" read as letters. A headline in that face now takes its digits from the text
+  face, scaled to the letters (a composite font; each digits face carries its display
+  face's exact weight, or the browser never picks it). Big numbers keep the face.
+- **The keywords are a footnote.** Both rounds read the keyword row as SEO. It is
+  required (TikTok's search reads the text on a slide), so it stays, smaller and
+  fainter, under the call to action.
+- **The source line keeps clear of the big slide number** on the template that draws
+  one.
+- **A photo of a person names the person.** The check that a picture's title names
+  the person a query names took one word of the name: a query for a fighter called
+  Holm brought a rock on Steep Holm, one for Serra a plant called Senecio serra, and,
+  once both words were required, "Holly with berries, Holm Hill". The title must now
+  hold two of the query's name words side by side, as a name is written. A post with
+  no photo is better than a post with the wrong one, and the screen would have held
+  all three for a person anyway.
+- **A sentence's end stops a Latin run.** The renderer isolates each Latin run in a
+  Hebrew line so bidi cannot move punctuation around it, but a run could continue
+  across a period and a space: "ל-Gnrgy. 450,000 דולר" isolated "Gnrgy. 450" as one
+  left-to-right unit and printed "000,Gnrgy. 450". A run now joins words with a space
+  ("UFC 193") and a name's parts with a point or a dash ("monday.com"), never across
+  a sentence's end, and a number range in a Hebrew line ("2002–03") is isolated too.
+- **One question at the end of a caption.** A caption that already ends on a question
+  takes no second one from the question field.
+- **A number drawn big is not printed twice.** A list item whose title holds a number
+  had it drawn large above the title and again in it; it is drawn large only when the
+  title opens with it, and the title then goes on without it.
+- **The `corner` template's diagonal cut is the cover's.** On content slides it ran
+  through the text, and every reviewer read it as a bug. Content slides there also
+  start at a fixed height, so the label and progress bar stop jumping, and a ranking
+  drops the page counter for its own place number.
+- **The fit check measures the baseline.** It estimated a line's baseline from its box
+  less 0.28 em; in a face whose descent is 0.16 em, a cover's last line ("2002") was
+  cut through the middle and passed. A zero-size marker after the last letter now sits
+  on the real baseline.
+- **Small slide counters use the headline digits too.** At 64 px the display face's 7
+  read as a Hebrew letter ("01 / 07").
+- **A niche hashtag is a word of the post.** The match ran on the text with its spaces
+  removed, so "#מסי" matched "המסירות". A tag now matches whole words, joined as a
+  hashtag joins them, with a one-letter prefix allowed.
+
+### The review reads the source's words, not only the summary
+
+A fact is a quote and a claim, the drafting model's Hebrew summary of it; the slides
+follow the claim, and the review saw only the claims. In the launch set an outline
+summarised three quotes about a welterweight title as "משקל בינוני" (middleweight):
+the fact gate passed it (no number was wrong), the review could not see it, and a
+blind reviewer caught it. The review and the rewrite now see each claim with its
+quote, and the outline prompt says a translated term takes its own Hebrew name. The
+launch set was reviewed before this change; `npm run launch` would now ask for its
+reviews again.

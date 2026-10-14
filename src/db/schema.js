@@ -306,4 +306,58 @@ export const MIGRATIONS = [
   -- earliest expiry date of the facts in it.
   ALTER TABLE documents ADD COLUMN expires_at TEXT;
   `,
+  `
+  -- The content model: a post has a kind (story, head-to-head, ...), a group
+  -- (entertaining or number), the cover pattern it followed, a shorter caption
+  -- for Instagram, and post-level data (the two sides, the answer, the date, the
+  -- keywords, the call to action). A slide has a role in its kind, and data (the
+  -- two values of a head-to-head stat).
+  ALTER TABLE posts ADD COLUMN kind TEXT;
+  ALTER TABLE posts ADD COLUMN grp TEXT;
+  ALTER TABLE posts ADD COLUMN hook_pattern TEXT;
+  ALTER TABLE posts ADD COLUMN caption_ig TEXT;
+  ALTER TABLE posts ADD COLUMN data_json TEXT;
+  ALTER TABLE slides ADD COLUMN role TEXT;
+  ALTER TABLE slides ADD COLUMN data_json TEXT;
+
+  -- Documents that are read together (two articles for a head-to-head).
+  ALTER TABLE documents ADD COLUMN group_key TEXT;
+
+  -- What the image screen found: ok, review (a person must look first) or
+  -- refused, and who looked.
+  ALTER TABLE images ADD COLUMN safety TEXT;
+  ALTER TABLE images ADD COLUMN safety_json TEXT;
+  ALTER TABLE images ADD COLUMN reviewed_by TEXT;
+  ALTER TABLE images ADD COLUMN reviewed_at TEXT;
+
+  -- Takedown notices: each one deletes its post; repeated ones pause the account.
+  CREATE TABLE takedowns (
+    id            INTEGER PRIMARY KEY,
+    post_id       TEXT REFERENCES posts(id),
+    account_id    TEXT NOT NULL REFERENCES accounts(id),
+    platform      TEXT,                          -- tiktok | instagram | null (both)
+    claimant      TEXT,
+    notice        TEXT NOT NULL,
+    received_at   TEXT NOT NULL,
+    recorded_by   TEXT,
+    deleted_json  TEXT,                          -- per platform: deleted | by_hand | not_published | failed
+    created_at    TEXT NOT NULL
+  );
+  CREATE INDEX takedowns_account ON takedowns(account_id, received_at);
+
+  -- Events an account follows (a fight card), read from a public listing.
+  CREATE TABLE events (
+    id            INTEGER PRIMARY KEY,
+    account_id    TEXT NOT NULL REFERENCES accounts(id),
+    key           TEXT NOT NULL,                 -- the listing's own name for it
+    name          TEXT NOT NULL,
+    day           TEXT NOT NULL,                 -- YYYY-MM-DD, the event's local date
+    main_event    TEXT,                          -- "A vs. B"
+    venue         TEXT,
+    url           TEXT,
+    source_id     INTEGER REFERENCES sources(id),
+    updated_at    TEXT NOT NULL,
+    UNIQUE (account_id, key)
+  );
+  `,
 ];

@@ -2,7 +2,9 @@
 
 One engine that runs several Hebrew social accounts, each in its own niche and
 each its own brand, mostly on its own. It reads approved sources, drafts
-slideshows grounded in quotes it can prove, checks them in code, renders them,
+slideshows grounded in quotes it can prove (stories, head-to-heads, guess-who,
+rankings, icebergs, hot takes: ten kinds of post, entertaining first), checks
+them in code, renders them,
 and publishes them after the approval each account's mode asks for: to TikTok
 through Zernio, to Instagram directly through Meta's own Graph API. It runs on a
 hard budget of $15 a month for every metered service but Zernio. Its website, **Teder** (תדר), is where the owner approves, edits and steers.
@@ -34,10 +36,11 @@ Nothing in it is real, and the Results page says so.
 | Command | What it does |
 |---|---|
 | `npm test` | every hard rule, offline, then `check:public` |
-| `npm run dry -- --pack <id> --count 5` | builds 5 posts for one pack and writes each to disk: slides for each platform, `caption.txt`, `sources.md` (every fact, its quote, its source), `post.json` (checks, trace, cost). Its own database; publishes nothing |
+| `npm run dry -- --pack <id> --count 5 [--format <id>] [--day YYYY-MM-DD]` | builds 5 posts for one pack and writes each to disk: slides for each platform, `caption.txt` (TikTok) and `caption-instagram.txt`, `sources.md` (every fact, its quote, its source), `post.json` (checks, trace, cost). Its own database; publishes nothing |
 | `npm run web` | the website on `127.0.0.1:4700` |
 | `npm start` | the website and the runner: daily generation, publishing at each slot, metrics, learning |
-| `npm run record -- --pack <id> [--source <id> --url <page> --key <name>]` | saves a pack's approved sources as recordings, so it runs offline |
+| `npm run record -- --pack <id> [--source <id> --url <page> --key <name>]` | saves a pack's approved sources as recordings, so it runs offline. `--title "Article#intro;Section"` records Wikipedia articles (several titles are one group, read together), `--group <key>` groups documents from different sources, `--filter '<json>'` narrows a data.gov.il source |
+| `npm run launch -- next|build|review|redo|status --pack <id>` | the launch set: the first posts of a new account, drafted by Claude Code on the engine's exact prompts (never the project's key), built by the real pipeline, reviewed blind; see [The launch set](#the-launch-set) |
 | `npm run screenshots` | every page at phone and desktop width (`-- --dark` for both themes), from the demo only |
 | `npm run init-private [-- --pack <id>] [-- --git]` | creates the private folder, optionally a blank pack and its own git repo |
 | `npm run user:add -- <name>` | adds a website user (asks for the password) |
@@ -115,12 +118,13 @@ A pack is a folder:
 
 | File | Holds |
 |---|---|
-| `pack.json` | id, display name, handle, platforms, the publisher per platform, Zernio profile and account ids, the Instagram account (`instagram.userId`, `auth`, `tokenEnv`), schedule (windows, slots, posts per day), autonomy mode, its weight in the budget (`budget.share`), compliance checks, topics |
+| `pack.json` | id, display name, handle, the profile's bio, platforms, the publisher per platform, Zernio profile and account ids, the Instagram account (`instagram.userId`, `auth`, `tokenEnv`), schedule (windows, slots, posts per day), autonomy mode, its weight in the budget (`budget.share`), compliance checks, topics; `imagery` (`providers`: commons, pexels, unsplash, pack; `safety`: standard or strict); `events` and `schedule.fightWeek` for an account that follows fight cards |
 | `voice.md` | who is talking, to whom, how it sounds; `## שורות טובות` and `## שורות רעות` with examples |
 | `theme.json` | a template and variant from the engine's library, colours, fonts |
 | `sources.json` | approved sources only: type (`rss`, `web`, `api`), url, name, why it is trusted, when approved |
-| `formats.json` | post formats, hook patterns, closing lines, caption questions, hashtags, trend queries |
+| `formats.json` | the account's formats, each of one [kind](#post-formats) with its own name, weight, cover patterns (`hooks`: `{ id, pattern, examples }`) and calls to action (`ctas`: `{ kind: save|comment|send, text }`); the `mix` of entertaining formats (0.4 to 0.8, 0.6 by default); caption questions, hashtags, trend queries |
 | `rules.json` | banned phrases, regex checks, blocked image words, the maximum quote length |
+| `photos/` (optional) | photos the owner decided the account may use (an event photo), in `photos.json` with what is in each, where it came from and whom to credit; every one still passes the image screen |
 | `facts/` (optional) | hand-checked facts, one file per topic: each sentence exactly as on its page, the page, the day it was checked and the day it expires. For official sites the engine may not read; added and rechecked on the website (*Sources* > *עובדות שנבדקו ביד*) |
 
 Validation refuses a pack with weak contrast, a source without https or a reason to trust it, a money
@@ -130,8 +134,10 @@ display face, a handle, a name, a Zernio profile, or a palette too close to tell
 ## How a post is made
 
 ```
-topic -> facts from approved sources -> outline -> slides -> voice and tell checks
-      -> fact verification -> render -> queue -> approval (by mode) -> publish
+format (by the mix and results) -> documents from approved sources -> outline
+      -> facts verified -> the kind's shape checked -> slides (a cover pattern and
+      a call to action chosen in code) -> voice, tell, shape and fact checks
+      -> review -> image screen -> render -> queue -> approval (by mode) -> publish
       -> metrics at 72h -> learn
 ```
 
@@ -139,15 +145,41 @@ Every step is a row in the database, so any slide traces back to its fact, the
 quote, the stored document and the approved source. The website's post page shows
 the whole trace.
 
+## Post formats
+
+A pack's format is one of ten kinds (`src/formats/kinds.js`). The engine owns the
+shape, checks it in code and draws it; the pack brings the name, the cover
+patterns and the calls to action.
+
+| Kind | Group | Shape (after the cover) |
+|---|---|---|
+| `story` | entertaining | 3 to 5 build-up slides, the twist or payoff last |
+| `what-happened` | entertaining | then, the turn, now (documented facts about people only) |
+| `on-this-day` | entertaining | context, the moment, what came after; drafted only from documents that name the day |
+| `guess-who` | entertaining | 3 clues, the answer last; the answer may not appear before it (cover, clues, captions, keywords are checked) |
+| `iceberg` | entertaining | 4 to 6 layers, famous to obscure; the design draws the depth |
+| `hot-take` | entertaining | the opinion (labelled as one), 3 to 5 slides of sourced case, "agree?" |
+| `myth-fact` | entertaining | 2 or 3 pairs: a myth as people say it, the fact that answers it |
+| `meme` | entertaining | 3 to 5 jokes on the account's own design, the real fact behind them last |
+| `head-to-head` | number | two sides, 4 to 6 stats with both values, the verdict last |
+| `ranking` | number | a top 5 (or a top 10, places 10 to 6 on one slide), number one last; the design draws the places |
+| `list` | number | the phase 1 shape: items and a closing slide |
+
+Every post: 5 to 8 slides, one idea a slide, the payoff on the last slide with the
+call to action drawn on it, keywords in Hebrew and English on the last slide above
+the call to action (TikTok's search reads them), a long TikTok caption (200 characters and up) and a short
+Instagram one led by the cover line. A slide with no fact of its own (a myth, a
+verdict, a joke's setup) still holds no number the post's quotes do not.
+
 ## The hard rules, and where they are enforced
 
 | Rule | Where |
 |---|---|
-| 1. Official APIs only; no likes, follows, comments, DMs or logged-in reading | `src/core/net.js` is the only `fetch`; its write allowlist is Claude (messages, batches), Zernio's create-post, and Meta's two publishing endpoints for an Instagram account; it refuses Zernio's inbox and every Graph edge for comments, mentions, tags, messages, hashtags and other accounts by name. Tests scan the code for any other `fetch`, engagement functions and endpoints |
+| 1. Official APIs only; no likes, follows, comments, DMs or logged-in reading | `src/core/net.js` is the only `fetch`; its write allowlist is Claude (messages, batches), Zernio's create-post, Meta's two publishing endpoints for an Instagram account, and deleting our own Instagram post after a takedown notice; it refuses Zernio's inbox and every Graph edge for comments, mentions, tags, messages, hashtags and other accounts by name. Tests scan the code for any other `fetch`, engagement functions and endpoints |
 | 2. Each account a distinct brand | `src/packs/validate.js` (`validateAll`), and a cross-promotion check on every post |
 | 3. Honest by construction | `src/verify/claims.js`: every quote verbatim in a stored document of an approved source of that account; every number on a slide in its quotes; the renderer refuses text without the gate's token; `src/voice/honesty.js` refuses invented experience and fake badges or metrics |
 | 4. AI disclosure | `src/publish/zernio.js` sets TikTok's `video_made_with_ai` (as a draft for photo posts); `src/publish/instagram.js` adds a caption line on Instagram |
-| 5. Rights | `src/images/index.js`: Pexels, Unsplash, Commons only, licence stored, Commons licences on an allowlist, logos and crests refused; quotes are short facts (4 to 40 words) |
+| 5. Rights | `src/images/index.js`: Pexels, Unsplash, Commons (and photos the owner adds to a pack, with their origin), licence stored, Commons licences on an allowlist, logos and crests refused; `src/images/safety.js` screens every photo for blood, injuries, a fighter down, watermarks and belts; `src/publish/takedown.js` takes a post down on a notice; quotes are short facts (4 to 40 words) |
 | 6. No investment advice | `src/rules/compliance.js`, required for any money niche |
 | 7. Cost caps | `src/budget/ledger.js`: every paid call reserves its worst case against `OF_BUDGET_MONTHLY_USD` and the account's share before it is made, and records its real cost from the API's usage after; `src/budget/plan.js` cuts volume, never quality, when the month runs short |
 | 8. Hebrew RTL | slides and every page are `lang="he" dir="rtl"` (tested) |
@@ -168,10 +200,40 @@ exhausted budget. A paused account says why. In Digest and Auto, a post the
 reviewer scored as sounding a little like a bot waits for the owner instead.
 
 The runner also reads each post's numbers at 72 hours (TikTok through Zernio:
-shares and likes per view; Instagram from Meta's own insights: saves per view, or
-per reach where Meta gives no views; never a number the API did not give), keeps 70% of posts on proven formats and 30% on trials, drops a format
-after three results in a row under 70% of the median, and once a week looks for
-formats that work on YouTube Shorts, copying the format and never the content.
+shares and likes per view; Instagram from Meta's own insights: saves per reach,
+or per view where Meta gives no reach; never a number the API did not give). It
+picks the group first by the account's mix of entertaining and number posts (60%
+entertaining to start, moved 5 points a week at most, within 40% to 80%, towards
+the group that does better), keeps 70% of posts on proven formats and 30% on
+trials, drops a format after three results in a row under 70% of the median,
+gives each cover pattern its turns and then favours the ones that work, and once
+a week looks for formats that work on YouTube Shorts, copying the format and
+never the content. The Results page says all of it in plain words.
+
+### Fight week
+
+An account that follows fight cards (`events` and `schedule.fightWeek` in
+`pack.json`) reads the calendar once a day from a public listing (Wikipedia's
+list of events, through its API). Three days before a card, the day's first slot
+is a tale of the tape; the day before, the account's pick; the morning after, a
+recap, drafted only once the card is over (`recapAfter`) and from documents that
+name both fighters, again every 45 minutes until the results are in the sources.
+
+### Takedowns and the image screen
+
+A takedown notice is recorded on the post's page. The post comes down at once:
+on Instagram it is deleted through the Graph API (Facebook Login, the
+`instagram_manage_contents` permission); on TikTok, which has no delete for a
+third party (not through Zernio, not through TikTok's own APIs), it is listed for
+the owner to delete in the app, with a button to say it is done. A second notice
+for the same account within 90 days pauses it.
+
+Every photo is screened before it is used: words in its description (blood,
+knockout, a watermark, a belt) refuse it; a picture with a lot of deep red goes to
+a person; with a live key, Claude Haiku looks at it. What none of them clears is
+held: the post can be approved but is not published until someone has looked at
+the photo on its page. `imagery.safety: "strict"` sends every photo of the pack
+to the model or to a person.
 
 ## The budget
 
@@ -214,7 +276,10 @@ carousel. Set it up once per account:
 3. **A short-lived token.** In the Graph API Explorer, pick the app, *Get User
    Access Token*, and grant `instagram_basic`, `instagram_content_publish`,
    `instagram_manage_insights`, `pages_show_list` and `pages_read_engagement`
-   (and `business_management` if the Page sits in a business portfolio).
+   (and `business_management` if the Page sits in a business portfolio). Grant
+   `instagram_manage_contents` too: it is what lets the engine delete a post after
+   a takedown notice (Meta added it in December 2025; a token made without it can
+   publish but not delete, and the post is then listed for you to delete by hand).
 4. **The lasting token.** `npm run instagram:token -- --pack <id> --short <token>`.
    The first time it lists your Pages and their Instagram accounts: put the
    account's id in `pack.json` as `instagram.userId` and run it again. It
@@ -282,7 +347,25 @@ Updating: `git pull` in both checkouts, `npm ci --omit=dev`,
 
 Every variable is in [`.env.example`](.env.example) with a comment saying what it
 is for and where to get it. The website's Settings page shows which keys are set,
-never their values.
+never their values. Set `OF_USER_AGENT` to name the engine with a contact
+(`open-frequency/0.1 (+https://your.site; you@your.site)`): Wikimedia asks for one
+and rate-limits readers without it, and SEC's EDGAR refuses them
+(`SEC_USER_AGENT`, for a source that reads it).
+
+## The launch set
+
+The first posts of a new account, the ones its owner approves to fill the grid
+before it goes public: `$OF_HOME/launch/<pack>/plan.json` names each post's format
+and the recorded document (or group) it is drafted from. `npm run launch -- next`
+writes the exact requests the engine would send; a Claude Code subagent on the
+drafting model answers them, and the script checks each answer with the engine's
+own code (facts, shape, voice, gate) and asks for the engine's one redraft when the
+checks refuse it. `build` files the answers as the pack's recordings and runs the
+real pipeline on them: `$OF_HOME/out/launch/<pack>/<n>-<format>/` holds the slides for
+both platforms, both captions, `sources.md`, `cost.md` and `post.json`. `review`
+writes a request for a second subagent that has not seen the drafting, a
+skeptical viewer who has never heard of the account; its notes are saved next to
+each post, and `redo` drafts a failed post again with them.
 
 ## Layout
 
@@ -290,25 +373,25 @@ never their values.
 src/core        paths ($OF_HOME), env, clock, the network door, settings and audit
 src/db          SQLite (node:sqlite), the schema
 src/packs       loading and validating packs
-src/schedule    Israel's clock, sunset, Shabbat, the Hebrew calendar and its festivals, slots
-src/sources     RSS/Atom, web pages, JSON, CSV, CKAN (data.gov.il) and Wikidata APIs, hand-checked facts, recordings
+src/schedule    Israel's clock, sunset, Shabbat, the Hebrew calendar and its festivals, slots, the fight-week calendar
+src/sources     RSS/Atom, web pages, JSON, CSV, CKAN (data.gov.il), Wikipedia and Wikidata APIs, hand-checked facts, recordings
 src/llm         Claude (official SDK, through the network door), the batcher, recorded client, cost
 src/budget      the monthly ledger, its reservations and guard, the month's plan
 src/voice       Hebrew tells, honesty, the bot-score reviewer
 src/verify      facts against stored documents, the pre-render gate
 src/rules       pack rules, cross-promotion, Israeli investment-advice compliance
-src/images      licensed photographs
-src/render      fonts, five templates with two variants each, Chromium
+src/images      licensed photographs, the image screen
+src/render      fonts, seven templates with two variants each, the parts each kind of slide draws, Chromium
 src/pipeline    one post from topic to queue; export to disk
-src/publish     dry, Zernio (TikTok), Instagram (Meta's Graph API)
+src/publish     dry, Zernio (TikTok), Instagram (Meta's Graph API), takedowns
 src/metrics     reading numbers, crediting formats
-src/formats     the 70/30 rotation and the judge
+src/formats     the ten kinds of post, the 70/30 rotation, the mix and the cover patterns, the judge
 src/trends      YouTube Shorts formats
 src/autonomy    the runner and the rails
 src/onboarding  source discovery, the API catalog, writing a new pack
 src/web         the website: server, login, pages, actions, one stylesheet, one script
 examples/       the fictional demo pack, and the blank pack template
-scripts/        dry, web, demo, record, screenshots, init-private, check-public, backup
+scripts/        dry, web, demo, record, launch, screenshots, init-private, check-public, backup, the checks
 test/           node:test, one file per area
 deploy/         systemd units, Caddyfile example, deploy/test: the steps in a clean container
 docs/           PLAN, decisions, session log, screenshots, REPORT

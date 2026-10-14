@@ -6,7 +6,9 @@ import { DEFAULT_MONTHLY_USD, monthSpend } from '../budget/ledger.js';
 import { planMonth, WARN_AT } from '../budget/plan.js';
 import { loadPost } from '../pipeline/build.js';
 import { israelDate, israelInstant, addDays } from '../schedule/israel.js';
-import { relative, postScore } from '../formats/rotation.js';
+import { groupsOf, hookStats, mixOf, relative, postScore } from '../formats/rotation.js';
+import { hookPatterns, kindOf } from '../formats/kinds.js';
+import { takedowns } from '../publish/takedown.js';
 import { engineMode } from '../engine.js';
 import { publisherFor, wantedPublisher } from '../publish/index.js';
 import { zernioConfigured } from '../publish/zernio.js';
@@ -69,7 +71,7 @@ export function today(ctx, t = now()) {
     };
   });
   const summary = ctx.db.get('SELECT * FROM summaries WHERE account_id IS NULL ORDER BY day DESC LIMIT 1');
-  return { day, groups, summary };
+  return { day, groups, summary, attention: attention(ctx) };
 }
 
 /** The last 7 Israel days for one account: posts published per day, and reach where it is known. */
@@ -132,7 +134,20 @@ export function results(ctx, t = now()) {
     };
   });
   const trends = ctx.db.all('SELECT * FROM trend_formats ORDER BY found_at DESC LIMIT 30').map((x) => ({ ...x, card: j(x.card_json, null) }));
-  return { posts, scored, winners, losers, formats, medians, demo, trends };
+  // The mix of entertaining and number posts, and the cover patterns, per account, in words.
+  const learning = ctx.packs.map((pack) => {
+    const share = mixOf(ctx.db, pack);
+    const learned = getSetting(ctx.db, `mix:${pack.id}`, null);
+    const stats = hookStats(ctx.db, pack.id, { t });
+    const hooks = (pack.formats.formats || []).flatMap((f) =>
+      hookPatterns(f).map((h) => ({ format: f.name, kind: kindOf(f).name, id: h.id, pattern: h.pattern, n: stats[f.id]?.[h.id]?.n || 0, avg: stats[f.id]?.[h.id]?.avg ?? null, used: ctx.db.get("SELECT COUNT(*) AS n FROM posts WHERE account_id = ? AND format_id = ? AND hook_pattern = ? AND status NOT IN ('blocked')", pack.id, f.id, h.id).n }))
+    );
+    const groups = groupsOf(pack);
+    const recent = ctx.db.all("SELECT format_id, grp FROM posts WHERE account_id = ? AND status IN ('published', 'approved', 'queued') ORDER BY created_at DESC LIMIT 30", pack.id);
+    const ent = recent.filter((p) => (p.grp || groups[p.format_id]) === 'entertaining').length;
+    return { pack, share, learned, hooks, recent: recent.length, recentEnt: ent };
+  });
+  return { posts, scored, winners, losers, formats, medians, demo, trends, learning };
 }
 
 /** A pack's hand-checked facts, each with its state today and anything wrong with it. */
@@ -185,5 +200,18 @@ export const postFull = (ctx, id) => {
     spend: ctx.db.all('SELECT api, model, usd, estimated, tag FROM spend WHERE post_id = ? ORDER BY id', id),
     image: post.checks?.image ? ctx.db.get('SELECT * FROM images WHERE id = ?', post.checks.image) : null,
     metrics: ctx.db.all('SELECT * FROM metrics WHERE post_id = ? ORDER BY collected_at DESC', id),
+    takedowns: takedowns(ctx.db, { limit: 200 }).filter((x) => x.post_id === id),
   };
 };
+
+/**
+ * What waits for a person outside the queue: posts to delete by hand after a
+ * takedown notice, and photographs the image screen could not clear.
+ */
+export function attention(ctx) {
+  const waitingDeletes = takedowns(ctx.db, { limit: 200 }).filter((x) => x.waiting.length);
+  const images = ctx.db
+    .all("SELECT p.id, p.hook, p.account_id, i.id AS image_id, i.safety_json FROM posts p JOIN images i ON i.id = json_extract(p.checks_json, '$.image') WHERE p.status IN ('queued', 'approved') AND i.safety IS NOT NULL AND i.safety != 'ok' AND i.reviewed_at IS NULL")
+    .map((r) => ({ ...r, screen: j(r.safety_json, null) }));
+  return { waitingDeletes, images };
+}

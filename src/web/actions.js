@@ -1,7 +1,9 @@
 import path from 'node:path';
 import { nowIso } from '../core/clock.js';
 import { audit, setSetting, step } from '../core/store.js';
-import { loadPost, checkPost } from '../pipeline/build.js';
+import { loadPost, checkPost, formatOfPost, igCaption, postDraft } from '../pipeline/build.js';
+import { kindName, kindOf } from '../formats/kinds.js';
+import { confirmDeleted, recordTakedown } from '../publish/takedown.js';
 import { renderPost } from '../render/render.js';
 import { pauseAccount, resumeAccount } from '../autonomy/rails.js';
 import { publishPost } from '../publish/index.js';
@@ -76,18 +78,21 @@ export async function edit(ctx, user, { id }, form) {
   if (!['queued', 'approved', 'sample'].includes(post.status)) throw new ActionError(`אי אפשר לערוך פוסט במצב "${post.status}"`);
   const pack = ctx.pack(post.account_id);
   const clean = (s, max) => String(s ?? '').replace(/\r/g, '').trim().slice(0, max);
+  const format = formatOfPost(ctx.db, pack, post);
+  const legacy = kindName(format) === 'list';
   let item = -1;
-  const draft = {
-    hook: clean(form.hook, 90),
-    sub: clean(form.sub, 120),
-    caption: clean(form.caption, 400),
-    slides: post.slides.map((s) => {
-      if (s.kind !== 'item') return { kind: s.kind, title: s.title, body: s.body, factKeys: s.factKeys };
-      item++;
-      return { kind: 'item', title: clean(form[`title_${item}`] ?? s.title, 80), body: clean(form[`body_${item}`] ?? s.body, 300), factKeys: s.factKeys };
-    }),
-  };
-  const { problems, gate } = checkPost({ ...ctx, packs: ctx.packs }, pack, draft, post.facts);
+  const draft = postDraft(post);
+  draft.hook = clean(form.hook, 90);
+  draft.sub = clean(form.sub, 120);
+  draft.caption = clean(form.caption, legacy ? 400 : 900);
+  if (form.caption_short != null) draft.captionShort = clean(form.caption_short, 260);
+  draft.slides = draft.slides.map((s) => {
+    if (s.kind !== 'item') return s;
+    item++;
+    return { ...s, title: clean(form[`title_${item}`] ?? s.title, 80), body: clean(form[`body_${item}`] ?? s.body, 300) };
+  });
+  draft.captionIg = igCaption(draft);
+  const { problems, gate } = checkPost({ ...ctx, packs: ctx.packs }, pack, draft, post.facts, format);
   if (problems.length) throw new ActionError('הבדיקות עצרו את השינוי', 422, { problems: problems.map((p) => `${p.where}: ${p.msg}`), values: { ...form } });
 
   const names = new Map(ctx.db.all('SELECT id, name FROM sources WHERE account_id = ?', pack.id).map((r) => [r.id, r.name]));
@@ -95,7 +100,8 @@ export async function edit(ctx, user, { id }, form) {
   const slides = draft.slides.map((s) => ({ ...s, sources: s.factKeys.map((k) => sourceOf.get(k)) }));
   const image = post.checks?.image ? ctx.db.get('SELECT * FROM images WHERE id = ?', post.checks.image) : null;
   const outDir = path.dirname(post.media.tiktok?.[0] || post.media.instagram?.[0]);
-  const files = await renderPost({ pack, post: { id, hook: draft.hook, sub: draft.sub, caption: draft.caption, token: gate.token }, slides, photo: image, outDir });
+  const extra = { captionIg: draft.captionIg || '', keywords: draft.keywords || [], subject: draft.subject || {}, cta: draft.cta?.text || '' };
+  const files = await renderPost({ pack, format, post: { id, hook: draft.hook, sub: draft.sub, caption: draft.caption, token: gate.token, extra, ctaKind: draft.cta?.kind }, slides, photo: image, photoOn: kindOf(format).photo, outDir });
 
   ctx.db.tx(() => {
     const changes = [];
@@ -105,6 +111,7 @@ export async function edit(ctx, user, { id }, form) {
     note(null, 'hook', post.hook, draft.hook);
     note(null, 'sub', post.sub, draft.sub);
     note(null, 'caption', post.caption, draft.caption);
+    note(null, 'caption_short', post.data?.captionShort, draft.captionShort);
     post.slides.forEach((s, i) => {
       if (s.kind !== 'item') return;
       note(i, 'title', s.title, draft.slides[i].title);
@@ -112,7 +119,7 @@ export async function edit(ctx, user, { id }, form) {
       ctx.db.run('UPDATE slides SET title = ?, body = ? WHERE post_id = ? AND idx = ?', draft.slides[i].title, draft.slides[i].body, id, i);
     });
     for (const c of changes) ctx.db.insert('edits', { post_id: id, account_id: post.account_id, ...c, user_id: user.id, at: nowIso() });
-    ctx.db.update('posts', id, { hook: draft.hook, sub: draft.sub, caption: draft.caption, media_json: files, checks_json: { ...post.checks, token: gate.token, edited: true }, updated_at: nowIso() });
+    ctx.db.update('posts', id, { hook: draft.hook, sub: draft.sub, caption: draft.caption, caption_ig: draft.captionIg, data_json: { ...post.data, captionShort: draft.captionShort }, media_json: files, checks_json: { ...post.checks, token: gate.token, edited: true }, updated_at: nowIso() });
     step(ctx.db, id, 'edit', 'ok', { by: user.name, changes: changes.length });
     audit(ctx.db, { actor: user.name, action: 'edit', accountId: post.account_id, postId: id, detail: { changes: changes.length } });
   });
@@ -241,4 +248,41 @@ export function removeFactAction(ctx, user, _p, form) {
   if (!gone) throw new ActionError('העובדה לא נמצאה', 404);
   audit(ctx.db, { actor: user.name, action: 'fact_removed', accountId: pack.id, detail: { topic: form.topic, quote: gone.quote.slice(0, 80) } });
   return { ok: true, message: 'הוסרה. פוסט שעוד לא פורסם ונשען עליה ייחסם בבדיקה שלפני הפרסום.', redirect: `/facts?account=${encodeURIComponent(pack.id)}` };
+}
+
+/** A takedown notice for a post: recorded, the post taken down, the account paused on the second in 90 days. */
+export async function takedown(ctx, user, { id }, form) {
+  const post = mustPost(ctx, id);
+  const notice = String(form.notice || '').trim();
+  if (notice.length < 10) throw new ActionError('הדביקו את נוסח ההודעה (לפחות כמה מילים)');
+  const platform = ['tiktok', 'instagram'].includes(form.platform) ? form.platform : null;
+  const r = await recordTakedown(ctx, { postId: id, platform, claimant: String(form.claimant || '').trim(), notice, by: user.name });
+  const hand = Object.entries(r.deleted).filter(([, v]) => v.state === 'by_hand').map(([p]) => (p === 'tiktok' ? 'טיקטוק' : 'אינסטגרם'));
+  return {
+    ok: true,
+    message: `ההודעה נרשמה והפוסט ירד.${hand.length ? ` צריך למחוק ידנית ב${hand.join(' וב')}: הפרטים בדף הפוסט.` : ''}${r.paused ? ` החשבון הושהה: ${r.count} הודעות ב-90 יום.` : ''}`,
+    redirect: `/post/${id}`,
+  };
+}
+
+/** The owner deleted the post by hand on one platform. */
+export function takedownDeleted(ctx, user, { id }, form) {
+  const platform = ['tiktok', 'instagram'].includes(form.platform) ? form.platform : null;
+  if (!platform) throw new ActionError('איזו פלטפורמה?');
+  try {
+    confirmDeleted(ctx.db, { id: Number(id), platform, by: user.name });
+  } catch (e) {
+    throw new ActionError(e.message);
+  }
+  return { ok: true, message: 'סומן כנמחק.' };
+}
+
+/** A person looked at a photograph the screen could not clear, and it is fine. */
+export function imageOk(ctx, user, { id }) {
+  const post = mustPost(ctx, id);
+  const imageId = post.checks?.image;
+  if (!imageId) throw new ActionError('לפוסט הזה אין תמונה');
+  ctx.db.update('images', imageId, { reviewed_by: user.name, reviewed_at: nowIso() });
+  audit(ctx.db, { actor: user.name, action: 'image_ok', accountId: post.account_id, postId: id, detail: { image: imageId } });
+  return { ok: true, message: 'התמונה סומנה כבדוקה. אפשר לפרסם.' };
 }

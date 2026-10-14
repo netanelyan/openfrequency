@@ -1,0 +1,46 @@
+{
+  "document": "plant-myths",
+  "format": "myth-fact",
+  "outline": {
+    "usable": true,
+    "why": "the page checks three beliefs many people hold about pots and watering, and says what to do instead",
+    "topic": "3 מיתוסים על השקיה ועציצים",
+    "subject": { "a": "", "b": "", "answer": "", "date": "" },
+    "imageQuery": "",
+    "facts": [
+      { "id": "f1", "claim": "שכבת חצץ בתחתית העציץ לא משפרת ניקוז: המים נעצרים בגבול בין האדמה לחצץ, והשכבה הרטובה יושבת גבוה יותר, קרוב לשורשים", "quote": "water stops where the soil meets the gravel, so the wet layer sits higher, closer to the roots", "doc": "D1" },
+      { "id": "f2", "claim": "מה שעוזר באמת הוא עציץ עם חור ניקוז ואדמה שמנקזת טוב", "quote": "The better fix is a pot with a drainage hole and a soil mix that drains well.", "doc": "D1" },
+      { "id": "f3", "claim": "עלים תחתונים שמצהיבים כשהאדמה עוד רטובה הם בדרך כלל סימן לעודף מים, לא למחסור", "quote": "Yellow lower leaves while the soil is still wet usually mean too much water, not too little.", "doc": "D1" },
+      { "id": "f4", "claim": "צמח צמא נראה אחרת: העלים צונחים והאדמה מתרחקת מדופן העציץ", "quote": "A thirsty plant shows it differently: its leaves droop and the soil pulls away from the edge of the pot.", "doc": "D1" },
+      { "id": "f5", "claim": "קצת מים כל יום מרטיבים את פני האדמה, והשורשים למטה נשארים יבשים", "quote": "A small splash of water every day keeps the top of the soil wet while the roots below stay dry.", "doc": "D1" },
+      { "id": "f6", "claim": "משקים לעומק עד שהמים יוצאים מחור הניקוז, ומחכים ש-3 הסנטימטרים העליונים יתייבשו", "quote": "Water deeply instead, until water runs out of the drainage hole, and then wait until the top 3 cm of soil are dry.", "doc": "D1" },
+      { "id": "f7", "claim": "ברוב הדירות זה אומר להשקות עציץ פעם בשבוע או פחות, לא כל יום", "quote": "In most apartments that means watering a pot once a week or less, not every day.", "doc": "D1" }
+    ],
+    "items": [
+      { "role": "myth", "point": "חצץ בתחתית משפר ניקוז", "facts": [] },
+      { "role": "fact", "point": "החצץ רק מעלה את הרטיבות", "facts": ["f1", "f2"] },
+      { "role": "myth", "point": "עלה צהוב אומר שהצמח צמא", "facts": [] },
+      { "role": "fact", "point": "עלה צהוב באדמה רטובה הוא עודף מים", "facts": ["f3", "f4"] },
+      { "role": "myth", "point": "קצת מים כל יום", "facts": [] },
+      { "role": "fact", "point": "השקיה עמוקה, ואז מחכים", "facts": ["f5", "f6"] }
+    ]
+  },
+  "slides": {
+    "hook": "3 דברים על צמחי בית שכולם עדיין מאמינים בהם",
+    "sub": "ומה עושים במקום",
+    "hookPattern": "still-believe",
+    "subject": { "a": "", "b": "", "answer": "", "date": "" },
+    "slides": [
+      { "role": "myth", "title": "שכבת חצץ בתחתית משפרת את הניקוז", "body": "", "a": "", "b": "", "facts": [] },
+      { "role": "fact", "title": "החצץ רק מעלה את הרטיבות", "body": "המים נעצרים בגבול בין האדמה לחצץ, והשכבה הרטובה יושבת גבוה יותר, קרוב לשורשים. מה שעוזר באמת הוא עציץ עם חור ואדמה שמנקזת טוב.", "a": "", "b": "", "facts": ["f1", "f2"] },
+      { "role": "myth", "title": "עלה צהוב אומר שהצמח צמא", "body": "", "a": "", "b": "", "facts": [] },
+      { "role": "fact", "title": "עלה צהוב באדמה רטובה הוא עודף מים", "body": "כשהעלים התחתונים מצהיבים והאדמה עוד רטובה, זה בדרך כלל יותר מדי מים. צמח צמא נראה אחרת, העלים צונחים והאדמה מתרחקת מהדופן.", "a": "", "b": "", "facts": ["f3", "f4"] },
+      { "role": "myth", "title": "עדיף קצת מים כל יום", "body": "", "a": "", "b": "", "facts": [] },
+      { "role": "fact", "title": "משקים לעומק, ואז מחכים", "body": "טיפה כל יום מרטיבה רק את פני האדמה, והשורשים למטה נשארים יבשים. משקים עד שהמים יוצאים מהחור, ומחכים ש-3 הסנטימטרים העליונים יתייבשו.", "a": "", "b": "", "facts": ["f5", "f6"] }
+    ],
+    "caption": "שלוש אמונות על צמחי בית שעוברות מאחד לשני, ומה המקורות אומרים במקום. חצץ בתחתית לא מנקז, ועלה צהוב באדמה רטובה הוא בדרך כלל עודף מים. ברוב הדירות משקים עציץ פעם בשבוע או פחות, ורק כשהאדמה למעלה כבר יבשה.",
+    "captionShort": "חצץ בתחתית, עלה צהוב וטיפה כל יום. שלושה מיתוסים, ומה עושים במקום.",
+    "question": "איזו מהן שמעתם הכי הרבה?",
+    "keywords": ["צמחי בית", "השקיה", "houseplant myths", "ניקוז"]
+  }
+}

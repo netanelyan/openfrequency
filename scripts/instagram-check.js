@@ -59,6 +59,8 @@ for (const pack of packs) {
       const need = cfg.auth === 'instagram' ? ['instagram_business_basic', 'instagram_business_content_publish', 'instagram_business_manage_insights'] : ['instagram_basic', 'instagram_content_publish', 'instagram_manage_insights', 'pages_read_engagement'];
       const missing = need.filter((s) => !st.scopes.includes(s));
       say(!missing.length, missing.length ? `missing permissions: ${missing.join(', ')}` : `permissions: ${need.join(', ')}`);
+      // Deleting a post after a takedown notice: Facebook Login only, its own permission.
+      if (cfg.auth === 'facebook') say(st.scopes.includes('instagram_manage_contents') ? true : null, st.scopes.includes('instagram_manage_contents') ? 'instagram_manage_contents: a takedown can delete the post through the API' : 'no instagram_manage_contents: after a takedown notice the post is listed for you to delete by hand (grant it to let the engine delete)');
     }
     const a = await account(db, pack);
     say(String(a.id) === cfg.userId, `the token reaches @${a.username} (${a.id}), ${a.media_count ?? '?'} posts${String(a.id) === cfg.userId ? '' : ` but pack.json says ${cfg.userId}`}`);

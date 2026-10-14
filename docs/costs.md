@@ -1,8 +1,9 @@
 # Costs: live on $15 a month
 
-2026-10-13. What the engine costs to run, what each service gives for free, what
-every phase 2 change did to the cost of a post, and the month at the planned
-volume.
+2026-10-13, updated 2026-10-14. What the engine costs to run, what each service
+gives for free, what every phase 2 change did to the cost of a post, and the month
+at the planned volume. The current forecast is the last section's, measured on the
+three accounts' launch set: **$7.20 to $12.20 at 180 posts, expected**.
 
 ## The rule
 
@@ -126,6 +127,10 @@ rewrite $0.005 to $0.007. The full table is in `private/cost-compare/summary.md`
 
 ## The month at 180 posts
 
+Phase 2's forecast, kept for the record. The three accounts' launch set measured
+more of each post (the review and its rewrite, the share of posts stopped): the
+current forecast is the next section's.
+
 | Case | Per published post | 180 posts | Inside $15? |
 |---|---|---|---|
 | Expected: batched, cached, thinking low to high | $0.021 to $0.036 | **$3.80 to $6.50** | yes |
@@ -141,6 +146,64 @@ else, and the cap holds regardless.
 One cost of a provable cap: each call reserves its worst case while in flight
 (a batched outline about $0.11, slides about $0.08, a review about $0.04), so the
 last dollar or two of a month can go unused when no call's ceiling fits.
+
+## The three accounts and their ten kinds of post (2026-10-14)
+
+The content model changed what a post sends. Each account's cached block is
+bigger (every format with its cover patterns, the shape of each kind it uses):
+about 3,900 to 4,300 tokens, against about 2,500 before. A post can read two to
+five documents (a head-to-head reads both players' articles), and it writes two
+captions and the keywords.
+
+### Measured on the launch set
+
+27 posts (9 per account), every request exactly what the engine sends, answered
+by a Claude Code subagent on Sonnet, every call priced from its token counts at
+the Message Batches price with the account's block read from the cache, thinking
+as half to twice each answer. Unlike the first measurement of this section, the
+engine's second look was measured too, not estimated: the review of the finished
+post and the rewrite of what it flags. A recorded build cannot take that step, so
+the launch harness now does (decisions.md, *The launch set takes the engine's
+review too*).
+
+| | Per attempted post | Calls |
+|---|---|---|
+| Each of the three accounts, batched and cached | $0.022 to $0.041 (the three within half a cent of each other) | outline, slides, review, rewrite |
+| All 27 | **$0.023 to $0.039** | |
+| The same calls without batching or caching | about $0.085 | |
+
+The review is strict: it flagged 9 to 15 texts of a post's 13 to 16, so nearly
+every post pays for a rewrite of most of its lines. That is the main difference
+from the first measurement ($0.018 to $0.032).
+
+What a published post costs depends on how many attempts the checks stop. The
+second round of the launch set, drafted on the engine's own rules with no help,
+is the best measure there is: 5 of 27 outlines failed the checks (the engine
+tries the next document), about 85% of first slide drafts used the one redraft,
+and about 30% of posts were stopped in the end (by the checks after the redraft,
+or by a fact problem the rewrite did not fix). The engine drops those and drafts
+another. Counting all of it:
+
+| Case | Per published post | 180 posts | Inside $15? |
+|---|---|---|---|
+| Expected: batched, cached, thinking low to high | $0.040 to $0.068 | **$7.20 to $12.20** | yes |
+| The newer tokenizer counts Hebrew 35% higher | $0.054 to $0.092 | $9.70 to $16.50 | not at the high end |
+| No batch and no cache at all | about $0.145 | about $26 | no |
+| Image screening with Claude Haiku (one photo a post, every photo on a strict account) | under $0.001 | under $0.20 | |
+
+**The expected month is inside $15 without Zernio; the worst cases are not.** The
+cap holds in every case: each call reserves its worst case first, and the planner
+cuts the weakest account to one post a day before the month runs out, so a dear
+month publishes fewer posts (about 100 to 160), never more money. Zernio stays on
+its own line above: $6 a month for the three TikTok accounts on their own. Photos
+come from Wikimedia Commons (free); Pexels and Unsplash are not used by these
+accounts.
+
+Three things would bring it down, none of them taken without the live numbers:
+the review's rewrite threshold (a text at 4 of 10 or more is rewritten; at 5, a
+strict reviewer's rewrites would shrink by about a third), the stopped share (a
+live model that counts sentences better than the subagents did stops fewer
+posts), and batching, which is on by default and halves every call.
 
 ## Measuring the real thing
 

@@ -2,6 +2,7 @@ import { contrast, deltaE, isHex, bestInk } from '../render/color.js';
 import { isFont } from '../render/fonts.js';
 import { isTemplate, TEMPLATES } from '../render/templates/registry.js';
 import { COMPLIANCE, FINANCIAL, isCompliance } from '../rules/compliance.js';
+import { ctasOf, hookPatterns, isKind, KINDS, MIX } from '../formats/kinds.js';
 
 // What a pack must be, checked in code. Every problem is one line of English the
 // website and the CLI can print. An empty list means the pack is valid.
@@ -109,11 +110,37 @@ export function validatePack(pack) {
     if (!f.id || fids.has(f.id)) p.push(`${where}: id missing or repeated`);
     fids.add(f.id);
     if (!String(f.name || '').trim()) p.push(`${where}: name is required`);
+    if (f.kind != null && !isKind(f.kind)) p.push(`${where}: kind "${f.kind}" is not one of ${Object.keys(KINDS).join(', ')}`);
     if (!Array.isArray(f.hooks) || !f.hooks.length) p.push(`${where}: hooks must list at least one pattern`);
-    const [lo, hi] = f.items || [];
-    if (!(Number.isInteger(lo) && Number.isInteger(hi) && lo >= 2 && hi <= 10 && lo <= hi)) p.push(`${where}: items must be [min, max] between 2 and 10`);
-    if (!Array.isArray(f.closers) || !f.closers.length || f.closers.some((x) => !String(x?.title || '').trim())) p.push(`${where}: closers must list at least one { title, body }`);
+    else {
+      const ids = hookPatterns(f).map((h) => h.id);
+      if (new Set(ids).size !== ids.length) p.push(`${where}: hook ids must be unique`);
+      if (hookPatterns(f).some((h) => !h.pattern.trim())) p.push(`${where}: every hook needs a pattern`);
+    }
+    if ((f.kind || 'list') === 'list') {
+      const [lo, hi] = f.items || [];
+      if (!(Number.isInteger(lo) && Number.isInteger(hi) && lo >= 2 && hi <= 10 && lo <= hi)) p.push(`${where}: items must be [min, max] between 2 and 10`);
+      if (!Array.isArray(f.closers) || !f.closers.length || f.closers.some((x) => !String(x?.title || '').trim())) p.push(`${where}: closers must list at least one { title, body }`);
+    } else if (!ctasOf(pack, f).length) {
+      p.push(`${where}: a ${f.kind} post ends with a call to action: list ctas [{ kind: save|comment|send, text }] on the format or the file`);
+    }
+    for (const c of f.ctas || []) if (typeof c === 'object' && c && !['save', 'comment', 'send'].includes(c.kind)) p.push(`${where}: cta kind "${c.kind}" must be save, comment or send`);
   }
+  if (formats.mix != null) {
+    const e = Number(formats.mix?.entertaining);
+    if (!(e >= MIX.min && e <= MIX.max)) p.push(`formats.json: mix.entertaining must be between ${MIX.min} and ${MIX.max}`);
+  }
+
+  // ---- events and the fight week (pack.json)
+  const fw = s.fightWeek;
+  if (fw) {
+    for (const k of ['tale', 'predict', 'recap']) if (fw[k] && !fids.has(fw[k])) p.push(`pack.json: schedule.fightWeek.${k} "${fw[k]}" is not a format in formats.json`);
+    if (fw.recapAfter && !HHMM.test(fw.recapAfter)) p.push('pack.json: schedule.fightWeek.recapAfter must be "HH:MM"');
+    if (!meta.events?.source) p.push('pack.json: a fight week needs events.source, the source its calendar is read from');
+  }
+  if (meta.events?.source && !list.some((x) => x.id === meta.events.source)) p.push(`pack.json: events.source "${meta.events.source}" is not a source in sources.json`);
+  if (meta.imagery?.safety && !['standard', 'strict'].includes(meta.imagery.safety)) p.push('pack.json: imagery.safety must be "standard" or "strict"');
+  for (const prov of meta.imagery?.providers || []) if (!['commons', 'pexels', 'unsplash', 'pack'].includes(prov)) p.push(`pack.json: imagery.providers: "${prov}" is not one of commons, pexels, unsplash, pack`);
   if (!Array.isArray(formats.caption?.questions) || !formats.caption.questions.length) p.push('formats.json: caption.questions must list at least one question');
   const tags = [...(formats.hashtags?.broad || []), ...(formats.hashtags?.niche || [])];
   if (tags.length < 3 || tags.some((t) => !/^#[\p{L}\p{N}_]+$/u.test(t))) p.push('formats.json: hashtags.broad + hashtags.niche need at least 3 tags like #מילה');

@@ -15,6 +15,7 @@ export const PAUSE_REASONS = {
   strike: 'הפלטפורמה דחתה פוסט כהפרת מדיניות',
   publish_errors: 'רצף שגיאות פרסום',
   budget: 'התקציב החודשי נגמר',
+  takedowns: 'הודעות הסרה חוזרות',
 };
 
 export function pauseAccount(db, accountId, reason, detail = null, actor = 'engine') {
