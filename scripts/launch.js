@@ -38,7 +38,7 @@
 // Costs are ESTIMATES from token counts at Sonnet 5.5's batch price with the
 // pack's block cached, thinking given as a range, like docs/costs.md.
 
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync, copyFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync, copyFileSync } from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 
@@ -265,20 +265,26 @@ function vet(ctx, s) {
   return { ...base, stage: 'drafted', draft: cur, answer: patched };
 }
 
-/** Whether an answer exists for this exact request (its user turn), not for an older version of the post. */
+/**
+ * Whether an answer exists for this exact request (its user turn), not for an older
+ * version of the post. Only `next`, which writes the requests, records which request
+ * an answer is for, and sets an answer to an older one aside in answers/stale/; every
+ * other command only reads (a `status` once deleted a round's reviews this way).
+ */
 function fresh(n, stage, request) {
   const sig = createHash('sha256').update(request.user).digest('hex').slice(0, 16);
   const sigFile = path.join(HOME, 'answers', `${nn(n)}-${stage}.sig`);
-  if (!existsSync(ans(n, stage))) {
+  const has = existsSync(ans(n, stage));
+  const stored = existsSync(sigFile) ? readFileSync(sigFile, 'utf8').trim() : null;
+  if (has && (stored === null || stored === sig)) return true;
+  if (cmd === 'next') {
+    if (has) {
+      mkdirSync(path.join(HOME, 'answers', 'stale'), { recursive: true });
+      renameSync(ans(n, stage), path.join(HOME, 'answers', 'stale', `${nn(n)}-${stage}-${stored}.json`));
+    }
     W(sigFile, sig);
-    return false;
   }
-  if (existsSync(sigFile) && readFileSync(sigFile, 'utf8').trim() !== sig) {
-    rmSync(ans(n, stage), { force: true });
-    W(sigFile, sig);
-    return false;
-  }
-  return true;
+  return false;
 }
 
 /** The estimated cost of a launch post's calls: Sonnet 5.5, batch, the pack block cached after the first call. */
