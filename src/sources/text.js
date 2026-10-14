@@ -136,3 +136,33 @@ export function focusText(text, { maxChars = 7000, numbersFirst = false } = {}) 
   }
   return kept.join('\n');
 }
+
+const cellsOf = (line) => line.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
+const isRule = (line) => /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(line);
+
+/**
+ * A Markdown table's rows, each labelled with its header: "Model: Claude Opus |
+ * Batch input: $2 / MTok". A row quoted alone ("| Claude Opus | $2 | $10 |") did not
+ * say which number was which, and a post titled its stats "the first price in the
+ * table". Rows whose cells do not match the header stay as they are.
+ */
+export function labelTables(text) {
+  const lines = String(text || '').split('\n');
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    const head = lines[i];
+    if (/^\s*\|.*\|\s*$/.test(head) && isRule(lines[i + 1] || '')) {
+      const names = cellsOf(head).map((h) => h.replace(/[*_`]/g, '').slice(0, 40));
+      out.push(names.join(' | '));
+      i += 2;
+      for (; i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i]); i++) {
+        const cells = cellsOf(lines[i]);
+        out.push(cells.length === names.length && names.every(Boolean) ? cells.map((c, k) => `${names[k]}: ${c}`).join(' | ') : cells.join(' | '));
+      }
+      i--;
+      continue;
+    }
+    out.push(head);
+  }
+  return out.join('\n');
+}

@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { waitingImages } from '../images/index.js';
 import { nowIso } from '../core/clock.js';
 import { audit, setSetting, step } from '../core/store.js';
 import { loadPost, checkPost, formatOfPost, igCaption, postDraft } from '../pipeline/build.js';
@@ -280,9 +281,10 @@ export function takedownDeleted(ctx, user, { id }, form) {
 /** A person looked at a photograph the screen could not clear, and it is fine. */
 export function imageOk(ctx, user, { id }) {
   const post = mustPost(ctx, id);
-  const imageId = post.checks?.image;
-  if (!imageId) throw new ActionError('לפוסט הזה אין תמונה');
-  ctx.db.update('images', imageId, { reviewed_by: user.name, reviewed_at: nowIso() });
-  audit(ctx.db, { actor: user.name, action: 'image_ok', accountId: post.account_id, postId: id, detail: { image: imageId } });
-  return { ok: true, message: 'התמונה סומנה כבדוקה. אפשר לפרסם.' };
+  // The person looked at the post's page, every slide on it: every photograph waiting there is marked.
+  const waiting = waitingImages(ctx.db, post);
+  if (!waiting.length) throw new ActionError('לפוסט הזה אין תמונה שמחכה לבדיקה');
+  for (const img of waiting) ctx.db.update('images', img.id, { reviewed_by: user.name, reviewed_at: nowIso() });
+  audit(ctx.db, { actor: user.name, action: 'image_ok', accountId: post.account_id, postId: id, detail: { images: waiting.map((i) => i.id) } });
+  return { ok: true, message: waiting.length > 1 ? `${waiting.length} התמונות סומנו כבדוקות. אפשר לפרסם.` : 'התמונה סומנה כבדוקה. אפשר לפרסם.' };
 }

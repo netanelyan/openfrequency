@@ -42,6 +42,8 @@ export function readPack(dir) {
   pack.id = meta.id;
   pack.examples = voiceExamples(pack.voice);
   pack.recordingsDir = path.join(dir, 'recordings');
+  // The account's mark (brand/logo.png, or .svg): drawn small on the first and last slides when it is there.
+  pack.brandLogo = ['logo.png', 'logo.svg'].map((f) => path.join(dir, 'brand', f)).find((f) => existsSync(f)) || null;
   // A facts/ folder: hand-checked facts, one more approved source (src/sources/facts.js).
   pack.facts = factsSource(path.join(dir, 'facts'));
   return pack;

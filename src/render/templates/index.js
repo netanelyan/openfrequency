@@ -357,7 +357,7 @@ export function buildSlide(theme, slide) {
   if (!t) throw new Error(`no template "${theme.template}"`);
   const css = `${t.css(theme)}\n${ROLE_CSS}`;
   if (drawsRole(slide)) {
-    const parts = slide.kind === 'cover' ? coverInner(slide) : roleInner(slide);
+    const parts = slide.kind === 'cover' ? coverInner(slide, { photo: Boolean(slide.hasPhoto) }) : roleInner(slide);
     const deep = slide.role === 'layer' ? { bodyClass: 'layer', bodyStyle: `--deep:${(slide.n - 1) / Math.max(1, slide.of - 1)}` } : {};
     return { css, html: t.frame(slide, parts), ...deep };
   }

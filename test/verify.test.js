@@ -120,3 +120,15 @@ test('slide text keeps Hebrew quote marks and isolates Latin runs (hard rule 8)'
   assert.equal(he('עד 1,200 ש"ח, צה"ל ו-AT&T'), 'עד 1,200 ש&quot;ח, צה&quot;ל ו-<bdi>AT&amp;T</bdi>');
   assert.equal(he('<b> ב-Gemini 2.5'), '&lt;<bdi>b</bdi>&gt; ב-<bdi>Gemini 2.5</bdi>');
 });
+
+test('digits inside a product name are part of the name, not a number to quote', async () => {
+  const { numbersIn } = await import('../src/verify/claims.js');
+  const n = (t) => [...numbersIn(t, { hebrew: true })].join(',');
+  assert.equal(n('Base44 נקנתה'), '');
+  assert.equal(n('GPT-4o ו-H100'), '');
+  assert.equal(n('Web3 ב-2022'), '2022');
+  // A token that starts with its digits is a number, and so is a version after a space.
+  assert.equal(n('גייסו 20M'), '20');
+  assert.equal(n('Claude 3.5'), '3.5');
+  assert.equal(n('UFC 193'), '193');
+});

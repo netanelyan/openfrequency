@@ -67,6 +67,11 @@ test('the kind checks: a guess-who that gives the answer away, place numbers in 
   assert.match(clue.join(' '), /clue 1 gives the answer away/);
   const numbered = g.slides.map((x, i) => (i === 1 ? { ...x, title: `רמז 1: ${x.title}` } : x));
   assert.match(kindProblems(fmt('guess-who'), { hook: 'x', sub: '', subject: g.subject, slides: numbered, caption: '', captionShort: '', keywords: [] }).join(' '), /no clue numbers/);
+  const clues = g.slides.filter((x) => x.role === 'clue').length;
+  const count = (hook) => kindProblems(fmt('guess-who'), { hook, sub: '', subject: g.subject, slides: g.slides, caption: '', captionShort: '', keywords: [] }).join(' ');
+  assert.match(count(`תנחשו לפי ${clues + 1} רמזים`), /promises \d clues/, 'a cover that promises another count of clues');
+  assert.doesNotMatch(count(`תנחשו לפי ${clues} רמזים`), /promises/);
+  assert.match(count('תנחשו לפי חמישה רמזים'), /promises 5 clues/);
   const r = SAMPLES.ranking.slides.map((x, i) => (i === 5 ? { ...x, body: 'מקום ראשון: חודש וחצי.' } : x));
   assert.match(kindProblems(fmt('ranking'), { slides: r, subject: {} }).join(' '), /no place numbers/);
   const bad = SAMPLES.ranking.slides.map((x, i) => (i === 0 ? { ...x, body: 'פוטוס\nזמיה' } : x));
@@ -222,6 +227,8 @@ test('mixed Hebrew lines: a Latin run stops at the end of a sentence, and a titl
   assert.equal(he('ל-Gnrgy. 450,000 דולר'), 'ל-<bdi>Gnrgy</bdi>. 450,000 דולר');
   assert.equal(he('ב-UFC 193 היא ניצחה'), 'ב-<bdi>UFC 193</bdi> היא ניצחה');
   assert.equal(he('monday.com הודיעה'), '<bdi>monday.com</bdi> הודיעה');
+  assert.equal(he('הריצו npx frugon --demo ותראו'), 'הריצו <bdi>npx frugon --demo</bdi> ותראו', "a command's flags stay with it");
+  assert.equal(he('ב-Pro זה יותר'), 'ב-<bdi>Pro</bdi> זה יותר', 'a Hebrew prefix keeps its dash');
   assert.deepEqual(splitLead('7,703 שקל בחודש'), { lead: { value: '7,703', pre: '', post: '' }, rest: 'שקל בחודש' });
   assert.deepEqual(splitLead('עד 7,703 שקל'), { lead: null, rest: 'עד 7,703 שקל' });
 });

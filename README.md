@@ -40,7 +40,8 @@ Nothing in it is real, and the Results page says so.
 | `npm run web` | the website on `127.0.0.1:4700` |
 | `npm start` | the website and the runner: daily generation, publishing at each slot, metrics, learning |
 | `npm run record -- --pack <id> [--source <id> --url <page> --key <name>]` | saves a pack's approved sources as recordings, so it runs offline. `--title "Article#intro;Section"` records Wikipedia articles (several titles are one group, read together), `--group <key>` groups documents from different sources, `--filter '<json>'` narrows a data.gov.il source |
-| `npm run launch -- next|build|review|redo|status --pack <id>` | the launch set: the first posts of a new account, drafted by Claude Code on the engine's exact prompts (never the project's key), built by the real pipeline, reviewed blind; see [The launch set](#the-launch-set) |
+| `npm run launch -- run|review|verdicts|status|costs --pack <id>` | the launch set: the first posts of a new account, made by the engine's own pipeline end to end (in development on the Claude Code CLI, never the project's key), each reviewed blind by three readers; see [The launch set](#the-launch-set) |
+| `npm run visuals -- [--pack <id>]` | every graphic the engine draws, in a pack's theme, for TikTok and Instagram: for the eye after a change to the graphics |
 | `npm run screenshots` | every page at phone and desktop width (`-- --dark` for both themes), from the demo only |
 | `npm run init-private [-- --pack <id>] [-- --git]` | creates the private folder, optionally a blank pack and its own git repo |
 | `npm run user:add -- <name>` | adds a website user (asks for the password) |
@@ -49,17 +50,33 @@ Nothing in it is real, and the Results page says so.
 | `npm run zernio:check [-- --pack <id> --send-private --confirm]` | checks the Zernio key and every pack's TikTok account id, and what Zernio will bill; with the flags, sends one private (SELF_ONLY) test post and reports whether the AI flag and the analytics work |
 | `npm run instagram:token -- --pack <id> --short <token>` | turns a short-lived Meta token into the pack's lasting one (see [Instagram](#instagram)) |
 | `npm run instagram:check [-- --pack <id> --publish --confirm]` | checks each Instagram pack's token, account, token expiry, quota and insights; publishes only with the flags |
-| `npm run live-day -- --confirm` | the one measurement that needs the Anthropic key: one day of posts for every account on real calls, in Approve mode, and what each really cost |
+| `npm run live-day -- --allow-api --confirm` | the one measurement that needs the Anthropic key: one day of posts for every account on real calls through the API, in Approve mode, and what each really cost (`--allow-api` because a laptop is in development, where the API is refused) |
 | `npm run compare -- next|status|score` | the cost and quality comparison behind [docs/costs.md](docs/costs.md), answered by Claude Code, never the project's key |
 
 Requires Node 22.13 or newer (for `node:sqlite`); developed on 24.
 
 ### Modes
 
-- **Recorded** (the default without `ANTHROPIC_API_KEY`): sources and drafts come
-  from each pack's `recordings/`. Every check, the fact gate, the renderer and the
-  website run exactly as they would live; a post's cost is an estimate and says so.
-- **Live** (`OF_MODE=live`, the default with a key): real sources, real Claude.
+- **Recorded** (`OF_MODE=recorded`): sources and drafts come from each pack's
+  `recordings/`. Every check, the fact gate, the renderer and the website run
+  exactly as they would live; a post's cost is an estimate and says so.
+- **Live** (`OF_MODE=live`, the default when there is a model to call): real
+  sources, a real model.
+
+Which model answers is the environment's (`OF_ENV`):
+
+- **`dev`** (the default, a laptop): the Claude Code CLI, headless (`claude -p`), on
+  your subscription. Each call is the request production would send (the same system
+  blocks, user turn, image, schema, model and effort), one model request with every
+  tool off, a fresh session that is never saved, without your machine's CLAUDE.md,
+  hooks or MCP servers, and never with `ANTHROPIC_API_KEY` in its environment. Calls
+  run one at a time, across processes too; on a usage limit the engine waits for the
+  reset and makes the same call again. Each call's tokens are recorded with what it
+  would cost through the API. Any call to the API itself is refused unless the
+  command says `--allow-api`, and each refusal is logged in
+  `$OF_HOME/logs/api-refusals.log`.
+- **`prod`** (the server; the service unit sets it): the Anthropic API, the day's drafts
+  through the Message Batches API with the pack's prefix cached.
 
 Publishing is a separate, deliberate switch, per platform. Each pack names its
 publisher for each platform in `pack.json`:
@@ -134,11 +151,14 @@ display face, a handle, a name, a Zernio profile, or a palette too close to tell
 ## How a post is made
 
 ```
-format (by the mix and results) -> documents from approved sources -> outline
-      -> facts verified -> the kind's shape checked -> slides (a cover pattern and
-      a call to action chosen in code) -> voice, tell, shape and fact checks
-      -> review -> image screen -> render -> queue -> approval (by mode) -> publish
-      -> metrics at 72h -> learn
+format (by the mix and results) -> documents from the format's approved sources
+      -> outline (and the articles to read next) -> research: those articles read,
+      the details a fan would want pulled out and verified (three, or the next topic)
+      -> facts verified -> the kind's shape checked -> slides with their graphics (a
+      cover pattern and a call to action chosen in code) -> voice, tell, shape, visual
+      and fact checks -> review -> photographs, screened and checked against their
+      slides -> render -> queue -> approval (by mode) -> publish -> metrics at 72h
+      -> learn
 ```
 
 Every step is a row in the database, so any slide traces back to its fact, the
@@ -164,6 +184,19 @@ patterns and the calls to action.
 | `head-to-head` | number | two sides, 4 to 6 stats with both values, the verdict last |
 | `ranking` | number | a top 5 (or a top 10, places 10 to 6 on one slide), number one last; the design draws the places |
 | `list` | number | the phase 1 shape: items and a closing slide |
+
+Every post has pictures as much as words: at least half of its slides carry a
+visual, and the cover always does. The engine draws its graphics from data the
+drafting model writes on a slide (a timeline, stat bars, a head-to-head card, one big
+number, a calendar page, a pitch with the players, kit colours, a fight record, the
+weight-class ladder, a product's stack, a funnel, price cards, a mock screen); each
+theme names the ones that fit it (`theme.json` `visuals`), and every number a graphic
+draws is held to the slide's quotes by the fact gate. A slide about a person or a place
+can ask for a licensed photograph of them: it is used only if its own title,
+description or categories name the subject, it passes the image screen, and a vision
+check says it fits the slide; otherwise the slide keeps its graphic. The cover shows a
+photograph, the graphic the model chose for it, or the art of its kind. An account's
+mark (`brand/logo.png` in the pack) is drawn small on the first and last slides.
 
 Every post: 5 to 8 slides, one idea a slide, the payoff on the last slide with the
 call to action drawn on it, keywords in Hebrew and English on the last slide above
@@ -250,8 +283,10 @@ per connected account and is outside it (see [docs/costs.md](docs/costs.md)).
   for onboarding.
 - **Volume, never quality.** Each day before drafting, the month is forecast at the
   planned volume and the measured cost per post. If it does not fit, the weakest
-  account (by its results, else by how often you approved it) drops to one post a
-  day first, then the next. The money freed goes to the others. Every page says so.
+  account (by its results, else by how often you approved it) comes down half a
+  post a day at a time to one a day, then the next; past that, to a post every
+  other day. The money freed goes to the others. Every page says so. At the
+  measured cost, about 86 posts a month fit in $15 ([docs/costs.md](docs/costs.md)).
 - **80%** spent: a warning on every page. **100%**: nothing is drafted until the
   next month. Settings shows the spend, the forecast and the posts left.
 - **Cheap by design**: drafting on Claude Sonnet 5.5 through the Message Batches
@@ -299,6 +334,15 @@ after 90 days without use; publishing and reading insights use it daily, and
 account on *Instagram Login* instead (`"auth": "instagram"`, no Facebook Page) has a
 60-day token: the runner refreshes it once a day when 20 days or fewer are left,
 and keeps the new one in the database.
+
+**Instagram Login, from the app's dashboard.** With the *Instagram API with
+Instagram Login* product there is no Page and no redirect address: on the
+product's setup page, under *Generate access tokens*, add the Instagram account,
+log in to it, and click *Generate*. That token already lasts 60 days: put it in
+`$OF_HOME/.env` as `IG_TOKEN_<PACK>`, the account's id in `pack.json` as
+`instagram.userId` with `"auth": "instagram"`, and run `npm run instagram:check --
+--pack <id>`. The API cannot delete a post on this login, so after a takedown
+notice the post is listed for you to delete by hand.
 
 Instagram fetches each slide from `MEDIA_PUBLIC_BASE_URL` (JPEG, 1080x1350), so
 that address must be live before the first post.
@@ -355,17 +399,32 @@ and rate-limits readers without it, and SEC's EDGAR refuses them
 ## The launch set
 
 The first posts of a new account, the ones its owner approves to fill the grid
-before it goes public: `$OF_HOME/launch/<pack>/plan.json` names each post's format
-and the recorded document (or group) it is drafted from. `npm run launch -- next`
-writes the exact requests the engine would send; a Claude Code subagent on the
-drafting model answers them, and the script checks each answer with the engine's
-own code (facts, shape, voice, gate) and asks for the engine's one redraft when the
-checks refuse it. `build` files the answers as the pack's recordings and runs the
-real pipeline on them: `$OF_HOME/out/launch/<pack>/<n>-<format>/` holds the slides for
-both platforms, both captions, `sources.md`, `cost.md` and `post.json`. `review`
-writes a request for a second subagent that has not seen the drafting, a
-skeptical viewer who has never heard of the account; its notes are saved next to
-each post, and `redo` drafts a failed post again with them.
+before it goes public: `$OF_HOME/launch/<pack>/plan.json` names each post's format.
+`npm run launch -- run` makes every post with the engine's own pipeline, end to end,
+exactly as the runner would (live sources, research, the checks, the redraft, the
+review and the rewrite, the photographs, the render), on whatever backend `OF_ENV`
+picks, so in development on the Claude Code CLI; nothing edits a post afterwards. A
+post the checks stop is made again from another topic, and every attempt is kept.
+`$OF_HOME/out/launch/<pack>/<n>-<format>/` holds the slides for both platforms, both
+captions, `sources.md`, `source-list.md`, `images.md` (every picture and its license),
+`cost.md` (tokens and the API price), `engine-review.md` and `post.json`. `review`
+writes each post's bundle (only the slides, the captions and the source list) and
+which of the three blind reviewers reads it; `verdicts` tallies them: a post passes
+when two of its three reviewers would stop, swipe to the end, and save, send or
+comment. Each round has its own folder and database (`launch/<pack>/r<n>/`).
+
+## Research and the topic bank
+
+A format can name the sources it draws from (`formats.json` `sources`). The outline
+names the articles that would tell its subject in more detail; the engine reads them
+through the pack's approved sources (a Wikipedia of an approved Wikipedia source,
+Hacker News through its API where the pack has it), and one call pulls out the
+details a fan would want. Each is verified against its stored document; a topic with
+fewer than `research.minDetails` (3) is left for the next one, and the slides must use
+three of them. A pack's `topics.json` with a source of `api.kind: "bank"` is a topic
+bank: chosen topics, each with the kind of post it suits and the pages that document
+it, drafted from exactly those pages. A source is read again after six hours, or for
+another day.
 
 ## Layout
 

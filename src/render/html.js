@@ -1,5 +1,6 @@
 import { bestInk, rgbList } from './color.js';
 import { fontFaces, headlineFaces, headlineFamily } from './fonts.js';
+import { VISUAL_CSS } from './visuals.js';
 
 // The page every slide is drawn on, whatever the template.
 //
@@ -28,7 +29,7 @@ export const esc = (s) =>
 // A run joins words with a space ("UFC 193", "Better Place") and parts of a name with a
 // point, a colon, a slash or a dash ("monday.com"), never across a sentence's end: as
 // one run, "Gnrgy. 450,000" put the period and half the number on the wrong side.
-const LATIN_RUN = /([A-Za-z](?:[A-Za-z0-9+#&_]|[.:/-](?=[A-Za-z0-9])|(?<![.!?]) (?=[A-Za-z0-9]))*)/;
+const LATIN_RUN = /([A-Za-z](?:[A-Za-z0-9+#&_]|[.:/=-](?=[A-Za-z0-9_])|-(?=-[A-Za-z])|\(\)|(?<![.!?]) (?=[A-Za-z0-9]|--?[A-Za-z]))*)/;
 
 /**
  * Escape, and isolate every Latin run so bidi cannot reorder punctuation around it.
@@ -95,7 +96,7 @@ bdi{unicode-bidi:isolate}
 .frame{position:absolute;inset:0;padding:var(--pt) var(--pr) var(--pb) var(--pl);display:flex;flex-direction:column}
 .fit{overflow:hidden}
 .probe{position:absolute;top:-400px;left:-400px;font-family:'Heebo';font-weight:700;font-size:40px;color:transparent}
-.photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 30%}
 .scrim{position:absolute;inset:0;background:linear-gradient(to top, rgba(8,10,14,var(--scrim,0.82)) 0%, rgba(8,10,14,calc(var(--scrim,0.82)*0.85)) 45%, rgba(8,10,14,0) 85%)}
 .icon svg{width:100%;height:100%;display:block}
 body.has-photo{--ink:#ffffff;--muted:rgba(255,255,255,.84);--ink-rgb:255,255,255;color:#fff}
@@ -109,7 +110,7 @@ body.has-photo .frame{z-index:2}
 const HEADLINE_CSS = '.hook,.title,.rtitle,.k-closer h2,.versus,.answer,.myth-text,.meme .punch,.vs .val,.q,.count,.cnt,.head .n{font-family:var(--headline)}';
 
 /** The whole page for one slide. `parts` is what a template returns. */
-export function page({ theme, size, slide, parts, photo }) {
+export function page({ theme, size, slide, parts, photo, blur = false }) {
   const families = [theme.fonts.display, theme.fonts.text, 'Heebo'];
   return `<!doctype html>
 <html lang="he" dir="rtl">
@@ -119,11 +120,13 @@ ${fontFaces(families)}
 ${headlineFaces(theme.fonts.display)}
 ${rootCss(theme, size)}
 ${parts.css}
+${VISUAL_CSS}
 ${HEADLINE_CSS}
 </style></head>
-<body class="t-${theme.template} v-${theme.variant || 'a'} k-${slide.kind} s-${size}${photo ? ' has-photo' : ''}${parts.bodyClass ? ` ${parts.bodyClass}` : ''}"${parts.bodyStyle ? ` style="${esc(parts.bodyStyle)}"` : ''}>
-${photo ? `<img class="photo" src="${photo}" alt=""><div class="scrim" data-scrim></div>` : ''}
+<body class="t-${theme.template} v-${theme.variant || 'a'} k-${slide.kind} s-${size}${photo ? ' has-photo' : ''}${slide.hasVisual ? ' has-vis' : ''}${parts.bodyClass ? ` ${parts.bodyClass}` : ''}"${parts.bodyStyle ? ` style="${esc(parts.bodyStyle)}"` : ''}>
+${photo ? `<img class="photo${blur ? ' blur' : ''}" src="${photo}" alt=""><div class="scrim" data-scrim></div>` : ''}
 ${parts.html}
+${slide.brand ? `<img class="brand" src="${slide.brand}" alt="">` : ''}
 <div class="probe">א</div>
 </body></html>`;
 }

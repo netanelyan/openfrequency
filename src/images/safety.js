@@ -71,6 +71,8 @@ export async function redShare(buf, type = 'image/jpeg') {
 export const SCREEN_SCHEMA = {
   type: 'object',
   properties: {
+    consistent: { type: 'boolean' },
+    mainSubject: { type: 'string' },
     blood: { type: 'boolean' },
     injury: { type: 'boolean' },
     unconscious: { type: 'boolean' },
@@ -79,7 +81,7 @@ export const SCREEN_SCHEMA = {
     sure: { type: 'boolean' },
     note: { type: 'string' },
   },
-  required: ['blood', 'injury', 'unconscious', 'watermark', 'logoOrBelt', 'sure', 'note'],
+  required: ['consistent', 'mainSubject', 'blood', 'injury', 'unconscious', 'watermark', 'logoOrBelt', 'sure', 'note'],
   additionalProperties: false,
 };
 
@@ -88,9 +90,11 @@ const SCREEN_SYSTEM = `You check one photograph before it goes on a public socia
 - injury: an injury close-up (a cut, swelling, a broken bone, a bruised face up close).
 - unconscious: a person lying knocked out, limp or being attended to on the ground.
 - watermark: a photo agency's or anyone's watermark or credit stamped on the picture.
-- logoOrBelt: a promotion's or brand's logo as a main element, a championship belt, a poster or a broadcast graphic.
+- logoOrBelt: a promotion's or brand's logo as the main element (a poster, a logo filling the frame), a championship belt held up or worn, or a broadcast graphic. A logo on a backdrop, a microphone, a banner or clothing behind or on the person is not.
 - sure: false when the picture is too small or unclear to tell.
-- note: a few words on what decided it.`;
+- note: a few words on what decided it.
+- mainSubject: what the picture mainly shows, in a few words (a person at a football match, a stadium from outside, a rock, a poster).
+- consistent: when the request says what the picture is for, true only if what you see fits it: the kind of subject it names (one person as the main subject for a person, the place for a place) in a setting that fits the slide. A different kind of thing (an object, a plant, an animal, a building for a person), a crowd where no one stands out, a poster, a logo or a screen is false. Do not try to recognise anyone by their face: the picture's own title names the person; you judge only that the picture fits. The file's own title and description, when given, say who it shows and where and when it was taken. A portrait, a press photo or a posed picture of the right person fits a slide about them whatever its date. An action picture (a match, a fight, a goal, a kick) fits only if the file places it at the very event the slide is about: an action shot of the same player at another match misleads. A statue, a plaque, a painting or a drawing of the person is not the person: false. A file whose title names someone else (another person with the same name) is false. The reader must see who it is: a person seen from behind, too small, or cropped so close the picture is a hat and a cheek, is false. When the slide names the club, the team or the year of its story, the person in another club's kit, or plainly years older or younger than the story, is false (a 2008 Manchester United story is not told with a Real Madrid shirt). A place fits only as the main subject, filling the frame: a stadium far off across a lake or a skyline is false. A blurred, out-of-focus or pixelated picture is false. Without a request, true.`;
 
 /** The red share above which a person (or the model) must look. Strict packs look sooner. */
 export const RED_REVIEW = { strict: 0.04, standard: 0.12 };
@@ -99,7 +103,7 @@ export const RED_REVIEW = { strict: 0.04, standard: 0.12 };
  * Screen one image before it is used. Returns { safety: 'ok'|'review'|'refused', why, red, model }.
  * meta: its title and description; strict: the pack asked for the strict screen (imagery.safety).
  */
-export async function screenImage(ctx, { pack, buf, type, meta = '', postId = null }) {
+export async function screenImage(ctx, { pack, buf, type, meta = '', postId = null, query = '', claim = '' }) {
   const strict = pack.meta.imagery?.safety === 'strict';
   const word = refusingWord(meta, pack.rules?.imageQueryBlock || []);
   if (word) return { safety: 'refused', why: `the picture's description says "${word}"` };
@@ -110,11 +114,14 @@ export async function screenImage(ctx, { pack, buf, type, meta = '', postId = nu
     ctx.log?.(`image screen: ${e.message}`);
   }
   const reddish = red == null || red >= RED_REVIEW[strict ? 'strict' : 'standard'];
-  if (ctx.llm?.kind === 'claude' && (strict || reddish)) {
+  // A picture for a slide is always looked at: the screen and the check that it shows what the slide says, in one call.
+  if (ctx.llm?.kind === 'claude' && (strict || reddish || claim)) {
     try {
-      const { data } = await askJson(ctx, { task: 'image-screen', role: 'judge', system: SCREEN_SYSTEM, user: 'The photograph:', image: { type, buf }, schema: SCREEN_SCHEMA, effort: 'low', maxTokens: 1500, tag: 'image-screen' });
+      const user = claim ? `The picture is for a slide that says: "${claim.slice(0, 300)}". It was searched for as: "${query}". The file's own title and description: "${String(meta).slice(0, 400)}". The photograph:` : 'The photograph:';
+      const { data } = await askJson(ctx, { task: 'image-screen', role: 'judge', system: SCREEN_SYSTEM, user, image: { type, buf }, schema: SCREEN_SCHEMA, effort: 'low', maxTokens: 1500, tag: 'image-screen' });
       const bad = ['blood', 'injury', 'unconscious', 'watermark', 'logoOrBelt'].filter((k) => data[k]);
       if (bad.length) return { safety: 'refused', why: `the model saw: ${bad.join(', ')} (${data.note})`, red, model: data };
+      if (claim && data.consistent === false) return { safety: 'refused', why: `it does not show what the slide says: ${data.mainSubject} (${data.note})`, red, model: data, mismatch: true };
       if (data.sure) return { safety: 'ok', why: `the model saw nothing to refuse (${data.note})`, red, model: data };
       return { safety: 'review', why: `the model could not tell (${data.note})`, red, model: data };
     } catch (e) {

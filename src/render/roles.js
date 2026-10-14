@@ -1,4 +1,5 @@
 import { esc, he, ICON, sourceLine, two } from './html.js';
+import { coverVisualHtml, visualHtml } from './visuals.js';
 
 // The parts of a slide that come from its role in the post's kind (src/formats/
 // kinds.js): a head-to-head's two values, a ranking's place, an iceberg's depth,
@@ -56,7 +57,7 @@ export const ROLE_CSS = `
 .vs{display:flex;align-items:stretch;gap:22px}
 .vs .side{flex:1;min-width:0;display:flex;flex-direction:column;gap:12px;padding:30px 28px;border-radius:var(--radius);background:rgba(var(--ink-rgb),.06);border:3px solid rgba(var(--accent-rgb),.6)}
 .vs .side.b{border-color:rgba(var(--accent2-rgb),.7)}
-.vs .val{font:700 128px/0.98 var(--display);color:var(--accent);unicode-bidi:isolate;text-align:right;overflow-wrap:anywhere;max-height:260px}
+.vs .val{font:700 128px/0.98 var(--display);color:var(--accent);unicode-bidi:isolate;text-align:right;overflow-wrap:normal;word-break:keep-all;hyphens:none;max-height:260px}
 .vs .val.m{font-size:92px}
 .vs .val.l{font-size:66px}
 .vs .val.xl{font-size:52px}
@@ -100,6 +101,8 @@ body.layer .frame{z-index:2}
 .s-instagram .myth-text{font-size:78px;max-height:380px}
 .meme{background:var(--surface);color:var(--ink);border-radius:var(--radius);padding:44px 46px;display:flex;flex-direction:column;gap:28px;border:3px solid rgba(var(--ink-rgb),.12);box-shadow:0 30px 70px rgba(0,0,0,.28)}
 .meme .setup{font:500 46px/1.35 var(--text);color:var(--muted);max-height:300px}
+.cover-meme{transform:rotate(-1.5deg)}
+.cover-meme .punch{max-height:620px}
 .meme .punch{font:700 86px/1.08 var(--display);max-height:520px}
 .s-instagram .meme .punch{font-size:70px;max-height:340px}
 .s-instagram .meme .setup{font-size:40px;max-height:200px}
@@ -138,14 +141,16 @@ export const ctaHtml = (cta) => (cta?.text ? `<div class="cta"><span class="icon
 export const keywordsHtml = (kw = []) => (kw.length ? `<div class="kw">${kw.map((k) => `<bdi>${esc(k)}</bdi>`).join('<span>·</span>')}</div>` : '');
 
 /** What a cover of each kind adds under its cover line. */
-export function coverExtras(s) {
+export function coverExtras(s, { art = false } = {}) {
   const k = s.postKind;
   const subj = s.subject || {};
   const parts = [];
-  if (k === 'head-to-head' && subj.a && subj.b) parts.push(`<div class="versus"><span class="a">${he(subj.a)}</span><i>VS</i><span class="b">${he(subj.b)}</span></div>`);
+  // The kind's own art already draws the two sides, or the date: once is enough.
+  const drawn = art && !s.coverVisual;
+  if (k === 'head-to-head' && subj.a && subj.b && !drawn) parts.push(`<div class="versus"><span class="a">${he(subj.a)}</span><i>VS</i><span class="b">${he(subj.b)}</span></div>`);
   // The label, unless the cover line already says it is an opinion.
   if (k === 'hot-take' && !/^\s*דעה/.test(String(s.hook || ''))) parts.unshift('<div class="opinion">דעה</div>');
-  if (k === 'on-this-day' && subj.date) {
+  if (k === 'on-this-day' && subj.date && !drawn) {
     const m = /^(\d{1,2})\s+(\S+)\s+(\d{4})/.exec(subj.date.replace(/^ב-?/, ''));
     // The stamp, unless the cover line already says the date: once is enough.
     const said = m && new RegExp(`(?<!\\d)${m[1]}\\s+${m[2]}`).test(String(s.hook || ''));
@@ -210,12 +215,23 @@ export function roleInner(s) {
   } else {
     inner = `${title(s)}${lines(s)}`;
   }
+  // The slide's graphic under its words, and its photograph: in a frame of its own when the
+  // slide has no graphic, as a round portrait beside the words when it has one.
+  const vis = s.visual && r !== 'stat' ? visualHtml(s.visual) : s.visual && r === 'stat' && s.visual.type !== 'compare' ? visualHtml(s.visual) : '';
+  if (s.photo) inner = vis ? `<div class="avatar"><img src="${s.photo}" alt=""></div>${inner}${vis}` : `<div class="portrait"><img src="${s.photo}" alt=""></div>${inner}`;
+  else if (vis) inner = `${inner}${vis}`;
   return { inner, after: `${src}${last}`, ghost: r === 'clue' ? '<div class="qmark">?</div>' : r === 'layer' ? '<div class="deep"></div>' : '' };
 }
 
 /** The inside of a new kind's cover: its cover line and what the kind adds. */
-export function coverInner(s) {
-  return { inner: `${coverExtras(s)}<h1 class="hook fit">${he(s.hook)}</h1>${s.sub ? `<p class="sub fit">${he(s.sub)}</p>` : ''}`, after: '', ghost: '' };
+export function coverInner(s, { photo = false } = {}) {
+  // A cover always shows a picture: its photograph, or the graphic drawn in its place.
+  // A guess-who's blurred photograph carries the question mark over it.
+  const art = s.tease ? '<div class="cover-vis art art-who"><b class="qbig">?</b></div>' : photo ? '' : coverVisualHtml(s);
+  const extras = coverExtras(s, { art: Boolean(art) });
+  // A meme's cover is the meme: the hook on the account's own meme card.
+  if (s.postKind === 'meme' && !photo && !s.coverVisual) return { inner: `${extras}<div class="meme cover-meme"><div class="punch hook fit">${he(s.hook)}</div>${s.sub ? `<div class="setup fit">${he(s.sub)}</div>` : ''}</div>`, after: '', ghost: '' };
+  return { inner: `${art}${extras}<h1 class="hook fit">${he(s.hook)}</h1>${s.sub ? `<p class="sub fit">${he(s.sub)}</p>` : ''}`, after: '', ghost: '' };
 }
 
 /** A number in two digits, for the templates that count. */

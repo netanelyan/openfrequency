@@ -6,7 +6,8 @@ import { now, nowIso } from '../core/clock.js';
 import { j } from '../db/index.js';
 import { israelDate } from '../schedule/israel.js';
 import { parseFeed } from './rss.js';
-import { htmlToText, mainHtml, titleOf } from './text.js';
+import { htmlToText, labelTables, mainHtml, titleOf } from './text.js';
+import { packsDir } from '../core/paths.js';
 import { parseCsv } from './csv.js';
 import { factDocuments, factsDir } from './facts.js';
 
@@ -35,6 +36,8 @@ import { factDocuments, factsDir } from './facts.js';
 // re-verified after the page has changed.
 
 const MAX_TEXT = 16_000;
+/** A source may keep more of a long page (a docs page whose price table is past the first 16,000 characters): hints.maxChars, up to 60,000. */
+const maxOf = (hints = {}) => Math.min(60_000, Number(hints.maxChars) || MAX_TEXT);
 const sha = (s) => createHash('sha256').update(String(s)).digest('hex');
 
 /**
@@ -79,7 +82,7 @@ export function liveSources() {
       if (src.type === 'web') {
         // Some old pages are Latin-1 (RSSSF): hints.encoding reads them as written.
         const page = await getText(src.url, { encoding: hints.encoding || null });
-        const docs = [{ url: page.finalUrl, title: titleOf(page.body), text: forDay(htmlToText(mainHtml(page.body, hints.selector))).slice(0, MAX_TEXT), publishedAt: null }];
+        const docs = [{ url: page.finalUrl, title: titleOf(page.body), text: forDay(labelTables(htmlToText(mainHtml(page.body, hints.selector)))).slice(0, maxOf(hints)), publishedAt: null }];
         if (hints.follow?.pattern) {
           const re = new RegExp(hints.follow.pattern, 'i');
           const links = [...new Set([...page.body.matchAll(/href=["']([^"']+)["']/gi)].map((m) => new URL(m[1], page.finalUrl).href).filter((u) => re.test(u)))];
@@ -127,6 +130,7 @@ async function fetchApi(src, cfg, { day = null, events = [] } = {}) {
     return [{ url: src.url, title: api.title || src.name, text: lines.join('\n').slice(0, MAX_TEXT), publishedAt: null }];
   }
   if (api.kind === 'facts') return factDocuments(factsDir(src.account_id));
+  if (api.kind === 'bank') return bankDocs(src, api);
   // "{EVENTS}" among a Wikipedia source's titles: the pages of the events this week (a fight card).
   if (api.kind === 'wikipedia') return wikipediaDocs(src, { ...api, titles: (api.titles || [api.title]).flatMap((x) => (x === '{EVENTS}' ? events : [x])) });
   if (api.kind === 'csv') {
@@ -157,6 +161,15 @@ async function fetchApi(src, cfg, { day = null, events = [] } = {}) {
   const get = (r, f) => f.split('.').reduce((o, k) => o?.[k], r);
   if (api.where) list = list.filter((r) => { const v = get(r, api.where); return v != null && v !== '' && !(Array.isArray(v) && !v.length); });
   if (api.last) list = list.slice(-api.last);
+  // api.each: one document per record (a Hacker News post), with its own address, so a slide's source is that post.
+  if (api.each) {
+    return list.slice(0, api.max || 20).map((r) => ({
+      url: String(api.each.url || src.url).replace(/\{([\w.]+)\}/g, (_, f) => encodeURIComponent(String(get(r, f) ?? ''))),
+      title: plainValue(get(r, api.each.title || 'title')) || src.name,
+      text: linesOf([r], api).join('\n').slice(0, MAX_TEXT),
+      publishedAt: api.each.date ? get(r, api.each.date) || null : null,
+    }));
+  }
   return [{ url: src.url, title: api.title || src.name, text: linesOf(list.slice(0, api.max || 200), api).join('\n').slice(0, MAX_TEXT), publishedAt: null }];
 }
 
@@ -192,9 +205,16 @@ export function wikiSections(text, sections = []) {
 export function wikiHtmlToText(html) {
   let s = String(html || '').replace(/<span[^>]*class="[^"]*mw-editsection[^"]*"[^>]*>[\s\S]*?<\/span>\s*<\/span>|<span[^>]*class="[^"]*mw-editsection[^"]*"[^>]*>[\s\S]*?<\/span>/gi, '');
   s = s.replace(/<sup[^>]*class="[^"]*reference[^"]*"[^>]*>[\s\S]*?<\/sup>/gi, '');
-  s = s.replace(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi, (_, row) => {
-    const cells = row.split(/<\/t[dh]>/i).map((c) => htmlToText(c).replace(/\n+/g, ' ').trim()).filter(Boolean);
-    return `<p>${cells.join(' | ').replace(/</g, '&lt;')}</p>`;
+  // Each table's rows labelled with its header row, so a row quoted alone says which value is which.
+  s = s.replace(/<table\b[\s\S]*?<\/table>/gi, (table) => {
+    let names = null;
+    return table.replace(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi, (_, row) => {
+      const cells = row.split(/<\/t[dh]>/i).map((c) => htmlToText(c).replace(/\n+/g, ' ').trim()).filter(Boolean);
+      const header = /<th\b/i.test(row) && !/<td\b/i.test(row);
+      if (header && !names) names = cells.map((c) => c.slice(0, 40));
+      const labelled = !header && names && cells.length === names.length && names.every(Boolean) ? cells.map((c, k) => `${names[k]}: ${c}`) : cells;
+      return `<p>${labelled.join(' | ').replace(/</g, '&lt;')}</p>`;
+    });
   });
   return htmlToText(s);
 }
@@ -277,7 +297,62 @@ export async function wikipediaDocs(src, api) {
 export function linesOf(records, { fields = null, labels = {} } = {}) {
   const keys = fields || Object.keys(records[0] || {});
   const get = (r, f) => f.split('.').reduce((o, k) => o?.[k], r);
-  return records.map((r) => keys.map((f) => `${labels[f] || f}: ${get(r, f) ?? ''}`).join(' | '));
+  return records.map((r) => keys.map((f) => `${labels[f] || f}: ${plainValue(get(r, f))}`).join(' | '));
+}
+
+/**
+ * A field's value as text a quote can match: HTML in a JSON field (a Hacker News
+ * post's text: "it&#x27;s", "<p>") read as the words it shows, on one line.
+ */
+export function plainValue(v) {
+  if (v == null) return '';
+  const s = String(v);
+  return /<[a-z/]|&(?:#x?[0-9a-f]+|[a-z]+);/i.test(s) ? htmlToText(s).replace(/\s*\n+\s*/g, ' ').trim() : s;
+}
+
+/**
+ * The pack's topic bank (<pack>/topics.json): topics someone chose, each with the
+ * kind of post it suits and the pages that document it. Each topic's pages are
+ * read as one group, so a post is drafted from exactly them, and only by a format
+ * of that kind (poolFor). A page is read through its machine door: Hacker News
+ * through its API, never as a web page; a Wikipedia article through the MediaWiki
+ * API; anything else as its own text.
+ */
+export async function bankDocs(src, api) {
+  const file = path.join(packsDir(), src.account_id, api.file || 'topics.json');
+  if (!existsSync(file)) return [];
+  const topics = JSON.parse(readFileSync(file, 'utf8'));
+  const slug = (s) => createHash('sha256').update(String(s)).digest('hex').slice(0, 10);
+  const docs = [];
+  for (const t of (Array.isArray(topics) ? topics : topics.topics || []).slice(0, api.max || 200)) {
+    const group = `bank:${t.kind}:${slug(t.topic)}`;
+    const seen = new Set();
+    for (const u of t.urls || []) {
+      const hn = /news\.ycombinator\.com\/item\?id=(\d+)|story_(\d+)/.exec(u);
+      const id = hn && (hn[1] || hn[2]);
+      const key = id ? `hn:${id}` : u;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      try {
+        if (id) {
+          const item = await getJson(`https://hn.algolia.com/api/v1/items/${id}`);
+          const text = [item.title, plainValue(item.text || ''), `points: ${item.points ?? ''} | posted: ${String(item.created_at || '').slice(0, 10)}`].filter(Boolean).join('\n');
+          docs.push({ url: `https://news.ycombinator.com/item?id=${id}`, title: `${item.title} (Hacker News)`, text, publishedAt: item.created_at || null, group, key: group });
+        } else if (/\.wikipedia\.org\/wiki\//.test(u)) {
+          const lang = /^https:\/\/(\w+)\./.exec(u)[1];
+          const title = decodeURIComponent(u.split('/wiki/')[1]).replace(/_/g, ' ');
+          for (const d of await wikipediaDocs({ ...src, lang }, { kind: 'wikipedia', lang, titles: [title] })) docs.push({ ...d, group, key: group });
+        } else {
+          const page = await getText(u);
+          const text = labelTables(/\.md(\.txt)?$/.test(new URL(u).pathname) ? page.body : htmlToText(mainHtml(page.body)));
+          docs.push({ url: u, title: titleOf(page.body) || t.topic, text: text.slice(0, maxOf(api)), publishedAt: null, group, key: group });
+        }
+      } catch {
+        /* one page that cannot be read leaves the topic with the rest */
+      }
+    }
+  }
+  return docs;
 }
 
 /**

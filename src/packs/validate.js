@@ -1,4 +1,5 @@
 import { contrast, deltaE, isHex, bestInk } from '../render/color.js';
+import { VISUAL_TYPES } from '../render/visuals.js';
 import { isFont } from '../render/fonts.js';
 import { isTemplate, TEMPLATES } from '../render/templates/registry.js';
 import { COMPLIANCE, FINANCIAL, isCompliance } from '../rules/compliance.js';
@@ -85,6 +86,7 @@ export function validatePack(pack) {
     if (contrast(onAccent, c.accent) < 4.5) p.push(`theme.json: text on accent is ${contrast(onAccent, c.accent).toFixed(2)}:1, needs 4.5:1 (set colors.onAccent)`);
   }
   for (const k of ['display', 'text']) if (!isFont(theme.fonts?.[k])) p.push(`theme.json: fonts.${k} "${theme.fonts?.[k]}" is not a bundled font`);
+  for (const v of theme.visuals || []) if (!VISUAL_TYPES.includes(v)) p.push(`theme.json: visuals: "${v}" is not a graphic the engine draws (${VISUAL_TYPES.join(', ')})`);
 
   // ---- sources.json
   const list = sources.sources || [];
@@ -111,6 +113,8 @@ export function validatePack(pack) {
     fids.add(f.id);
     if (!String(f.name || '').trim()) p.push(`${where}: name is required`);
     if (f.kind != null && !isKind(f.kind)) p.push(`${where}: kind "${f.kind}" is not one of ${Object.keys(KINDS).join(', ')}`);
+    const srcIds = new Set((pack.sources?.sources || []).map((s) => s.id));
+    for (const sid of f.sources || []) if (!srcIds.has(sid)) p.push(`${where}: sources: "${sid}" is not one of this pack's sources`);
     if (!Array.isArray(f.hooks) || !f.hooks.length) p.push(`${where}: hooks must list at least one pattern`);
     else {
       const ids = hookPatterns(f).map((h) => h.id);
@@ -141,6 +145,12 @@ export function validatePack(pack) {
   if (meta.events?.source && !list.some((x) => x.id === meta.events.source)) p.push(`pack.json: events.source "${meta.events.source}" is not a source in sources.json`);
   if (meta.imagery?.safety && !['standard', 'strict'].includes(meta.imagery.safety)) p.push('pack.json: imagery.safety must be "standard" or "strict"');
   for (const prov of meta.imagery?.providers || []) if (!['commons', 'pexels', 'unsplash', 'pack'].includes(prov)) p.push(`pack.json: imagery.providers: "${prov}" is not one of commons, pexels, unsplash, pack`);
+  const minDetails = meta.research?.minDetails;
+  if (minDetails !== undefined && !(Number.isInteger(minDetails) && minDetails >= 0 && minDetails <= 8)) p.push('pack.json: research.minDetails is a whole number from 0 to 8');
+  const maxAge = meta.research?.maxAgeDays;
+  if (maxAge !== undefined && !(Number.isInteger(maxAge) && maxAge >= 7)) p.push('pack.json: research.maxAgeDays is a whole number of days, 7 or more');
+  if (meta.bio !== undefined && [...String(meta.bio)].length > 80) p.push('pack.json: bio is over 80 characters, the limit on TikTok');
+  if ([...String(meta.displayName || '')].length > 30) p.push('pack.json: displayName is over 30 characters, the limit on Instagram and TikTok');
   if (!Array.isArray(formats.caption?.questions) || !formats.caption.questions.length) p.push('formats.json: caption.questions must list at least one question');
   const tags = [...(formats.hashtags?.broad || []), ...(formats.hashtags?.niche || [])];
   if (tags.length < 3 || tags.some((t) => !/^#[\p{L}\p{N}_]+$/u.test(t))) p.push('formats.json: hashtags.broad + hashtags.niche need at least 3 tags like #מילה');

@@ -61,7 +61,7 @@ export const KINDS = {
     photo: 'last',
     cta: 'comment',
     subject: ['answer'],
-    prompt: `guess-who: the cover asks them to guess a famous person (or club, or company) from clues. 3 "clue" slides (4 at most), from hard to easy, each one sourced fact that never names the answer, and never names anything that gives it away at once. The "reveal" slide is last: its title is the answer (subject.answer) and its body one sourced line. The answer appears nowhere before the reveal: not on the cover, not in a clue, not in the captions or the keywords. Never number a clue yourself ("רמז 1"): the design draws the badges.`,
+    prompt: `guess-who: the cover asks them to guess a famous person (or club, or company) from clues. 3 "clue" slides (4 at most), from hard to easy, each one sourced fact that never names the answer, and never names anything that gives it away at once. The "reveal" slide is last: its title is the answer (subject.answer) and its body one sourced line. The answer appears nowhere before the reveal: not on the cover, not in a clue, not in the captions or the keywords. The cover asks the question and gives no clue of its own (no year, title or deed that points to the answer): the clues are the slides'. The answer is someone the account's audience knows by name: a guess nobody can get is no game. Never number a clue yourself ("רמז 1"): the design draws the badges.`,
   },
   'head-to-head': {
     group: 'number',
@@ -71,7 +71,7 @@ export const KINDS = {
     photo: 'cover',
     cta: 'comment',
     subject: ['a', 'b'],
-    prompt: `head-to-head: two subjects, subject.a and subject.b (short names, as the slides call them). 4 to 6 "stat" slides: title is the stat's name, a and b are the two values exactly as the quotes give them (digits, with their unit), body one short line of context; each stat slide cites the facts that hold both values. Compare like with like: the same competition and period for both, said on the slide. The last slide, "verdict", says who the numbers favour and the one stat that decides it, with no new number. It can take a side.`,
+    prompt: `head-to-head: two subjects still argued over (two players, two coaches, two teams, two eras, two products), never one past match whose winner everyone knows; subject.a and subject.b (short names, as the slides call them). 4 to 6 "stat" slides: title is the stat's name, a and b are the two values exactly as the quotes give them (digits, with their unit), body one short line of context; each stat slide cites the facts that hold both values. Compare like with like: the same competition and period for both, said on the slide. Both values of every stat are real values from the quotes, and the same measure on both sides (a record against a record, never an age against a result): never a dash or "אין נתון" (drop a stat one side does not have). When the two meet at a coming event (a fight, a match), the cover or the first stat names the event and its date from the quotes: a matchup without a when reads as old news. The last slide, "verdict", takes a side: who the numbers favour and the one stat that decides it, with no new number. Never a hedge.`,
   },
   ranking: {
     group: 'number',
@@ -79,7 +79,7 @@ export const KINDS = {
     segments: [['ranks', 0, 1], ['rank', 5, 5]],
     photo: 'cover',
     cta: 'comment',
-    prompt: `ranking: a top 5, or a top 10. Famous names only. Every place is decided by a number in the quotes (goals, titles, wins, money), and the order follows that number. Five "rank" slides go from 5th place to 1st: number 1 is the last slide. For a top 10, one "ranks" slide comes first and holds places 10 to 6 as exactly five short lines in its body, one per line, in order, each with its number. Never write a place number yourself ("מקום 3", "#1"): the design draws them. A rank slide's title is the name; its body the number that ranks it and one short line.`,
+    prompt: `ranking: a top 5, or a top 10. Famous names only. Every place is decided by a number in the quotes (goals, titles, wins, money), and the order follows that number. Five "rank" slides go from 5th place to 1st: number 1 is the last slide, and the cover never names it (nor the whole list): it teases the countdown. For a top 10, one "ranks" slide comes first and holds places 10 to 6 as exactly five short lines in its body, one per line, in order, each with its number. Never write a place number yourself ("מקום 3", "#1"): the design draws them. A rank slide's title is the name; its body the number that ranks it and one short line, and its graphic shows that number big, number 1's included. One measure for every place (a team's score in one match, never beside a player's season): the cover or the first slide says what is counted.`,
   },
   iceberg: {
     group: 'entertaining',
@@ -96,7 +96,7 @@ export const KINDS = {
     factFree: ['ask'],
     photo: 'cover',
     cta: 'comment',
-    prompt: `hot-take: one bold opinion on the cover, the account's own (the design labels it as opinion). 3 to 5 "case" slides make the case with sourced facts: the opinion is ours, the facts inside it are never invented. The last slide, "ask", restates the take in a few words and asks if they agree. Never insult a person, a club, a company or fans.`,
+    prompt: `hot-take: one bold opinion on the cover, the account's own (the design labels it as opinion): one that a good share of the audience would argue against, never the answer everyone already gives. One case slide names the strongest rival view by name and answers it. 3 to 5 "case" slides make the case with sourced facts: the opinion is ours, the facts inside it are never invented. The last slide, "ask", restates the take in a few words and asks if they agree. Never insult a person, a club, a company or fans.`,
   },
   'myth-fact': {
     group: 'entertaining',
@@ -106,7 +106,7 @@ export const KINDS = {
     factFree: ['myth'],
     photo: 'cover',
     cta: 'save',
-    prompt: `myth-fact: 2 or 3 pairs. A "myth" slide says a common belief in a few words, the way people say it (the design stamps it as a myth); the "fact" slide right after it says what the sources say instead, with its facts. A myth slide holds no number that its fact slide's quotes do not hold. Pick beliefs people really hold; never a straw man.`,
+    prompt: `myth-fact: 2 or 3 pairs. A "myth" slide says a common belief in a few words, the way people say it (the design stamps it as a myth); the "fact" slide right after it says what the sources say instead, with its facts. A myth slide holds no number that its fact slide's quotes do not hold. Pick beliefs the audience really holds and argues about (a myth no one believes is a straw man and loses the reader); one subject for the whole post, never two unrelated ones.`,
   },
   meme: {
     group: 'entertaining',
@@ -219,6 +219,7 @@ export function kindProblems(format, post) {
     content.forEach((s, i) => {
       if (s.role === 'stat' && !(String(s.a || '').trim() && String(s.b || '').trim())) out.push(`slide ${i + 1}: a stat slide needs both values (a and b)`);
       if (s.role === 'stat' && String(s.a || '').length + String(s.b || '').length > 32) out.push(`slide ${i + 1}: a and b are values, not sentences (at most a few characters each)`);
+      if (s.role === 'stat' && [s.a, s.b].some((v) => !/[\p{L}\p{N}]/u.test(String(v || '')))) out.push(`slide ${i + 1}: a stat needs a real value on both sides, never a dash: drop a stat one side does not have`);
     });
   }
   if (name === 'on-this-day' && subj.date && !/\d{4}/.test(subj.date)) out.push('subject.date must hold the year');
@@ -231,6 +232,14 @@ export function kindProblems(format, post) {
     const early = [['the cover', `${post.hook} ${post.sub}`], ['the captions', `${post.caption} ${post.captionShort}`], ['the keywords', (post.keywords || []).join(' ')], ...content.filter((s) => s.role === 'clue').map((s, i) => [`clue ${i + 1}`, `${s.title} ${s.body}`])];
     content.forEach((s, i) => s.role === 'clue' && /(?:^|\s)רמז\s*(?:\d|מספר|ראשון|שני|שלישי|רביעי)/.test(`${s.title} ${s.body}`) && out.push(`slide ${i + 1}: no clue numbers in the text, the design draws them`));
     for (const [where, text] of early) if (spoils(text)) out.push(`${where} gives the answer away ("${subj.answer}"): it may appear only on the reveal slide`);
+  }
+  if (name === 'guess-who') {
+    // "לפי 3 רמזים" over four clues read as a mistake to every reader who counted.
+    const clues = content.filter((s) => s.role === 'clue').length;
+    const WORDS = { שלושה: 3, שלוש: 3, ארבעה: 4, ארבע: 4, חמישה: 5, חמש: 5 };
+    const m = `${post.hook} ${post.sub}`.match(/(\d+|שלושה|שלוש|ארבעה|ארבע|חמישה|חמש)\s+רמזים/);
+    const said = m ? Number(WORDS[m[1]] ?? m[1]) : null;
+    if (said != null && said !== clues) out.push(`the cover promises ${said} clues and the post has ${clues}: make them match`);
   }
   if (name === 'ranking') {
     const ranks = content.find((s) => s.role === 'ranks');

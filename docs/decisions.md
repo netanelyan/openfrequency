@@ -186,7 +186,7 @@ Each account's share is the cap by `budget.share` weights, after 5% kept for
 onboarding. Every day, before drafting, the month is forecast: what was spent
 and held, plus the slots still to draft this month (Shabbat and festivals
 excluded) times the measured cost per produced post (blocked attempts included).
-If it does not fit, the weakest account drops to one post a day, then the next.
+If it does not fit, the weakest account comes down half a post a day at a time to one a day, then the next; past that, to a post every other day (see *The cut comes in half posts*, below).
 "Weakest": by its own 72-hour results against the median of its platform; with
 none yet, by how often the owner approved its posts; with neither, the one whose
 posts cost most. The money a cut frees goes to the accounts that keep their
@@ -614,3 +614,231 @@ blind reviewer caught it. The review and the rewrite now see each claim with its
 quote, and the outline prompt says a translated term takes its own Hebrew name. The
 launch set was reviewed before this change; `npm run launch` would now ask for its
 reviews again.
+
+## Session of 2026-10-14 (later): development on Claude Code, visuals, research
+
+### Development runs on Claude Code, production on the API
+
+Every model call goes through one entry point (`askJson`) to one of two backends.
+`claude-cli` runs the Claude Code CLI headless (`claude -p`): the request
+production would send, with its system blocks joined in order, its user turn and
+image as one stream-json line, its schema through `--json-schema`, its model and
+effort, all tools off, a fresh session that is never saved, and `--safe-mode` so
+nothing of the machine's own setup (CLAUDE.md, hooks, skills, MCP) reaches it. `api`
+is the official SDK with batches and caching. `OF_ENV` picks: `dev`, the default, is
+the CLI; `prod`, set by the service unit, is the API.
+
+Decided:
+- **The key never reaches the CLI.** The child process gets the environment without
+  any `ANTHROPIC_*` variable: with `ANTHROPIC_API_KEY` set, the CLI would bill the API
+  instead of the subscription.
+- **In dev the API is refused** unless the command says `--allow-api`, in the client
+  itself, so no path reaches it by accident. Every refusal is logged to
+  `$OF_HOME/logs/api-refusals.log`.
+- **One call at a time,** within a process (a promise chain) and across processes (a
+  lock file, taken over when a crashed process left it).
+- **A usage limit waits** for the reset the CLI names, or half an hour, and makes the
+  same call again; it never falls back to the API. An answer that is not JSON is asked
+  for once more with the error, then fails.
+- **Tokens are recorded, money is not.** A CLI call is a spend row of $0 with its usage
+  and what the same call would cost through the API as production sends it (batched,
+  the pack prefix read from the cache), so the forecast stays measurable. When the
+  CLI's own schema check sent an answer back, its usage adds both rounds; production
+  answers in one constrained request, so the price is the last round's. The CLI adds
+  about 1,000 tokens of its own framing to every call; the forecast says so.
+- **The same validation.** The answer goes through the same checks downstream, and
+  nothing else touches it: a pass in dev is a pass in prod.
+
+### Every post has visuals
+
+A blind review's most common complaint was a deck of text cards. Now at least half of
+a post's slides carry a visual, and the cover always does.
+
+- **The engine draws its own graphics** from data the drafting model writes on a slide
+  (`visual`): a timeline, stat bars drawn to scale, a head-to-head card, one big number
+  (a ring for a percentage), a calendar page, a pitch with the players in their
+  positions, kit-colour blocks (colours only), a fight record, the weight-class ladder,
+  a product's stack, a funnel, price cards and mock screens (chat, terminal, browser).
+  Each theme names the types that fit its account (`theme.json` `visuals`). Nothing is
+  a logo, a crest, a screenshot or another page's picture.
+- **A graphic's numbers are claims.** The fact gate reads every number a graphic draws
+  against the quotes its slide cites, like the slide's own text; the token covers the
+  graphic, so it cannot change after the gate; the review reads its names and numbers,
+  and a graphic it doubts is dropped, not rewritten.
+- **The cover always shows a picture**: a photograph that passed every check, else the
+  graphic the model chose for it (`coverVisual`), else the art of its kind (an iceberg,
+  a podium, a versus split, a silhouette, a calendar page...).
+- **The rule is counted in code** (with the cover, half the slides; a head-to-head's
+  stat slide counts) and refused like any other check, so the redraft fixes it.
+- **Every graphic is tested** to fit a TikTok and an Instagram slide in four templates,
+  right to left, with Hebrew and Latin mixed, numbers, units and ranges. A text node
+  with no Hebrew in it is isolated too ("2003–04" came out "04–2003"), and a run with no
+  space never breaks across lines ("3–0" broke as "3–" and "0").
+- **An account's mark** (`brand/logo.png` or `.svg` in the pack) is drawn small on the
+  first and the last slide when it is there.
+
+### A photograph must show what its slide says
+
+A content slide may ask for a photograph of the person or place it is about
+(`imageQuery`). The picture must name its subject in its own title, description or
+categories (Commons categories added; a name split across the title, as "Holly with
+berries, Holm Hill", is still refused), pass the image screen, and pass a vision check
+in the same Haiku call: the model says what the picture mainly shows and whether that
+fits the slide. It is told not to recognise anyone by their face: the file's own
+metadata names the person, the model checks the picture fits (one person in the right
+setting, not a rock, a plant, a crowd or a poster). A picture that fails is not used
+and the slide keeps its graphic: a wrong picture is worse than none. A guess-who's clue
+never gets one (it would give the answer away). Every picture's license and author is
+written per post, and the caption credits every one whose license asks for it.
+
+### Research before drafting, and three details or no post
+
+A post drafted from the one document it came from told what everyone knows. Now the
+outline names the articles that would tell its subject in more detail (`research`);
+the engine reads them through the pack's own approved sources (a Wikipedia of an
+approved Wikipedia source, Hacker News where the pack has it), stores them, and one
+call pulls out the details a fan would want: what someone said, the minute or the
+round, the moment, what came before, what came after, a telling number. Each is
+verified against its stored text like any fact, and says which slide it belongs on.
+
+- **A topic needs three verified details** (`research.minDetails`, 3 by default) or it is
+  left for the next one; general wording never fills the gap.
+- **The slides must use them**: at least three, each on its slide, cited by id.
+- **The outline may plan a moment its document only names**, leaving the facts of the
+  slides that need the details to research; a slide still without a fact after it is
+  dropped.
+- **The review checks every detail**: a name, a number, a minute, a quote or a moment
+  that no fact's source holds is a fact problem.
+
+### A format names its sources; a topic bank; a source read once in six hours
+
+- **A format can name the sources it draws from** (`formats.json` `sources`), in order.
+  A match story drafted from a results table cost six refused outlines before it found
+  an article.
+- **A topic bank** (`api.kind: "bank"`, the pack's `topics.json`) holds chosen topics,
+  each with the kind of post it suits and the pages that document it. A topic's pages
+  are one group, drafted together and only by a format of its kind. Hacker News pages
+  are read through its API, never fetched as pages.
+- **A JSON source can be one document per record** (`api.each`, one Hacker News post
+  each, with its own address), and HTML inside a JSON field is read as the words it
+  shows, so a quote with an apostrophe in it matches.
+- **A source read in the last six hours, for the same day, is not read again.** Every
+  post read every source, some forty requests a post, and Wikipedia throttles a reader
+  that asks that often.
+
+### A redraft is told which sentences were counted
+
+"4 sentences, 3 at most" was redrafted into the same four sentences: the model
+miscounts its own text. The message now quotes the sentences as the code split them,
+so the redraft joins or cuts the right ones.
+
+### What round 1 of the launch set changed before it was done
+
+The first posts of the round were stopped seven times in ten, most by the engine's
+own review. Each cause was fixed in the engine, and the round went on from where it
+was (the posts already made stayed):
+
+- **The redraft sees the draft it fixes.** It was told "fix these, keep everything
+  else" without the draft, so it wrote a new one from scratch, with new mistakes.
+- **A slide's uncited number is cited by code** when exactly one verified fact holds
+  it ("2022" on a slide that forgot the fact with the year). Two facts holding it, or
+  none, is left for the gate.
+- **A slide research left without a fact takes a spare detail** rather than being
+  dropped, which broke a post's shape (three slides where the kind needs four).
+- **A list is four short things in a row.** Clauses around one long one ("that year,
+  on 14 November, the company released X, which summarises sites") were refused, and
+  no redraft could fix what was not there. The message quotes the sentence, and the
+  sentence count quotes the sentences as counted.
+- **A product name's digits are not a number** ("Base44", "GPT-4o", "H100"); a token
+  that starts with its digits ("20M") still is.
+- **The review says yes or no to a fact problem** (`factIssue`): one reviewer filled
+  the field with "...so this is fine", and it blocked a post.
+- **A rewrite is kept when it adds no problem of its own**, and one the checks refuse
+  gets one more bounded call with the reasons. A flagged text now goes to the rewrite
+  with its limits and the facts its slide cites; a third of the rewrites were refused
+  for a limit or a number they could not know about.
+- **A photograph is checked against its file's own title, description and
+  categories**: a photo of the right player at another match (2018, on a slide about
+  2022) passed a check that looked only at the picture.
+- **A topic whose plan cannot keep the kind's shape is left for the next topic**, in the
+  same post, as a topic short of details already was; the post was blocked before.
+  A plan lost to facts its quotes do not hold still blocks as a fact-check failure
+  when no topic is left (the rails pause an account on those). A run of one role longer
+  than the kind takes ("turn" three times where it takes two) keeps the slides with
+  the most facts.
+- **A graphic the review doubts goes to the rewrite as its data** and comes back
+  corrected, or is dropped when it cannot be: dropping it outright left posts short of
+  their visuals, and the final gate refused them.
+- **A slide that does not fit is drawn again** without its framed photograph, then with
+  its type allowed down to 45%; a photograph left off on every platform is not credited.
+- **Three details are asked for, two pass after the redraft.** Two of a post's moments
+  on the slides still tell it; blocking a finished post for the third did not.
+
+### What the first blind review of round 1 changed
+
+Three readers a post, each blind to how it was made. Their reasons, the ones the
+engine can act on, and what changed:
+
+- **A table row is quoted with its header.** "| Claude Opus | $2 | $10 |" did not say
+  which number was input and which output, and a post titled its stats "the first
+  price in the table". Rows of a Markdown or an HTML table are now written "Model: X |
+  Batch input: $2 / MTok | ...", so a row quoted alone says what it holds.
+- **The model knows today's date**, and a story more than a year old says its year
+  and is told as what it shows now. A 2023 launch and a 2024 ruling were told as news,
+  and every reader caught it.
+- **A story ends on how it ended.** "What happened to X" ended without saying; a
+  story, a what-happened or an on-this-day is usable only when its documents, or the
+  articles research reads, say how it ended.
+- **No slide repeats another**, graphics included: a cover's price table drawn again
+  on slide 2 read as filler.
+- **A line wider than its box is cut, and the fit pass now sees it.** It measured only
+  how far a box ran down; "$120 מיליון" lost its last letters sideways on a cover. A
+  grid card shrinks and wraps rather than overflowing its column.
+- **A topic bank's page is credited by its site** ("Hacker News", "Anthropic",
+  "ויקיפדיה"), never as "the account's topic bank".
+- **A code name stays one run**: an underscore and a call's brackets are part of it
+  ("budget_tokens" came out "tokens_budget" in a Hebrew line).
+- **A photograph's date matters only for an action shot.** The rule added during round
+  1 (a picture from another event does not fit) refused every portrait of a fighter
+  taken at a later ceremony, and the fight account's posts went out with almost no photographs,
+  the reviewers' first complaint. Now a portrait or a press photo of the right person
+  fits whatever its date; an action shot fits only at the very event the slide is
+  about; a statue, a plaque or a painting of the person never does. A logo blocks a
+  picture only as its main element, not on a backdrop or a microphone behind the
+  person. Commons pictures from 800 pixels a side are taken (1000 cut most portraits).
+- **A guess-who's cover shows its answer's photograph blurred** past recognition, when
+  the reveal has one; otherwise a large question mark. The grey silhouette read as a
+  missing image. The cover gives no clue of its own.
+- **A head-to-head never shows a dash**, and its verdict takes a side; a ranking's cover
+  never names its number one.
+- **A cover without its own photograph tries the post's subject by name**, then takes
+  a portrait one of its slides found: readers asked for a face on the cover over the
+  kind's drawn art (an arrow, a flame read as clip art). Photographs are framed
+  toward the top, where faces are.
+- **A cover may hold three short sentences** ("X או Y? מי היה טוב יותר? התשובה בסוף"):
+  eleven words still bound it, and a pack's own cover pattern asked for three.
+- **Sideways overflow is measured on the text**, not on the box's scroll width, which
+  counted what was never drawn and refused finished posts.
+- **The cut comes in half posts, and the default cost is the measured one.** Real token
+  counts from the CLI put a post made at about $0.15 (stopped attempts included), not the
+  $0.035 the planner assumed: 180 posts would be about $27. A cut to whole posts a day
+  wasted money (one a day each left $1.35 unused at $0.15) or could not fit at all (at
+  $0.20, one a day each is over the cap). A rate can now be a half (1.5 is two posts one
+  day and one the next, 0.5 a post every other day), spread evenly over the calendar,
+  and nothing goes under a post every other day. `DEFAULT_COST_PER_POST` is $0.15 until
+  an account has four posts of its own.
+- **A photograph's title decides whom it shows.** A file titled for one person and filed
+  under another's category went on the other's cover (a Maeda photograph on a Hélio
+  Gracie post). The person's name must be in the title; a title that names nobody (a
+  camera's numbering) may be named by its description or categories. The sharpest
+  candidate is tried first.
+- **A cover takes only its own subject's photograph.** A slide's portrait moves to an
+  empty cover only when it is of the post's subject (a Dana White photograph once led a
+  post about another fighter), and never in a ranking, where it would show number one,
+  or a guess-who, where it would show the answer.
+- **A head-to-head's value shrinks rather than break.** "נוקאאוט" broke over two lines on
+  the narrow size; a value now never wraps inside a word, and the fit pass shrinks it.
+  Its two values are the same measure (never an age against a result), and a coming
+  fight names its event and date.
+- **A guess-who's answer is someone the audience knows**, and the blurred photograph is
+  lighter, with a question mark over it: the heavy blur read as a grey blob.

@@ -16,6 +16,19 @@ export function inWindows(t, windows = []) {
   return windows.some(([a, b]) => h >= a && h < b);
 }
 
+/**
+ * How many posts a day's rate allows on one Israel date, or null for no limit. A whole rate is that many every day;
+ * a budget cut can leave a fraction (1.5 is two posts one day and one the next, 0.5 a post every other day), spread
+ * evenly over the calendar.
+ */
+export function postsOn(date, perDay) {
+  const p = Number(perDay);
+  if (!(p > 0)) return null;
+  if (Number.isInteger(p)) return p;
+  const n = Math.round(Date.parse(`${date}T00:00:00Z`) / 86_400_000);
+  return Math.floor((n + 1) * p) - Math.floor(n * p);
+}
+
 /** { slots: Date[], dropped: [{ at, why }] } for one account on one Israel date. */
 export function slotsFor(date, schedule = {}, { notBefore = null } = {}) {
   const day = schedule.slotsByDay?.[String(weekday(date))] || schedule.slots || [];
@@ -29,6 +42,6 @@ export function slotsFor(date, schedule = {}, { notBefore = null } = {}) {
     else if (notBefore != null && at.getTime() < notBefore) dropped.push({ at: hhmm, why: 'השעה עברה' });
     else slots.push(at);
   }
-  const cap = Number(schedule.postsPerDay) || slots.length;
+  const cap = postsOn(date, schedule.postsPerDay) ?? slots.length;
   return { slots: slots.slice(0, cap), dropped };
 }

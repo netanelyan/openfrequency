@@ -2,8 +2,11 @@
 
 2026-10-13, updated 2026-10-14. What the engine costs to run, what each service
 gives for free, what every phase 2 change did to the cost of a post, and the month
-at the planned volume. The current forecast is the last section's, measured on the
-three accounts' launch set: **$7.20 to $12.20 at 180 posts, expected**.
+at the planned volume. The current forecast is the section
+[The full pipeline, measured on real token counts](#the-full-pipeline-measured-on-real-token-counts-2026-10-14):
+**about $27 at 180 posts, expected, and $36 in the worst case: over $15.** The
+planner cuts volume to fit: **about 86 posts a month expected, 71 in the worst
+case**, one a day per account, never a cheaper model or a shorter prompt.
 
 ## The rule
 
@@ -193,8 +196,8 @@ another. Counting all of it:
 
 **The expected month is inside $15 without Zernio; the worst cases are not.** The
 cap holds in every case: each call reserves its worst case first, and the planner
-cuts the weakest account to one post a day before the month runs out, so a dear
-month publishes fewer posts (about 100 to 160), never more money. Zernio stays on
+cuts the weakest account first before the month runs out, so a dear month
+publishes fewer posts, never more money. Zernio stays on
 its own line above: $6 a month for the three TikTok accounts on their own. Photos
 come from Wikimedia Commons (free); Pexels and Unsplash are not used by these
 accounts.
@@ -204,6 +207,74 @@ the review's rewrite threshold (a text at 4 of 10 or more is rewritten; at 5, a
 strict reviewer's rewrites would shrink by about a third), the stopped share (a
 live model that counts sentences better than the subagents did stops fewer
 posts), and batching, which is on by default and halves every call.
+
+## The full pipeline, measured on real token counts (2026-10-14)
+
+The second launch set ran every call through the Claude Code CLI (development
+spends nothing on the API: README, *Development and production*), and the CLI
+returns each call's real token counts, thinking included, where the sections
+above estimated thinking. Each call is priced at what the API would charge in
+production, the Message Batches price with the account's block read from the
+cache, and stored as `spend.api_usd`; `npm run launch -- costs --pack <id>`
+adds them up per call type.
+
+Since the last measurement a post also does more: a research step (a details
+call before the slides, on up to 60,000 characters of sources), a second rewrite
+pass for what the first refused, and a vision check on every photograph.
+
+| Call | Model | Avg tokens in | Avg out | Share of the cost |
+|---|---|---|---|---|
+| outline | Sonnet 5.5 | 14,000 to 15,800 | 1,900 to 2,700 | 29% |
+| details (research) | Sonnet 5.5 | 12,200 to 13,100 | 1,000 to 1,200 | 14% |
+| slides (with its one redraft) | Sonnet 5.5 | 11,800 to 13,100 | 2,600 to 2,800 | 36% |
+| review | Sonnet 5.5 | 4,300 to 4,900 | 1,000 to 1,300 | 9% |
+| rewrite | Sonnet 5.5 | 9,900 to 10,700 | 1,000 to 1,100 | 11% |
+| image check (vision) | Haiku | about 5,100 | about 850 | under 1% |
+
+Over the three accounts' rounds, 102 attempts made 50 posts (the checks stopped
+the rest, and each stopped attempt is paid for):
+
+| | Per attempt | Per post made, stopped attempts included |
+|---|---|---|
+| The three accounts | $0.067 to $0.078 | $0.126 to $0.181 |
+| All of them | $0.073 | **$0.149** |
+| The best and worst single round | | $0.111 and $0.201 |
+| The vision checks alone (3 to 9 a photo post) | $0.0005 a check | under $0.004 |
+
+The CLI adds about 1,000 tokens of its own framing to every call, so these run a
+few percent high.
+
+| Case | Per post made | 180 posts | Inside $15? |
+|---|---|---|---|
+| Expected (the average) | $0.15 | **$27** | no |
+| Best round | $0.115 | $20.70 | no |
+| Worst round | $0.20 | **$36** | no |
+| Vision checks, included above | under $0.004 | under $0.70 | |
+
+**180 posts a month does not fit in $15.** The rule is to cut volume, not quality,
+so the planner now cuts in half-post steps: the weakest account comes down
+half a post a day at a time (1.5 is three posts in two days) to one a day, then
+the next weakest; if every account is at one a day and the forecast still does
+not fit, the weakest goes on to a post every other day, then the next
+(`src/budget/plan.js`). `DEFAULT_COST_PER_POST` is now $0.15, the measured
+average, until each account has four posts of its own.
+
+What fits, on November 2026's calendar (152 slots at two a day: Shabbat and the
+festivals have none) and $14.25 (the cap less the 5% engine reserve):
+
+| Cost per post | The planner's rates | Posts | AI cost |
+|---|---|---|---|
+| $0.115 (best) | 1, 1.5 and 2 a day | 119 | $13.68 |
+| **$0.15 (expected)** | **1 a day each** | **86** | **$12.90** |
+| $0.20 (worst) | 1, 1, and a post every other day | 71 | $14.20 |
+
+Zernio stays on its own line, outside the cap ($6 a month for the three TikTok
+accounts).
+
+What would bring the volume back up, none of it taken because each one trades
+quality: fewer stopped attempts (the main lever: half the cost of a post made is
+attempts that did not make it), shorter source text into the outline (most of its
+14,000 tokens), and a cheaper model for the details step.
 
 ## Measuring the real thing
 

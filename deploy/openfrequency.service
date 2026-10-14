@@ -26,6 +26,8 @@ User=openfrequency
 Group=openfrequency
 WorkingDirectory=/opt/open-frequency
 Environment=NODE_ENV=production
+# Production drafts through the Anthropic API (batched and cached); a laptop is dev.
+Environment=OF_ENV=prod
 Environment=OF_HOME=/opt/open-frequency/private
 Environment=PORT=4700
 Environment=PLAYWRIGHT_BROWSERS_PATH=/opt/open-frequency/.browsers

@@ -32,6 +32,7 @@ test('stock connectives, formal words, filler, exclamation marks and long dashes
   assert.ok(t('פוטוס, זמיה, קקטוס, אלוורה וסנסיווריה.').includes('structure'));
   assert.ok(!t('ב-23 במרץ 1988, בוולינגטון, ישראל 9, טייוואן 0.').includes('structure'));
   assert.ok(t('מכבי 5, הפועל 4, בית"ר 0, בני 1.').includes('structure'), 'four scores in a row are still a list');
+  assert.ok(!t('באותה שנה, ב-14 בנובמבר, AI21 הוציאה את Wordtune Read, שמסכם אתרים וסרטונים.').includes('structure'), 'clauses around a long one are a sentence');
 });
 
 test('lengths fit the text: a long TikTok caption, a short Instagram one, a body of lines, a name as a title', () => {

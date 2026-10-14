@@ -3,7 +3,7 @@ import { audit, getSetting, setSetting, settings } from '../core/store.js';
 import { j } from '../db/index.js';
 import { israelDate, israelInstant, addDays, hhmm } from '../schedule/israel.js';
 import { inRest } from '../schedule/shabbat.js';
-import { inWindows, slotsFor } from '../schedule/slots.js';
+import { inWindows, slotsFor, postsOn } from '../schedule/slots.js';
 import { buildPost, PausedError } from '../pipeline/build.js';
 import { publishPost } from '../publish/index.js';
 import { REWRITE_AT } from '../voice/review.js';
@@ -55,13 +55,12 @@ export function generationTargets(db, pack, { t = now(), lead = 0 } = {}) {
   const today = israelDate(t);
   const cut = perDayFor(db, pack.id, t);
   const sched = { ...pack.meta.schedule, ...(cut ? { postsPerDay: cut } : {}) };
-  const cap = Number(sched.postsPerDay) || Infinity;
   const live = db.all("SELECT slot_at FROM posts WHERE account_id = ? AND slot_at IS NOT NULL AND status NOT IN ('blocked', 'drafting')", pack.id).map((r) => r.slot_at);
   const have = new Set(live);
   const onDay = (d) => live.filter((s) => israelDate(Date.parse(s)) === d).length;
   const out = [];
   for (const [day, notBefore] of [[today, t + lead], [addDays(today, 1), null]]) {
-    const room = Math.max(0, cap - onDay(day));
+    const room = Math.max(0, (postsOn(day, sched.postsPerDay) ?? Infinity) - onDay(day));
     const free = slotsFor(day, sched, { notBefore }).slots.filter((s) => !have.has(s.toISOString()));
     out.push(...free.slice(0, room).map((s) => s.toISOString()));
   }

@@ -99,16 +99,23 @@ function sdkFor({ apiKey, workspaceId }) {
   return new Anthropic({ apiKey, fetch: doorFetch, maxRetries: 2, timeout: 10 * 60_000, ...(ws ? { defaultHeaders: { 'anthropic-workspace-id': ws } } : {}) });
 }
 
-export function claudeClient({ apiKey = process.env.ANTHROPIC_API_KEY, workspaceId = process.env.ANTHROPIC_WORKSPACE_ID } = {}) {
+/**
+ * The API client. `gate` runs before every request: in development it refuses
+ * one the command did not allow (src/llm/index.js, apiGate), so no path in the
+ * engine reaches the API by accident.
+ */
+export function claudeClient({ apiKey = process.env.ANTHROPIC_API_KEY, workspaceId = process.env.ANTHROPIC_WORKSPACE_ID, gate = () => {} } = {}) {
   const sdk = sdkFor({ apiKey, workspaceId });
   let fallbackRefused = false;
 
   return {
     kind: 'claude',
+    backend: 'api',
     /** Does a direct call on this model go out with server-side fallbacks (and so may be billed at another model's rates)? */
     fallsBack: (model) => TAKES_FALLBACK.test(model) && !fallbackRefused,
     async json(req) {
       const body = req.params || requestParams(req);
+      gate(`${req.task || 'a call'} on ${body.model}`);
       const withFallback = TAKES_FALLBACK.test(body.model) && !fallbackRefused;
       let res;
       try {
@@ -126,14 +133,16 @@ export function claudeClient({ apiKey = process.env.ANTHROPIC_API_KEY, workspace
 }
 
 /** The Message Batches API, through the same door: create, poll, read results. */
-export function claudeBatchApi({ apiKey = process.env.ANTHROPIC_API_KEY, workspaceId = process.env.ANTHROPIC_WORKSPACE_ID } = {}) {
+export function claudeBatchApi({ apiKey = process.env.ANTHROPIC_API_KEY, workspaceId = process.env.ANTHROPIC_WORKSPACE_ID, gate = () => {} } = {}) {
   const sdk = sdkFor({ apiKey, workspaceId });
   return {
     async create(requests) {
+      gate(`a message batch of ${requests.length}`);
       const b = await sdk.messages.batches.create({ requests });
       return { id: b.id, status: b.processing_status };
     },
     async retrieve(id) {
+      gate(`reading batch ${id}`);
       const b = await sdk.messages.batches.retrieve(id);
       return { id: b.id, status: b.processing_status, counts: b.request_counts };
     },

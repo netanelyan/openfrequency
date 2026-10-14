@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { visualText } from '../render/visuals.js';
 import { now } from '../core/clock.js';
 import { israelDate } from '../schedule/israel.js';
 
@@ -60,7 +61,9 @@ const HE_RE = new RegExp(`(?<![\\p{L}])[ובלהמש]{0,2}(${Object.keys(HE_NUM)
  * hebrew: also Hebrew counting words ("חמש", "שלושה"), for slide text.
  */
 export function numbersIn(text, { words = false, hebrew = false } = {}) {
-  const s = String(text || '');
+  // Digits inside a name that starts with a Latin letter are part of the name, not a number:
+  // "Base44", "GPT-4o", "H100", "Web3". A token that starts with its digits ("20M", "4K") is a number.
+  const s = String(text || '').replace(/(?<![\p{L}\p{N}])[A-Za-z][A-Za-z.]*(?:-?\d+[A-Za-z0-9.]*)+/gu, (t) => t.replace(/\d/g, 'x'));
   const out = new Set();
   for (const m of s.matchAll(/\d+(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?/g)) {
     const n = Number(m[0].replace(/,/g, ''));
@@ -138,9 +141,11 @@ export function gate({ slides, facts, caption = '', hook = '', sub = '', extra =
     // A count written in Hebrew words ("חמש") is held to its quotes like one written in digits,
     // and so are a head-to-head's two values.
     for (const x of numbersIn(`${s.title} ${s.body} ${s.a || ''} ${s.b || ''}`, { hebrew: true })) if (!nums.has(x)) problems.push(`${where}: the number ${x} is not in the quotes it cites`);
+    // A slide's graphic says its numbers too: a bar drawn at 120 is a claim of 120.
+    for (const x of numbersIn(visualText(s.visual), { hebrew: true })) if (!nums.has(x)) problems.push(`${where}: the visual's number ${x} is not in the quotes the slide cites`);
   });
   for (const [where, text] of [
-    ['the cover', `${hook} ${sub} ${(extra.keywords || []).join(' ')} ${extra.subject?.date || ''}`],
+    ['the cover', `${hook} ${sub} ${(extra.keywords || []).join(' ')} ${extra.subject?.date || ''} ${visualText(extra.coverVisual)}`],
     ['the caption', `${caption} ${extra.captionIg || ''}`],
   ]) {
     // "שמונה שנים" on a cover is a number like "8": held to the quotes, unless it is the post's own count.
@@ -160,7 +165,9 @@ export function tokenOf({ slides, caption = '', hook = '', sub = '', extra = {} 
   const slide = (s) => {
     const base = [s.kind, s.title || '', s.body || '', s.factKeys || []];
     const role = s.role && !['item', 'cover', 'closer'].includes(s.role) ? s.role : '';
-    return role || s.a || s.b ? [...base, role, s.a || '', s.b || ''] : base;
+    const withRole = role || s.a || s.b ? [...base, role, s.a || '', s.b || ''] : base;
+    // A slide's graphic is part of what was checked, when it has one.
+    return s.visual ? [...withRole, s.visual] : withRole;
   };
   const x = Object.fromEntries(Object.entries(extra || {}).filter(([, v]) => (Array.isArray(v) ? v.length : v && typeof v === 'object' ? Object.values(v).some(Boolean) : Boolean(v))));
   const body = JSON.stringify({ hook, sub, caption, slides: slides.map(slide), ...(Object.keys(x).length ? { extra: x } : {}) });

@@ -72,6 +72,9 @@ export const NAV = [
  * all of it spent (nothing is written until the next month), or an account cut
  * to one post a day because the forecast did not fit.
  */
+/** A posting rate in words: a cut can leave half a post a day. */
+export const rateText = (p) => (p === 0.5 ? 'פוסט כל יומיים' : p === 1 ? 'פוסט אחד ביום' : Number.isInteger(p) ? `${p} פוסטים ביום` : `${p * 2} פוסטים ביומיים`);
+
 export function budgetBanner(b) {
   if (!b) return '';
   const out = [];
@@ -80,7 +83,7 @@ export function budgetBanner(b) {
   if (b.level === 'stop') out.push(`<div class="banner bad">${icon('alert')}<div><b>התקציב החודשי נגמר.</b><p>שום פוסט לא נכתב עד ${esc(nm)}. פוסטים שכבר אושרו ממשיכים לצאת.</p></div><a class="btn sm" href="/settings#budget">לתקציב</a></div>`);
   else if (b.level === 'warn') out.push(`<div class="banner warn">${icon('alert')}<div><b>${pctTxt} מהתקציב החודשי כבר נוצלו.</b><p>התחזית לסוף החודש: $${(b.forecast || 0).toFixed(2)} מתוך $${b.cap}. ב-100% שום פוסט לא נכתב עד ${esc(nm)}.</p></div><a class="btn sm" href="/settings#budget">לתקציב</a></div>`);
   if (b.cuts?.length) {
-    out.push(`<div class="banner info">${icon('clock')}<div><b>התקציב קצר החודש, אז מצמצמים כמות ולא איכות.</b>${b.cuts.map((c) => `<p>${esc(c.name)}: פוסט ${c.perDay === 1 ? 'אחד' : c.perDay} ביום במקום ${c.planned}.</p>`).join('')}</div><a class="btn sm" href="/settings#budget">למה</a></div>`);
+    out.push(`<div class="banner info">${icon('clock')}<div><b>התקציב קצר החודש, אז מצמצמים כמות ולא איכות.</b>${b.cuts.map((c) => `<p>${esc(c.name)}: ${rateText(c.perDay)} במקום ${c.planned} ביום.</p>`).join('')}</div><a class="btn sm" href="/settings#budget">למה</a></div>`);
   }
   return out.join('');
 }

@@ -48,10 +48,10 @@ const describes = (text, words) => {
 const commons = {
   id: 'commons',
   ready: () => true,
-  async search(query, { n = 12 } = {}) {
+  async search(query, { n = 20 } = {}) {
     const params = new URLSearchParams({
       action: 'query', format: 'json', formatversion: '2', generator: 'search', gsrsearch: `${query} filetype:bitmap`, gsrnamespace: '6', gsrlimit: String(n),
-      prop: 'imageinfo', iiprop: 'url|size|extmetadata|mime', iiurlwidth: '1440',
+      prop: 'imageinfo|categories', iiprop: 'url|size|extmetadata|mime', iiurlwidth: '1440', clshow: '!hidden', cllimit: 'max',
     });
     const body = await getJson(`https://commons.wikimedia.org/w/api.php?${params}`);
     return (body?.query?.pages || [])
@@ -71,12 +71,16 @@ const commons = {
           authorUrl: null,
           sourceUrl: ii?.descriptionurl || null,
           alt: `${p.title} ${plain(md.ImageDescription?.value)}`.slice(0, 400),
+          // A file's categories name what it shows ("Steven Gerrard", "Liverpool F.C. players"), often when its title does not.
+          categories: (p.categories || []).map((c) => String(c.title || '').replace(/^Category:/, '')).join(' · ').slice(0, 600),
           mime: ii?.mime,
         };
       })
+      // The sharpest first: a blurry candid was picked over a portrait because it came first.
+      .sort((a, b) => Math.min(...b.original) - Math.min(...a.original))
       // A license that requires attribution is usable only with a name to attribute. And a
-      // photograph, not a still from a video or a screenshot: a JPEG at least 1000 pixels a side.
-      .filter((c) => c.url && c.mime === 'image/jpeg' && Math.min(...c.original) >= 1000 && commonsLicenseOk(c.license) && (c.author || !needsCredit(c.license)));
+      // photograph, not a still from a video or a screenshot: a JPEG at least 800 pixels a side.
+      .filter((c) => c.url && c.mime === 'image/jpeg' && Math.min(...c.original) >= 800 && commonsLicenseOk(c.license) && (c.author || !needsCredit(c.license)));
   },
 };
 
@@ -157,21 +161,41 @@ export function namesIn(title, names) {
   return want.slice(1).some((b, i) => words.some((w, j) => w === want[i] && words[j + 1] === b));
 }
 
+/** Does a file's title name a person or a place (two capitalised words in a row), rather than a camera's numbering? */
+export function titleNamesSomeone(title) {
+  const t = String(title || '').replace(/^File:/, '').replace(/\.[a-z]{3,4}$/i, '').replace(/[_()-]/g, ' ');
+  return /\p{Lu}\p{Ll}+\s+\p{Lu}\p{Ll}+/u.test(t);
+}
+
 /** CC BY and CC BY-SA require the author and the license next to the picture. */
 export const needsCredit = (license) => /\bby\b|attribution/i.test(String(license || ''));
 
+/** The names a query asks a picture to show: its capitalised words, less the promotions' and the sport's own. */
+export const namesOf = (query) => String(query).split(/\s+/).filter((w) => /^\p{Lu}\p{L}{2,}/u.test(w) && !/^(UFC|PFL|ONE|MMA|BJJ|FC|The|Stadium|Arena|Park)$/i.test(w));
+
 const PROVIDER_NAME = { commons: 'Wikimedia Commons', pexels: 'Pexels', unsplash: 'Unsplash' };
 
+/** Every photograph a post shows: its slides' and its lead one, once each. */
+export function postImages(db, post) {
+  const ids = [...new Set([...(post.slides || []).map((s) => s.image_id), post.checks?.image].filter(Boolean))];
+  return ids.map((id) => db.get('SELECT * FROM images WHERE id = ?', id)).filter(Boolean);
+}
+
+/** The photographs of a post the screen could not clear and no person has looked at yet. */
+export const waitingImages = (db, post) => postImages(db, post).filter((img) => img.safety && img.safety !== 'ok' && !img.reviewed_at);
+
 /**
- * The credit line a post's caption carries when its photo's license asks for one,
- * or ''. It is added when the caption is published, after the checks: a license
- * name ("CC BY-SA 4.0") is not a claim, and its numbers are not facts.
+ * The credit line a post's caption carries for the photos whose license asks for
+ * one, or ''. It is added when the caption is published, after the checks: a
+ * license name ("CC BY-SA 4.0") is not a claim, and its numbers are not facts.
  */
 export function imageCredit(db, post) {
-  const id = (post.slides || []).find((s) => s.image_id)?.image_id;
-  const img = id ? db.get('SELECT provider, license, author FROM images WHERE id = ?', id) : null;
-  if (!img || !needsCredit(img.license)) return '';
-  return `צילום: ${img.author} · ${img.license} · ${PROVIDER_NAME[img.provider] || img.provider}`;
+  const ids = [...new Set((post.slides || []).map((s) => s.image_id).filter(Boolean))];
+  const credits = ids
+    .map((id) => db.get('SELECT provider, license, author FROM images WHERE id = ?', id))
+    .filter((img) => img && needsCredit(img.license))
+    .map((img) => `${img.author} · ${img.license} · ${PROVIDER_NAME[img.provider] || img.provider}`);
+  return credits.length ? `${credits.length > 1 ? 'צילומים' : 'צילום'}: ${[...new Set(credits)].join(' | ')}` : '';
 }
 
 /**
@@ -180,7 +204,7 @@ export function imageCredit(db, post) {
  * render the theme's own ground instead of a photograph. A run that wants real
  * photographs with recorded drafts (the launch set) sets ctx.imagesLive.
  */
-export async function findImage(ctx, { pack, query, postId = null }) {
+export async function findImage(ctx, { pack, query, postId = null, claim = '' }) {
   if (!query || (ctx.mode === 'recorded' && !ctx.imagesLive)) return null;
   const blocked = blockedQuery(pack, query) || describes(query, ALWAYS_BLOCK);
   if (blocked) {
@@ -200,10 +224,13 @@ export async function findImage(ctx, { pack, query, postId = null }) {
     }
     // A query that names someone ("Holly Holm UFC") takes only a picture whose own title
     // names them too: a search can return a photo of somebody else from the same event.
-    const names = String(query).split(/\s+/).filter((w) => /^\p{Lu}\p{L}{2,}/u.test(w) && !/^(UFC|PFL|ONE|MMA|BJJ|FC|The)$/i.test(w));
+    const names = namesOf(query);
     for (const c of found) {
       if (describes(c.alt, block)) continue;
-      if (names.length && !namesIn(`${c.providerId || ''} ${c.alt || ''}`, names)) continue;
+      // The name in the file's own title. A title that names nobody (a camera's "IMG_2041.jpg") may be named by its
+      // description or categories; a title that names someone else may not: a photo titled for Mitsuyo Maeda, filed
+      // under a category of Hélio Gracie, went on a Hélio Gracie cover.
+      if (names.length && !namesIn(String(c.providerId || ''), names) && (titleNamesSomeone(c.providerId) || !namesIn(`${c.alt || ''} ${c.categories || ''}`, names))) continue;
       if (!c.license) continue;
       let bytes;
       try {
@@ -212,11 +239,12 @@ export async function findImage(ctx, { pack, query, postId = null }) {
         continue;
       }
       // The screen: a picture with blood, an injury, a fighter down, a watermark or a belt is never used.
-      const screen = await screenImage(ctx, { pack, buf: bytes.buf, type: bytes.type, meta: `${c.providerId || ''} ${c.alt || ''}`, postId });
+      const screen = await screenImage(ctx, { pack, buf: bytes.buf, type: bytes.type, meta: `${c.providerId || ''} ${c.alt || ''} ${c.categories || ''}`, postId, query, claim });
       if (screen.safety === 'refused') {
         ctx.log?.(`image refused (${screen.why}): ${c.providerId}`);
         continue;
       }
+      const match = { title: Boolean(names.length), model: screen.model ? { consistent: screen.model.consistent, mainSubject: screen.model.mainSubject } : null, claim: claim ? claim.slice(0, 200) : null };
       if (c.track) getJson(c.track, { headers: { authorization: `Client-ID ${process.env.UNSPLASH_ACCESS_KEY}` } }).catch(() => {});
       const hash = createHash('sha256').update(bytes.buf).digest('hex');
       const dir = ensureDir(path.join(mediaDir(), 'images'));
@@ -225,7 +253,7 @@ export async function findImage(ctx, { pack, query, postId = null }) {
       const id = ctx.db.insert('images', {
         provider: c.provider, provider_id: c.providerId, license: c.license, license_url: c.licenseUrl, author: c.author, author_url: c.authorUrl,
         source_url: c.sourceUrl, alt: c.alt, query, ai_generated: 0, realistic: 0, file, sha256: hash, created_at: nowIso(),
-        safety: screen.safety, safety_json: screen,
+        safety: screen.safety, safety_json: screen, match_json: match, categories: c.categories || null,
       });
       return ctx.db.get('SELECT * FROM images WHERE id = ?', id);
     }

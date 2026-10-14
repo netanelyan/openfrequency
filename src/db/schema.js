@@ -360,4 +360,22 @@ export const MIGRATIONS = [
     UNIQUE (account_id, key)
   );
   `,
+  `
+  -- Development answers from the Claude Code CLI cost nothing; each is recorded
+  -- with what the same call would cost through the API as production sends it.
+  ALTER TABLE spend ADD COLUMN api_usd REAL;
+
+  -- The vision check of a picture against the slide it is for: what the model
+  -- saw, and whether it shows what the slide says.
+  ALTER TABLE images ADD COLUMN match_json TEXT;
+  ALTER TABLE images ADD COLUMN categories TEXT;
+
+  -- A fact found by the research step: the kind of detail it is (a quote, the
+  -- minute, the moment, the backstory, what came after, a number).
+  ALTER TABLE facts ADD COLUMN detail TEXT;
+
+  -- The documents a source gave on its last read, and for which day: read again
+  -- only after six hours, or for another day.
+  ALTER TABLE sources ADD COLUMN last_docs_json TEXT;
+  `,
 ];

@@ -82,7 +82,8 @@ export function hebrewShare(text) {
 }
 
 export const LIMITS = {
-  cover: { maxChars: 70, minWords: 3, maxWords: 11, emoji: 1, sentences: 2 },
+  // A cover can ask, answer and tease in three short sentences ("X או Y? מי היה טוב יותר? התשובה בסוף"): eleven words bound it.
+  cover: { maxChars: 70, minWords: 3, maxWords: 11, emoji: 1, sentences: 3 },
   slideTitle: { maxChars: 60, emoji: 1, sentences: 2 },
   slideBody: { maxChars: 230, emoji: 1, sentences: 3 },
   caption: { maxChars: 320, emoji: 2, sentences: 4 },
@@ -132,8 +133,16 @@ export function tellsIn(text, { kind = 'slideBody', extra = [] } = {}) {
     // A score as fans write it ("ישראל 9, טייוואן 0") is one thing, not two; four scores in a row are still a list.
     const s = raw1.replace(SCORE_COMMA, '$1 ');
     const parts = s.split(/,|\s+ו(?=\S)/).map((p) => p.trim()).filter(Boolean);
-    if (s.split(',').length >= 4 && parts.filter((p) => p.split(/\s+/).length <= 3).length >= 4) {
-      add('structure', 'a list of four or more things in one sentence');
+    // Four short things in a row: "פוטוס, זמיה, קקטוס ואלוורה". Clauses around one long one are a sentence, not a list
+    // ("באותה שנה, ב-14 בנובמבר, החברה הוציאה את X, שמסכם אתרים" was refused, and no redraft could fix what was not there).
+    let run = 0;
+    let longest = 0;
+    for (const p of parts) {
+      run = p.split(/\s+/).length <= 3 ? run + 1 : 0;
+      longest = Math.max(longest, run);
+    }
+    if (s.split(',').length >= 4 && longest >= 4) {
+      add('structure', `a list of four or more things in one sentence ("${raw1.length > 70 ? `${raw1.slice(0, 70)}...` : raw1}"): keep two or three, or give them a line each`);
       break;
     }
   }
@@ -142,7 +151,8 @@ export function tellsIn(text, { kind = 'slideBody', extra = [] } = {}) {
 
   const len = raw.replace(/\s+/g, ' ').length;
   if (len > lim.maxChars) add('length', `${len} characters, ${lim.maxChars} at most`);
-  if (sentences.length > lim.sentences) add('length', `${sentences.length} sentences, ${lim.sentences} at most`);
+  // The sentences as the code counted them: a model told only "4 sentences" miscounts its own text and redrafts the same four.
+  if (sentences.length > lim.sentences) add('length', `${sentences.length} sentences, ${lim.sentences} at most (counted: ${sentences.map((x, i) => `[${i + 1}] "${x.length > 50 ? `${x.slice(0, 50)}...` : x}"`).join(' ')}): join two of them or cut one`);
   if (kind === 'cover') {
     // Words as a reader counts them: ש-Gemini is one word, not a prefix and a name.
     const words = raw.split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length;

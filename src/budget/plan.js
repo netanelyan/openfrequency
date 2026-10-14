@@ -10,8 +10,10 @@ import { ENGINE_RESERVE, globalCap, monthReserved, monthSpend } from './ledger.j
 //
 // CUT VOLUME, NEVER QUALITY. When the forecast is over the cap, the planner
 // does not reach for a cheaper model or a shorter prompt: it posts less. The
-// weakest account drops to one post a day first, then the next weakest, until
-// the forecast fits. The money a cut frees goes to the accounts that keep their
+// weakest account comes down half a post a day at a time (1.5 is three posts in
+// two days) to one a day first, then the next weakest, until the forecast fits;
+// if every account is at one a day and it still does not, the weakest goes on
+// to a post every other day, then the next. The money a cut frees goes to the accounts that keep their
 // volume. The website says which account was cut and why.
 //
 //   weakest   by its own results (each post's 72-hour score against the
@@ -25,8 +27,14 @@ import { ENGINE_RESERVE, globalCap, monthReserved, monthSpend } from './ledger.j
 // The plan is written once a day before generation, and the ledger reads each
 // account's allocation from it as that account's cap for the month.
 
-/** What a post costs until an account has a history: the top of the comparison's estimate per published post (docs/costs.md), replaced by each account's own measured cost once it has four posts. */
-export const DEFAULT_COST_PER_POST = 0.035;
+/**
+ * What a post costs until an account has a history, replaced by each account's own measured cost once it has four
+ * posts: the launch rounds' measured cost per post made, the attempts the checks stopped included, at the API's
+ * batched and cached rates (docs/costs.md).
+ */
+export const DEFAULT_COST_PER_POST = 0.15;
+/** The least a cut leaves an account: a post every other day. */
+export const MIN_PER_DAY = 0.5;
 export const WARN_AT = 0.8;
 
 /** AI spend per produced post over the last 30 days: every call, including the ones that ended blocked. */
@@ -129,13 +137,16 @@ export function planMonth(db, packs, { t = now(), env = process.env } = {}) {
     return b.costPerPost - a.costPerPost;
   });
   const total = () => rows.reduce((s, r) => s + forecastOf(r), 0);
-  for (const r of order) {
-    if (total() <= pool) break;
-    if (r.perDay > 1) {
-      r.perDay = 1;
-      r.cut = true;
+  const cutTo = (floor) => {
+    for (const r of order) {
+      while (total() > pool && r.perDay - 0.5 >= floor) {
+        r.perDay -= 0.5;
+        r.cut = true;
+      }
     }
-  }
+  };
+  cutTo(1);
+  cutTo(MIN_PER_DAY);
   const forecasts = rows.map(forecastOf);
   const sum = forecasts.reduce((a, b) => a + b, 0);
   const wsum = rows.reduce((s, r) => s + r.weight, 0) || 1;

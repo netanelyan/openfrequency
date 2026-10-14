@@ -156,7 +156,7 @@ function fakeBatchApi(pack, { onCreate = () => {} } = {}) {
     async *results(id) {
       for (const r of batches.get(id)) {
         const sys = r.params.system.map((b) => b.text).join('\n');
-        const data = /TASK: PLAN ONE POST/.test(sys) ? rec.outline : /TASK: WRITE ONE POST/.test(sys) ? rec.slides : { reviews: [] };
+        const data = /TASK: PLAN ONE POST/.test(sys) ? rec.outline : /TASK: WRITE ONE POST/.test(sys) ? rec.slides : /TASK: FIND THE DETAILS/.test(sys) ? { details: [] } : { reviews: [] };
         yield { custom_id: r.custom_id, result: { type: 'succeeded', message: { model: r.params.model, stop_reason: 'end_turn', usage: worstUsage(r.params), content: [{ type: 'text', text: JSON.stringify(data) }] } } };
       }
     },
@@ -177,9 +177,9 @@ test('the day is drafted in batches: one batch per round for every post at once,
     const bctx = { ...ctx, llm: batcher };
     const res = await Promise.all([0, 1, 2].map(() => batcher.run(() => buildPost(bctx, { pack, formatKey: 'care-guide' }))));
     assert.deepEqual(res.map((r) => r.status), ['queued', 'queued', 'queued'], JSON.stringify(res.map((r) => r.reason)));
-    assert.deepEqual(sizes, [3, 3, 3], 'three posts: their outlines in one batch, then their slides, then their reviews');
+    assert.deepEqual(sizes, [3, 3, 3, 3], 'three posts: their outlines in one batch, then their details, then their slides, then their reviews');
     const rows = ctx.db.all("SELECT * FROM spend WHERE api = 'claude'");
-    assert.equal(rows.length, 9);
+    assert.equal(rows.length, 12);
     assert.ok(rows.every((r) => r.batch === 1 && r.usage_json && !r.estimated), 'every call recorded from its usage, as a batch call');
     const outline = rows.find((r) => r.tag === 'outline');
     assert.ok(Math.abs(outline.usd - claudeCost(JSON.parse(outline.usage_json), outline.model) / 2) < 1e-12, 'at half price');
@@ -212,7 +212,7 @@ test('a batch a restart left behind is still recorded, and its money is never lo
   }
 });
 
-test('money short: the weakest account drops to one post a day first, the website says so, and 100% stops generation', async () => {
+test('money short: the weakest account comes down first, half a post a day at a time, the website says so, and 100% stops generation', async () => {
   const { home, cleanup } = tempHome({ packs: {} });
   try {
     copyPack(home, 'demo');
@@ -241,11 +241,13 @@ test('money short: the weakest account drops to one post a day first, the websit
     const demo = plan.accounts.find((a) => a.id === 'demo');
     const second = plan.accounts.find((a) => a.id === 'second');
     assert.equal(demo.basis, 'approval');
-    assert.ok(demo.cut && demo.perDay === 1, 'the weaker account is cut to one a day');
+    assert.ok(demo.cut && demo.perDay < 2, 'the weaker account is cut');
+    assert.ok(demo.perDay <= second.perDay, 'the weaker account is cut first and deepest');
+    assert.ok(plan.accounts.every((a) => a.perDay >= 0.5 && (a.perDay * 2) % 1 === 0), 'in half-post steps, never under a post every other day');
     assert.ok(plan.forecast > 0 && plan.postsLeft >= 0);
     savePlan(ctx.db, plan, { t });
     const banner = budgetBanner({ level: plan.level, share: plan.spent / plan.cap, cap: plan.cap, forecast: plan.forecast, nextMonth: plan.nextMonth, cuts: plan.accounts.filter((a) => a.cut).map((a) => ({ name: a.name, perDay: a.perDay, planned: a.planned })) });
-    assert.match(banner, /פוסט אחד ביום במקום 2/);
+    assert.match(banner, /(פוסט כל יומיים|פוסט אחד ביום|3 פוסטים ביומיים) במקום 2 ביום/);
     if (!second.cut) assert.ok(second.alloc > demo.alloc, 'the money a cut frees goes to the account that keeps its volume');
     // 80% spent: a warning on every page.
     ctx.db.insert('spend', { account_id: null, api: 'claude', usd: 12 - plan.spent, month: '2026-10', at, estimated: 0 });

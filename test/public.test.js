@@ -93,7 +93,7 @@ test('.env.example lists every variable the code reads, each with a comment and 
   walk('src');
   walk('scripts');
   for (const k of KEYS) read.add(k.name);
-  const internal = new Set(['CHECK_PUBLIC_ROOT', 'NODE_ENV']);
+  const internal = new Set(['CHECK_PUBLIC_ROOT', 'NODE_ENV', 'PATH']);
   const missing = [...read].filter((k) => !listed.has(k) && !internal.has(k));
   assert.deepEqual(missing, [], 'add these to .env.example with a comment');
   for (const k of listed) {

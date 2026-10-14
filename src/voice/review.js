@@ -27,7 +27,7 @@ You get the texts of one slideshow post: the cover line, each slide, the caption
 
 - botScore: 0 means clearly a person wrote it, 10 means obviously a bot. Be strict: a text that is balanced, complete and polished, that sounds like a brochure or a school summary, that praises in general terms or opens with a stock phrase scores high. Translated-sounding Hebrew scores high.
 - tells: only what gives it away, a few English words each ("stock opener", "translated Hebrew", "too polished", "brochure tone"). Empty when nothing does.
-- factProblem: if the text states something its facts do not support, say what; else an empty string. The source's own words decide: a fact whose summary says more than its source supports nothing. A text marked as a myth, a joke, an opinion or a question to the reader is not the post's claim: a myth is wrong on purpose (the next slide corrects it). Flag it only when a fact inside it (a number, a name, a result) is wrong.`;
+- factIssue: true only if the text states something its facts do not support. factProblem: when factIssue is true, what; else an empty string (never a note that concludes the text is fine). The source's own words decide: a fact whose summary says more than its source supports nothing. A text marked as a myth, a joke, an opinion or a question to the reader is not the post's claim: a myth is wrong on purpose (the next slide corrects it). Flag it only when a fact inside it (a number, a name, a result) is wrong. Every specific detail a text states (a name, a number, a minute or a round, a quote, what someone said, the moment itself) must be in the source words of the facts above: a detail none of them holds is a fact problem, however likely it sounds.`;
 
 /**
  * What a slide that carries no fact of its own is doing, so the review does not
@@ -39,6 +39,7 @@ const ROLE_NOTE = {
   joke: "a joke's setup",
   verdict: "the account's opinion, labelled as one",
   ask: 'a question to the reader',
+  visual: "a graphic's labels and values: check only that its names and numbers are in the facts; botScore 1",
 };
 
 export const REVIEW_SCHEMA = {
@@ -52,9 +53,10 @@ export const REVIEW_SCHEMA = {
           index: { type: 'integer' },
           botScore: { type: 'integer' },
           tells: { type: 'array', items: { type: 'string' } },
+          factIssue: { type: 'boolean' },
           factProblem: { type: 'string' },
         },
-        required: ['index', 'botScore', 'tells', 'factProblem'],
+        required: ['index', 'botScore', 'tells', 'factIssue', 'factProblem'],
         additionalProperties: false,
       },
     },
@@ -95,7 +97,8 @@ export async function reviewTexts(ctx, { pack, texts, facts = [] }) {
     reviewer: 'claude',
     reviews: texts.map((_, i) => {
       const r = (data.reviews || []).find((x) => x.index === i) || {};
-      return { botScore: clamp(r.botScore), tells: (r.tells || []).map(String).slice(0, 5), factProblem: String(r.factProblem || '') };
+      // A reviewer once filled factProblem with "...so this is fine", and it blocked the post: the boolean decides.
+      return { botScore: clamp(r.botScore), tells: (r.tells || []).map(String).slice(0, 5), factProblem: r.factIssue === false ? '' : String(r.factProblem || '') };
     }),
   };
 }

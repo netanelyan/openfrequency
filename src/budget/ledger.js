@@ -204,9 +204,28 @@ export function settle(db, reservationId, row) {
   });
 }
 
-export function record(db, { accountId = null, postId = null, api, model = null, units = 1, usd, estimated = false, tag = null, t = now(), batch = false, usage = null }) {
-  db.insert('spend', { account_id: accountId, post_id: postId, api, model, units, usd, estimated: estimated ? 1 : 0, tag, month: monthKey(t), at: nowIso(), batch: batch ? 1 : 0, usage_json: usage });
+export function record(db, { accountId = null, postId = null, api, model = null, units = 1, usd, estimated = false, tag = null, t = now(), batch = false, usage = null, apiUsd = null }) {
+  db.insert('spend', { account_id: accountId, post_id: postId, api, model, units, usd, estimated: estimated ? 1 : 0, tag, month: monthKey(t), at: nowIso(), batch: batch ? 1 : 0, usage_json: usage, api_usd: apiUsd });
   return usd;
+}
+
+/**
+ * What a call answered by the Claude Code CLI would cost through the API, from
+ * the tokens the CLI reported. `cachedShare` is the share of the prompt that is
+ * the stable system prefix (the pack and the task), which production reads from
+ * the cache. Returns { list: every token at the full rate, as a direct call
+ * without a cache; prod: batched, the prefix read from the cache, as the runner
+ * sends it }. A cache write (once per pack and task per batch) is left out of
+ * prod: a fraction of a cent a day.
+ */
+export function apiEquivalent(usage = {}, model, { cachedShare = 0, batch = true } = {}) {
+  const total = (usage.input_tokens || 0) + (usage.cache_creation_input_tokens || 0) + (usage.cache_read_input_tokens || 0);
+  const out = usage.output_tokens || 0;
+  const cached = Math.round(total * Math.min(1, Math.max(0, cachedShare)));
+  return {
+    list: claudeCost({ input_tokens: total, output_tokens: out }, model),
+    prod: claudeCost({ input_tokens: total - cached, cache_read_input_tokens: cached, output_tokens: out }, model, { batch }),
+  };
 }
 
 /** A post's own total, for the cost-per-post figure. */

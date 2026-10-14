@@ -10,13 +10,15 @@
 // returned, and the cost per post to put in docs/costs.md.
 //
 // It spends real money (a few tens of cents) against this month's cap, which is
-// why it asks for --confirm.
+// why it asks for --confirm, and on a laptop (OF_ENV=dev) for --allow-api too: in
+// development every API call is refused without it.
 
 import { loadEnv, isSet } from '../src/core/env.js';
 import { makeContext } from '../src/engine.js';
 import { addDays, israelDate } from '../src/schedule/israel.js';
 import { slotsFor } from '../src/schedule/slots.js';
 import { generate } from '../src/autonomy/runner.js';
+import { allowApiFlag, logRefusal, ofEnv } from '../src/llm/index.js';
 import { closeBrowser } from '../src/render/render.js';
 import { j } from '../src/db/index.js';
 
@@ -29,6 +31,13 @@ if (!args.includes('--confirm')) {
 }
 if (args.includes('--direct')) process.env.OF_BATCH = 'off';
 process.env.OF_MODE = 'live';
+// This measures the API: the API backend, whatever the environment's default.
+process.env.OF_LLM = 'api';
+if (ofEnv() === 'dev' && !allowApiFlag()) {
+  logRefusal('live-day without --allow-api');
+  console.error('In development (OF_ENV=dev) the API is refused unless the command says --allow-api: npm run live-day -- --allow-api --confirm');
+  process.exit(1);
+}
 
 const ctx = makeContext({ log: (m) => console.log(m) });
 const tomorrow = addDays(israelDate(Date.now()), 1);

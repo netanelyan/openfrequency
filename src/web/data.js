@@ -1,4 +1,5 @@
 import { DAY, monthKey, now } from '../core/clock.js';
+import { waitingImages } from '../images/index.js';
 import { KEYS, isSet } from '../core/env.js';
 import { settings } from '../core/store.js';
 import { j } from '../db/index.js';
@@ -198,7 +199,8 @@ export const postFull = (ctx, id) => {
     pack: ctx.pack(post.account_id),
     steps: ctx.db.all('SELECT * FROM steps WHERE post_id = ? ORDER BY id', id).map((s) => ({ ...s, detail: j(s.detail_json, null) })),
     spend: ctx.db.all('SELECT api, model, usd, estimated, tag FROM spend WHERE post_id = ? ORDER BY id', id),
-    image: post.checks?.image ? ctx.db.get('SELECT * FROM images WHERE id = ?', post.checks.image) : null,
+    // The photograph the page asks a person about: the first still waiting, else the lead one.
+    image: waitingImages(ctx.db, post)[0] || (post.checks?.image ? ctx.db.get('SELECT * FROM images WHERE id = ?', post.checks.image) : null),
     metrics: ctx.db.all('SELECT * FROM metrics WHERE post_id = ? ORDER BY collected_at DESC', id),
     takedowns: takedowns(ctx.db, { limit: 200 }).filter((x) => x.post_id === id),
   };
@@ -211,7 +213,7 @@ export const postFull = (ctx, id) => {
 export function attention(ctx) {
   const waitingDeletes = takedowns(ctx.db, { limit: 200 }).filter((x) => x.waiting.length);
   const images = ctx.db
-    .all("SELECT p.id, p.hook, p.account_id, i.id AS image_id, i.safety_json FROM posts p JOIN images i ON i.id = json_extract(p.checks_json, '$.image') WHERE p.status IN ('queued', 'approved') AND i.safety IS NOT NULL AND i.safety != 'ok' AND i.reviewed_at IS NULL")
+    .all("SELECT DISTINCT p.id, p.hook, p.account_id, i.id AS image_id, i.safety_json FROM posts p JOIN images i ON i.id = json_extract(p.checks_json, '$.image') OR i.id IN (SELECT image_id FROM slides WHERE post_id = p.id) WHERE p.status IN ('queued', 'approved') AND i.safety IS NOT NULL AND i.safety != 'ok' AND i.reviewed_at IS NULL GROUP BY p.id")
     .map((r) => ({ ...r, screen: j(r.safety_json, null) }));
   return { waitingDeletes, images };
 }

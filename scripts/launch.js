@@ -1,481 +1,351 @@
 #!/usr/bin/env node
-// npm run launch -- next   --pack <id>              the next requests to answer
-// npm run launch -- redo   --pack <id> --n <k> [--stage outline|slides] [--notes <file>]
-// npm run launch -- build  --pack <id>              drafts -> recordings -> posts, exported
-// npm run launch -- review --pack <id>              the blind review requests
-// npm run launch -- status --pack <id>
+// npm run launch -- run      --pack <id> [--round <n>] [--only 1,4] [--tries 3]
+// npm run launch -- review   --pack <id> [--round <n>]
+// npm run launch -- verdicts --pack <id> [--round <n>]
+// npm run launch -- status   --pack <id>
+// npm run launch -- costs    --pack <id>          every round's calls, priced at the API's rates
 //
 // The launch set: the first posts of a new account, the ones its owner approves
 // to fill the grid before the account goes public. Planned in
 // $OF_HOME/launch/<pack>/plan.json:
 //
-//   { "posts": [ { "n": 1, "format": "<format id>", "doc": "<recording key or group>",
-//                  "day": "YYYY-MM-DD" (on-this-day), "subject": "..." (optional),
-//                  "hook": "<hook id>", "cta": "<cta text>" (chosen here when absent) } ] }
+//   { "posts": [ { "n": 1, "format": "<format id>", "day": "YYYY-MM-DD" (optional),
+//                  "subject": "..." (optional: a fight week's event) } ] }
 //
-// THE ANSWERS ARE NOT BOUGHT. Nothing here calls the Anthropic API. Each request
-// is exactly what the engine would send (src/pipeline/prompts.js), written to a
-// file; a Claude Code subagent on the drafting model answers it, once, and this
-// script checks the answer with the engine's own code: the facts verified
-// against the stored document, the kind's shape, the voice and the gate. A
-// slides answer the checks refuse gets the engine's one redraft, with the
-// reasons. A drafted post then takes the engine's review (the reviewing model's
-// exact request) and the one rewrite of what it flags, each rewrite kept only if
-// the post still passes every check, as src/pipeline/build.js does with a live
-// client; a recorded build cannot, so it is done here (requests NN-review and
-// NN-rewrite). `build` files the final answers as the pack's recordings and runs the
-// real pipeline on them (recorded mode), so every launch post is a post the
-// engine built: rendered for TikTok and Instagram, exported with its captions,
-// its sources and its cost.
+// RUN. Every post is made by the engine's own pipeline, end to end, exactly as the
+// runner makes one: live sources, the outline, research and the details, the
+// facts verified, the slides, every check in code, the one redraft, the review,
+// the one rewrite, the photographs and their checks, the render. The model is
+// whatever OF_ENV picks: in development the Claude Code CLI (src/llm/cli.js), so
+// nothing is bought. Nothing here edits a post: what the engine makes is what is
+// exported. A post the checks stop is made again from another topic, up to
+// --tries times, and every attempt is kept with what stopped it.
 //
-// Then a different subagent, which has not seen the drafting, reviews each
-// rendered post as a skeptical Israeli who has never heard of the account
-// (`review` writes its requests; its answers go to reviews/<n>.json). A post that
-// fails is redone with the notes (`redo`), or replaced in the plan.
+// REVIEW. A post is then read by three fresh reviewers who see only what a viewer
+// would: the slides, the two captions and the list of sources (never the drafts,
+// the facts or the engine's own review). `review` writes each post's bundle and
+// which reviewer reads which post (three per post, three posts per reviewer); the
+// reviewers write their verdicts to reviews/<reviewer>.json; `verdicts` tallies
+// them (a post passes when two of its three reviewers pass it) and writes the
+// notes next to each post.
 //
-// The posts are written to $OF_HOME/out/launch/<pack>/<n>-<format>/.
-//
-// Costs are ESTIMATES from token counts at Sonnet 5.5's batch price with the
-// pack's block cached, thinking given as a range, like docs/costs.md.
+// Each round has its own database and folder, $OF_HOME/launch/<pack>/r<n>/. The
+// posts of the latest round are exported to $OF_HOME/out/launch/<pack>/<nn>-<format>/,
+// the earlier rounds' to out/launch/<pack>/rounds/r<n>/.
 
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync, copyFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { createHash } from 'node:crypto';
-
-process.env.OF_MODE = 'recorded';
-const { ofHome } = await import('../src/core/paths.js');
-const { Db } = await import('../src/db/index.js');
-const { loadPack, packDirs, resolvePackDir, syncAccounts } = await import('../src/packs/load.js');
-const { makeContext } = await import('../src/engine.js');
-const { recordedSources, refreshSource } = await import('../src/sources/index.js');
-const { candidatesOf, buildPost, checkPost, draftFromAnswer, igCaption, keepItems, textsOf } = await import('../src/pipeline/build.js');
-const { exportPost } = await import('../src/pipeline/export.js');
-const { outlinePrompt, outlineUser, rewritePrompt, rewriteUser, slidesPrompt, slidesUser } = await import('../src/pipeline/prompts.js');
-const { BLOCK_AT, REVIEW_SCHEMA, REVIEW_SYSTEM, REWRITE_AT, reviewUser } = await import('../src/voice/review.js');
-const { mechanicalFix } = await import('../src/voice/tells.js');
-const { verifyFact } = await import('../src/verify/claims.js');
-const { ctasOf, hookPatterns, kindName, shapeProblems } = await import('../src/formats/kinds.js');
-const { resolveFormat } = await import('../src/trends/index.js');
-const { estimateTokens } = await import('../src/llm/index.js');
-const { BATCH_FACTOR, MODEL_RATES } = await import('../src/budget/ledger.js');
-const { closeBrowser } = await import('../src/render/render.js');
 
 const args = process.argv.slice(2);
 const cmd = args[0];
 const opt = (n, d = null) => (args.includes(`--${n}`) ? args[args.indexOf(`--${n}`) + 1] : d);
 const packId = opt('pack');
-if (!packId || !['next', 'redo', 'build', 'review', 'status'].includes(cmd)) {
-  console.error('usage: npm run launch -- next|redo|build|review|status --pack <id>');
+if (!packId || !['run', 'review', 'verdicts', 'status', 'costs'].includes(cmd)) {
+  console.error('usage: npm run launch -- run|review|verdicts|status --pack <id> [--round <n>]');
   process.exit(1);
 }
+process.env.OF_MODE = 'live';
+// Wikimedia throttles a reader that does not say who it is. Until the owner sets OF_USER_AGENT with a
+// contact, the launch set names the project's public repository.
+process.env.OF_USER_AGENT ||= 'open-frequency/0.1 (+https://github.com/netanelyan/openfrequency)';
+
+const { loadEnv } = await import('../src/core/env.js');
+loadEnv();
+const { ofHome } = await import('../src/core/paths.js');
+const { Db, j } = await import('../src/db/index.js');
+const { makeContext } = await import('../src/engine.js');
+const { buildPost, loadPost, sourceLabel } = await import('../src/pipeline/build.js');
+const { exportPost } = await import('../src/pipeline/export.js');
+const { kindName, groupOf } = await import('../src/formats/kinds.js');
+const { resolveFormat } = await import('../src/trends/index.js');
+const { closeBrowser } = await import('../src/render/render.js');
+const { llmBackend } = await import('../src/llm/index.js');
+const { syncEvents } = await import('../src/autonomy/runner.js');
+
 const HOME = path.join(ofHome(), 'launch', packId);
+const OUT = path.join(ofHome(), 'out', 'launch', packId);
 const J = (f) => JSON.parse(readFileSync(f, 'utf8'));
 const W = (f, x) => (mkdirSync(path.dirname(f), { recursive: true }), writeFileSync(f, `${typeof x === 'string' ? x : JSON.stringify(x, null, 2)}\n`));
 const nn = (n) => String(n).padStart(2, '0');
-const planFile = path.join(HOME, 'plan.json');
-const plan = J(planFile);
-const pack = loadPack(resolvePackDir(packId));
-const others = packDirs().filter((d) => path.basename(d) !== packId).map((d) => {
-  try {
-    return loadPack(d);
-  } catch {
-    return null;
+const plan = J(path.join(HOME, 'plan.json'));
+const rounds = () => (existsSync(HOME) ? readdirSync(HOME).filter((d) => /^r\d+$/.test(d)).map((d) => Number(d.slice(1))).sort((a, b) => a - b) : []);
+const round = Number(opt('round', cmd === 'run' ? (rounds().at(-1) || 0) + 1 : rounds().at(-1) || 1));
+const RD = path.join(HOME, `r${round}`);
+const usd = (x) => `$${Number(x || 0).toFixed(4)}`;
+
+function context() {
+  mkdirSync(RD, { recursive: true });
+  const db = new Db(path.join(RD, 'launch.db'));
+  const ctx = makeContext({ db, mode: 'live', log: (m) => console.log(`  ${m}`) });
+  ctx.mediaDir = path.join(RD, 'media');
+  return ctx;
+}
+
+/** What a post's model calls were, and what they would cost through the API. */
+function costOf(db, postIds) {
+  const rows = db.all(`SELECT tag, model, usd, api, api_usd, usage_json FROM spend WHERE post_id IN (${postIds.map(() => '?').join(',')}) AND api IN ('claude', 'claude-cli') ORDER BY id`, ...postIds);
+  const calls = rows.map((r) => {
+    const u = j(r.usage_json, {}) || {};
+    const input = u.priced?.input ?? (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0);
+    return { tag: r.tag, model: r.model, backend: r.api, input, output: u.priced?.output ?? (u.output_tokens || 0), thinking: u.output_tokens_details?.thinking_tokens || 0, paid: r.usd, prod: r.api_usd ?? r.usd, list: u.listUsd ?? r.usd };
+  });
+  const sum = (k) => calls.reduce((s, c) => s + (c[k] || 0), 0);
+  return { calls, input: sum('input'), output: sum('output'), paid: sum('paid'), prod: sum('prod'), list: sum('list') };
+}
+
+function costMd(db, post, attempts) {
+  const ids = [...attempts.map((a) => a.postId)];
+  const all = costOf(db, ids);
+  const own = costOf(db, [post.id]);
+  const lines = [
+    `# Cost: ${post.hook}`,
+    '',
+    `Backend: ${all.calls[0]?.backend || '-'}. A call answered by the Claude Code CLI costs nothing; "API" is what the same call would cost`,
+    'through the Anthropic API as production sends it (batched, the pack prefix read from the cache), and "list" at the full price,',
+    'from the tokens the CLI reported (each includes about 1,000 tokens of the CLI\'s own framing).',
+    '',
+    `This post: ${own.calls.length} calls, ${own.input.toLocaleString()} tokens in, ${own.output.toLocaleString()} out: API ${usd(own.prod)}, list ${usd(own.list)}, paid ${usd(own.paid)}.`,
+    attempts.length > 1 ? `With the ${attempts.length - 1} attempt(s) the checks stopped before it: ${all.calls.length} calls, API ${usd(all.prod)}, list ${usd(all.list)}.` : '',
+    '',
+    '| Call | Model | Tokens in | Out (thinking) | API | List |',
+    '|---|---|---|---|---|---|',
+    ...own.calls.map((c) => `| ${c.tag} | ${String(c.model).replace('claude-', '')} | ${c.input.toLocaleString()} | ${c.output.toLocaleString()} (${c.thinking.toLocaleString()}) | ${usd(c.prod)} | ${usd(c.list)} |`),
+  ];
+  return lines.filter((l) => l !== null).join('\n');
+}
+
+function imagesMd(db, post) {
+  const lines = [`# Pictures: ${post.hook}`, '', 'Every picture on the slides, where it came from and its license. A slide without a photograph shows a graphic the engine drew from the slide\'s own facts.', ''];
+  post.slides.forEach((s, i) => {
+    const vis = s.data?.visual;
+    const img = s.image_id ? db.get('SELECT * FROM images WHERE id = ?', s.image_id) : null;
+    const what = img ? 'photograph' : vis ? `graphic (${vis.type})` : s.kind === 'cover' ? (post.data?.coverVisual ? `graphic (${post.data.coverVisual.type})` : "the kind's own art") : s.role === 'stat' ? 'graphic (the two values)' : 'none';
+    lines.push(`- Slide ${i + 1} (${s.role || s.kind}): ${what}`);
+    if (img) {
+      const match = j(img.match_json, {}) || {};
+      lines.push(`  - file: ${img.provider_id} (${img.provider})`, `  - license: ${img.license}${img.license_url ? ` (${img.license_url})` : ''}`, `  - author: ${img.author || '-'}`, `  - source: ${img.source_url || '-'}`, `  - asked for: "${img.query}"`, `  - the screen: ${img.safety}${match.model ? `; the vision check saw "${match.model.mainSubject}" (${match.model.consistent ? 'fits the slide' : 'does not fit'})` : ''}`);
+    }
+  });
+  return lines.join('\n');
+}
+
+function engineReviewMd(db, post, attempts) {
+  const steps = db.all('SELECT step, status, detail_json FROM steps WHERE post_id = ? ORDER BY id', post.id).map((s) => ({ ...s, d: j(s.detail_json, {}) }));
+  const lines = [`# The engine's own review: ${post.hook}`, '', 'What the engine\'s checks and its reviewing model said while the post was made. The blind reviewers never see this.', ''];
+  for (const s of steps) {
+    if (s.step === 'outline') lines.push(`- outline: ${s.status}, topic "${s.d.topic || ''}"${s.d.research?.length ? `, research: ${s.d.research.join(' · ')}` : ''}`);
+    else if (s.step === 'details') lines.push(`- details: ${s.status}, ${s.d.verified} verified of ${s.d.found} (need ${s.d.need})${s.d.documents?.length ? `; read ${s.d.documents.join(', ')}` : ''}`);
+    else if (s.step === 'facts') lines.push(`- facts: ${s.d.verified} verified${s.d.refused?.length ? `, refused: ${s.d.refused.map((r) => `${r.key} (${r.error})`).join('; ')}` : ''}`);
+    else if (s.step === 'slides' || s.step === 'redraft') lines.push(`- ${s.step}: ${s.status}${s.d.problems?.length ? `\n  - ${s.d.problems.join('\n  - ')}` : ''}${s.d.fixed?.length ? `\n  - fixed in code: ${s.d.fixed.join('; ')}` : ''}`);
+    else if (s.step === 'review') {
+      lines.push(`- review (${s.d.reviewer}): worst ${s.d.worst}/10`);
+      for (const x of s.d.scores || []) lines.push(`  - ${x.where}: ${x.score}${x.tells?.length ? ` (${x.tells.join(', ')})` : ''}${x.factProblem ? `, FACT: ${x.factProblem}` : ''}`);
+      for (const r of s.d.rewrites || []) lines.push(`  - rewritten ${r.where}: "${r.from}" -> "${r.to}"`);
+      for (const v of s.d.visualsDropped || []) lines.push(`  - graphic dropped on ${v.where}: ${v.why}`);
+    } else if (s.step === 'rewrite') lines.push(`- rewrite: ${s.status}, kept ${s.d.kept ?? 0} of ${s.d.flagged ?? 0}`);
+    else if (s.step === 'image') lines.push(`- image for slide ${(s.d.slide ?? 0) + 1} ("${s.d.query}"): ${s.status}${s.d.license ? `, ${s.d.license}` : ''}`);
   }
-}).filter(Boolean);
-const ans = (n, stage) => path.join(HOME, 'answers', `${nn(n)}-${stage}.json`);
-const req = (n, stage) => path.join(HOME, 'prompts', `${nn(n)}-${stage}.md`);
-
-// A database with the pack's recorded documents in it, for the fact checks.
-function workDb() {
-  const db = new Db(':memory:');
-  syncAccounts(db, [pack, ...others]);
-  return db;
-}
-async function docsFor(db) {
-  const srcs = db.all("SELECT * FROM sources WHERE account_id = ? AND status = 'approved'", pack.id);
-  const impl = recordedSources(pack);
-  const docs = [];
-  for (const s of srcs) for (const d of await refreshSource(db, impl, s)) docs.push({ ...d, sourceName: s.name, sourceKey: s.key });
-  return candidatesOf(docs);
+  if (attempts.length > 1) {
+    lines.push('', '## Attempts the checks stopped first', '');
+    for (const a of attempts.slice(0, -1)) lines.push(`- ${a.topic || '(no topic)'}: ${a.reason}`);
+  }
+  return lines.join('\n');
 }
 
-/** A request file a subagent answers: the system blocks, the user turn, the schema, where to write. */
-function requestFile(title, { system, user, schema }, answerPath) {
-  const sys = (Array.isArray(system) ? system : [{ text: system }]).map((b) => b.text).join('\n\n----- (next system block) -----\n\n');
-  return `# ${title}
-
-You are the drafting model of a content engine. Answer this request exactly as the model would: read the system prompt and the user turn below, and reply with ONE JSON object that matches the schema, and nothing else. Write that JSON object, alone, to:
-
-${answerPath}
-
-## System prompt
-
-${sys}
-
-## User turn
-
-${user}
-
-## Output schema (JSON Schema)
-
-\`\`\`json
-${JSON.stringify(schema, null, 2)}
-\`\`\`
-`;
+function sourceList(db, post) {
+  const seen = new Map();
+  // The same names the slides show, never the engine's own (a topic bank).
+  for (const f of post.facts) if (f.verified && f.doc_url && !seen.has(f.doc_url)) seen.set(f.doc_url, `${f.doc_title || f.source_name} (${sourceLabel(db, f, { article: false })})`);
+  return ['# Sources', '', ...[...seen].map(([u, t]) => `- ${t}: ${u}`)].join('\n');
 }
 
-/** Round-robin cover patterns and calls to action over the plan, so the launch set shows each. */
-function choose() {
-  const used = {};
-  let changed = false;
+async function run() {
+  if (llmBackend() === 'api' && !args.includes('--allow-api')) console.log('note: the API backend is selected; in dev it is refused without --allow-api');
+  const ctx = context();
+  const pack = ctx.pack(packId);
+  if (!pack) throw new Error(`no pack "${packId}"`);
+  const only = opt('only') ? new Set(opt('only').split(',').map(Number)) : null;
+  const tries = Number(opt('tries', 3));
+  // A pack that follows events (a fight card) reads its calendar first, as the runner does every day.
+  if (pack.meta.events) await syncEvents(ctx, pack).catch((e) => console.log(`events: ${e.message}`));
+  const log = path.join(RD, 'progress.jsonl');
+  const results = existsSync(path.join(RD, 'results.json')) ? J(path.join(RD, 'results.json')) : {};
+  console.log(`launch round ${round} for ${packId}, on ${llmBackend()}`);
   for (const p of plan.posts) {
-    const f = resolveFormat(null, pack, p.format) || pack.formats.formats.find((x) => x.id === p.format);
-    if (!f) throw new Error(`plan post ${p.n}: no format "${p.format}"`);
-    if (kindName(f) === 'list') continue;
-    const k = (used[f.id] ??= { h: 0, c: 0 });
-    if (!p.hook) {
-      p.hook = hookPatterns(f)[k.h++ % hookPatterns(f).length].id;
-      changed = true;
+    if (only && !only.has(p.n)) continue;
+    if (results[p.n]?.status === 'sample' && !only) continue;
+    const attempts = [];
+    let made = null;
+    for (let t = 0; t < tries && !made; t++) {
+      const t0 = Date.now();
+      console.log(`post ${p.n} (${p.format}), attempt ${t + 1}`);
+      const r = await buildPost(ctx, { pack, formatKey: p.format, sample: true, day: p.day || null, subject: p.subject ? { text: p.subject, terms: p.terms || [p.subject] } : null });
+      const row = ctx.db.get('SELECT topic FROM posts WHERE id = ?', r.postId);
+      const a = { postId: r.postId, status: r.status, reason: r.reason, kind: r.kind, topic: row?.topic || null, minutes: Number(((Date.now() - t0) / 60000).toFixed(1)) };
+      attempts.push(a);
+      writeFileSync(log, `${JSON.stringify({ n: p.n, at: new Date().toISOString(), ...a })}\n`, { flag: 'a' });
+      console.log(`  -> ${r.status}${r.reason ? `: ${r.reason}` : ''} (${a.minutes} min)`);
+      if (r.status === 'sample') made = r;
+      else if (r.kind === 'no_source') break;
     }
-    const ctas = ctasOf(pack, f);
-    if (!p.cta && ctas.length) {
-      p.cta = ctas[k.c++ % ctas.length].text;
-      changed = true;
-    }
-  }
-  if (changed) W(planFile, plan);
-}
-
-const fmtOf = (p) => pack.formats.formats.find((x) => x.id === p.format);
-const say = (x) => `${x.where}: ${x.msg}`;
-
-/**
- * A post's review notes (plan.json "notes", from a reader's review) after the
- * engine's own user turn: the one thing the launch set adds to the engine's
- * prompt, the way the owner's notes would be.
- */
-function withNotes(p, request) {
-  if (!p.notes?.length) return request;
-  const notes = p.notes.map((x) => `- ${x}`).join('\n');
-  return { ...request, user: `${request.user}\n\nA READER REVIEWED THE LAST VERSION OF THIS POST. Fix what they say and keep every rule (notes about photos, layout or links are for the design: leave them):\n${notes}` };
-}
-
-/** Where one planned post stands, and what it needs next. */
-async function state(db, cands, p) {
-  const f = fmtOf(p);
-  const cand = cands.find((c) => c.key === p.doc);
-  if (!cand) return { p, f, stage: 'no-doc', why: `no recorded document "${p.doc}"` };
-  const refs = cand.docs.map((d, i) => ({ ...d, ref: `D${i + 1}` }));
-  const op = outlinePrompt(pack, { ttl: '1h' });
-  const outlineReq = withNotes(p, { system: op.system, user: outlineUser(f, refs, { avoid: [], day: p.day || null, subject: p.subject || null }), schema: op.schema });
-  if (!existsSync(ans(p.n, 'outline'))) return { p, f, stage: 'outline', outlineReq };
-  const outline = J(ans(p.n, 'outline'));
-  if (!outline.usable) return { p, f, stage: 'unusable', why: outline.why, outlineReq };
-  const docOf = new Map(refs.map((d) => [d.ref, d]));
-  const facts = outline.facts.map((x) => {
-    const d = docOf.get(String(x.doc || '').trim()) || (refs.length === 1 ? refs[0] : null);
-    const row = { key: x.id, claim: x.claim, quote: x.quote, document_id: d?.id ?? null, source_id: d?.source_id ?? null };
-    const v = verifyFact(db, row, { accountId: pack.id, maxQuoteWords: pack.rules.maxQuoteWords || 40 });
-    return { ...row, verified: v.ok, error: v.error };
-  });
-  const good = new Set(facts.filter((x) => x.verified).map((x) => x.key));
-  const items = keepItems(f, outline.items, good);
-  const shape = shapeProblems(f, items.map((it) => it.role));
-  const refused = facts.filter((x) => !x.verified).map((x) => `${x.key}: ${x.error}`);
-  if (shape.length || !good.size) return { p, f, stage: 'outline-failed', why: [...shape, ...refused].join(' · '), outlineReq, facts };
-  const verified = facts.filter((x) => x.verified);
-  const hook = hookPatterns(f).find((h) => h.id === p.hook) || null;
-  const cta = ctasOf(pack, f).find((c) => c.text === p.cta) || null;
-  const sp = slidesPrompt(pack, { ttl: '1h' });
-  const slidesReq = (problems = []) => withNotes(p, { system: sp.system, user: slidesUser({ format: f, n: items.length, outline: { ...outline, items }, facts: verified, edits: [], problems, hook, cta }), schema: sp.schema });
-  const ctx = { db, packs: [pack, ...others] };
-  const check = (stage) => (existsSync(ans(p.n, stage)) ? draftFromAnswer(ctx, pack, { format: f, answer: J(ans(p.n, stage)), outline, items, facts, hook, cta }) : null);
-  const first = check('slides');
-  if (!first) return { p, f, stage: 'slides', outlineReq, slidesReq: slidesReq(), facts, refused };
-  if (!first.checked.problems.length) return vet(ctx, { p, f, outlineReq, slidesReq: slidesReq(), final: 'slides', draft: first.draft, facts, refused });
-  const problems = first.checked.problems.map(say);
-  const second = check('slides-2');
-  if (!second) return { p, f, stage: 'redraft', outlineReq, slidesReq: slidesReq(problems), firstReq: slidesReq(), problems, facts, refused };
-  if (second.checked.problems.length) return { p, f, stage: 'blocked', why: second.checked.problems.map(say).join(' · '), outlineReq, slidesReq: slidesReq(problems), firstReq: slidesReq(), facts, refused };
-  return vet(ctx, { p, f, outlineReq, slidesReq: slidesReq(problems), firstReq: slidesReq(), final: 'slides-2', draft: second.draft, facts, refused, redrafted: problems });
-}
-
-/**
- * The engine's second look, which a recorded build cannot take (src/pipeline/build.js
- * reviews with the offline heuristic and rewrites nothing without a live client): the
- * review request on the final draft, the one rewrite of what it flags, each rewrite
- * kept only if the post still passes every check, a fact problem left unfixed blocks
- * the post, and so does a text still scored as a bot. A request is tied to the text it
- * was written for: an answer to an older version of the post is set aside.
- */
-function vet(ctx, s) {
-  const { p, f, draft, facts } = s;
-  const verified = facts.filter((x) => x.verified);
-  const texts = textsOf(draft);
-  const reviewReq = { system: REVIEW_SYSTEM, user: reviewUser(pack, texts, verified), schema: REVIEW_SCHEMA };
-  if (!fresh(p.n, 'review', reviewReq)) return { ...s, stage: 'review', reviewReq };
-  const got = J(ans(p.n, 'review')).reviews || [];
-  const scores = texts.map((t, i) => {
-    const r = got.find((x) => x.index === i) || {};
-    return { index: i, where: t.where, text: t.text, botScore: Math.max(0, Math.min(10, Math.round(Number(r.botScore) || 0))), tells: (r.tells || []).map(String).slice(0, 5), factProblem: String(r.factProblem || '') };
-  });
-  const flagged = scores.filter((r) => r.botScore >= REWRITE_AT || r.factProblem);
-  const answer = J(ans(p.n, s.final));
-  if (!flagged.length) return { ...s, stage: 'drafted', reviewReq, answer, vetted: { scores, flagged: [], applied: [] } };
-  const rp = rewritePrompt(pack, { ttl: '1h' });
-  const rewriteReq = { system: rp.system, user: rewriteUser({ flagged, facts: verified }), schema: rp.schema };
-  if (!fresh(p.n, 'rewrite', rewriteReq)) return { ...s, stage: 'rewrite', reviewReq, rewriteReq, flagged };
-  let cur = draft;
-  const patched = structuredClone(answer);
-  const applied = [];
-  const rejected = [];
-  for (const rw of J(ans(p.n, 'rewrite')).rewrites || []) {
-    const t = texts[rw.index];
-    if (!t || !flagged.some((x) => x.index === rw.index)) continue;
-    const text = mechanicalFix(String(rw.text || '').trim()).text;
-    if (!text) continue;
-    const next = structuredClone(cur);
-    if (t.where === 'cover') next.hook = text;
-    else if (t.where === 'cover line 2') next.sub = text;
-    else if (t.where === 'caption') next.caption = text;
-    else if (t.where === 'caption short') next.captionShort = text;
-    else next.slides[t.idx][t.field] = text;
-    next.captionIg = igCaption(next);
-    const refusedBy = checkPost(ctx, pack, next, facts, f).problems;
-    if (refusedBy.length) {
-      rejected.push({ where: t.where, text, why: refusedBy.slice(0, 2).map(say).join(" · ") });
-      continue;
-    }
-    cur = next;
-    applied.push({ index: rw.index, where: t.where, from: t.text, to: text });
-    // The same change in the answer the build files as the recording.
-    if (t.where === 'cover') patched.hook = text;
-    else if (t.where === 'cover line 2') patched.sub = text;
-    else if (t.where === 'caption') patched.caption = text;
-    else if (t.where === 'caption short') patched.captionShort = text;
-    else patched.slides[t.idx - 1][t.field] = text;
-  }
-  const fixed = new Set(applied.map((a) => a.index));
-  const after = scores.map((r) => (fixed.has(r.index) ? Math.min(r.botScore, REWRITE_AT - 1) : r.botScore));
-  const unfixed = scores.filter((r) => r.factProblem && !fixed.has(r.index));
-  const vetted = { scores, flagged, applied, rejected };
-  const base = { ...s, reviewReq, rewriteReq, vetted };
-  if (unfixed.length) return { ...base, stage: 'blocked', why: `the review: says more than its facts: ${unfixed.map((r) => `${r.where}: ${r.factProblem}`).join(' · ')}${rejected.length ? ` (rewrites the checks refused: ${rejected.map((x) => `${x.where}: ${x.why}`).join(' · ')})` : ''}` };
-  if (Math.max(0, ...after) >= BLOCK_AT) return { ...base, stage: 'blocked', why: `the review: still sounds like a bot (${Math.max(...after)}/10: ${scores.filter((r, i) => after[i] >= BLOCK_AT).map((r) => r.where).join(', ')})${rejected.length ? ` (rewrites the checks refused: ${rejected.map((x) => `${x.where}: ${x.why}`).join(' · ')})` : ''}` };
-  return { ...base, stage: 'drafted', draft: cur, answer: patched };
-}
-
-/**
- * Whether an answer exists for this exact request (its user turn), not for an older
- * version of the post. Only `next`, which writes the requests, records which request
- * an answer is for, and sets an answer to an older one aside in answers/stale/; every
- * other command only reads (a `status` once deleted a round's reviews this way).
- */
-function fresh(n, stage, request) {
-  const sig = createHash('sha256').update(request.user).digest('hex').slice(0, 16);
-  const sigFile = path.join(HOME, 'answers', `${nn(n)}-${stage}.sig`);
-  const has = existsSync(ans(n, stage));
-  const stored = existsSync(sigFile) ? readFileSync(sigFile, 'utf8').trim() : null;
-  if (has && (stored === null || stored === sig)) return true;
-  if (cmd === 'next') {
-    if (has) {
-      mkdirSync(path.join(HOME, 'answers', 'stale'), { recursive: true });
-      renameSync(ans(n, stage), path.join(HOME, 'answers', 'stale', `${nn(n)}-${stage}-${stored}.json`));
-    }
-    W(sigFile, sig);
-  }
-  return false;
-}
-
-/** The estimated cost of a launch post's calls: Sonnet 5.5, batch, the pack block cached after the first call. */
-function price(s) {
-  const r = MODEL_RATES['claude-sonnet-5-5'];
-  const sysTokens = (system) => (Array.isArray(system) ? system : [{ text: system }]).map((b) => estimateTokens(b.text));
-  const call = (request, answerPath) => {
-    if (!request || !existsSync(answerPath)) return null;
-    const [packT, ...rest] = sysTokens(request.system);
-    const restT = rest.reduce((a, b) => a + b, 0) + estimateTokens(request.user) + Math.ceil(estimateTokens(JSON.stringify(request.schema)) / 3);
-    const out = estimateTokens(readFileSync(answerPath, 'utf8'));
-    // The pack block: read from the cache (written once a day per account, which a day's posts share).
-    const input = (packT * r.cacheRead + restT * r.in) / 1e6;
-    return { input, out };
-  };
-  const calls = [call(s.outlineReq, ans(s.p.n, 'outline')), call(s.firstReq || s.slidesReq, ans(s.p.n, 'slides')), s.firstReq ? call(s.slidesReq, ans(s.p.n, 'slides-2')) : null].filter(Boolean);
-  // The review: its own short system prompt, not cached; the texts and facts in, a few tokens per text out.
-  if (s.reviewReq) {
-    const inT = estimateTokens(REVIEW_SYSTEM) + estimateTokens(s.reviewReq.user) + Math.ceil(estimateTokens(JSON.stringify(REVIEW_SCHEMA)) / 3);
-    const out = existsSync(ans(s.p.n, 'review')) ? estimateTokens(readFileSync(ans(s.p.n, 'review'), 'utf8')) : 30 * textsOf(s.draft).length;
-    calls.push({ input: (inT * r.in) / 1e6, out });
-  }
-  // The rewrite of what it flagged, when it flagged anything: the pack block cached again.
-  if (s.vetted?.flagged.length) calls.push(call(s.rewriteReq, ans(s.p.n, 'rewrite')));
-  // Thinking is not visible: the answer plus half to twice its length again.
-  const lo = calls.filter(Boolean).reduce((a, c) => a + c.input + (c.out * 1.5 * r.out) / 1e6, 0) * BATCH_FACTOR;
-  const hi = calls.filter(Boolean).reduce((a, c) => a + c.input + (c.out * 3 * r.out) / 1e6, 0) * BATCH_FACTOR;
-  return { lo, hi, calls: calls.filter(Boolean).length };
-}
-
-const db = workDb();
-const cands = await docsFor(db);
-choose();
-const states = [];
-for (const p of plan.posts) states.push(await state(db, cands, p));
-
-if (cmd === 'status' || cmd === 'next') {
-  for (const s of states) {
-    const line = `${nn(s.p.n)} ${s.p.format.padEnd(16)} ${s.stage.padEnd(15)} ${s.why || s.problems?.slice(0, 2).join(' · ') || ''}`;
-    console.log(line.slice(0, 260));
-    if (cmd !== 'next') continue;
-    // A request written by redo, with a review's notes, stays as it is until it is answered.
-    const reviewed = (stage) => existsSync(req(s.p.n, stage)) && readFileSync(req(s.p.n, stage), 'utf8').includes('A READER REVIEWED');
-    if (s.stage === 'outline' && !reviewed('outline')) W(req(s.p.n, 'outline'), requestFile(`Launch post ${s.p.n}: the outline (format ${s.p.format}, a ${kindName(s.f)} post)`, s.outlineReq, ans(s.p.n, 'outline')));
-    if (s.stage === 'slides' && !reviewed('slides')) W(req(s.p.n, 'slides'), requestFile(`Launch post ${s.p.n}: the slides (format ${s.p.format}, a ${kindName(s.f)} post)`, s.slidesReq, ans(s.p.n, 'slides')));
-    if (s.stage === 'redraft') W(req(s.p.n, 'slides-2'), requestFile(`Launch post ${s.p.n}: the slides, redrafted after the checks refused the first draft`, s.slidesReq, ans(s.p.n, 'slides-2')));
-    if (s.stage === 'review') W(req(s.p.n, 'review'), requestFile(`Launch post ${s.p.n}: the engine's review of the drafted post (the reviewing model)`, s.reviewReq, ans(s.p.n, 'review')));
-    if (s.stage === 'rewrite') W(req(s.p.n, 'rewrite'), requestFile(`Launch post ${s.p.n}: the rewrite of the lines the review flagged`, s.rewriteReq, ans(s.p.n, 'rewrite')));
-  }
-  if (cmd === 'next') console.log(`\nrequests in ${path.join(HOME, 'prompts')}; answers go to ${path.join(HOME, 'answers')}`);
-}
-
-if (cmd === 'redo') {
-  const n = Number(opt('n'));
-  const stage = opt('stage', 'slides');
-  const s = states.find((x) => x.p.n === n);
-  if (!s) throw new Error(`no post ${n}`);
-  for (const st of stage === 'outline' ? ['outline', 'slides', 'slides-2', 'review', 'rewrite'] : ['slides', 'slides-2', 'review', 'rewrite']) rmSync(ans(n, st), { force: true });
-  // The reviewer's notes go to the slides call as the engine's own redraft reasons.
-  const notes = opt('notes') ? readFileSync(opt('notes'), 'utf8').split(/\n+/).map((l) => l.replace(/^[-*]\s*/, '').trim()).filter(Boolean) : [];
-  if (notes.length) {
-    const fresh = await state(db, cands, s.p);
-    const base = stage === 'outline' ? fresh.outlineReq : fresh.slidesReq;
-    // The one place the launch set adds to the engine's prompt: a review, as the owner's notes would be.
-    const user = `${base.user}\n\nA READER REVIEWED THE LAST VERSION OF THIS POST. Fix what they say and keep every rule:\n${notes.map((x) => `- ${x}`).join('\n')}`;
-    W(req(n, stage), requestFile(`Launch post ${n}: the ${stage}, written again after a review`, { ...base, user }, ans(n, stage)));
-    console.log(`post ${n}: ${stage} request written with ${notes.length} notes`);
-  } else console.log(`post ${n}: ${stage} answers removed; run next`);
-}
-
-if (cmd === 'build') {
-  const drafted = states.filter((s) => s.stage === 'drafted');
-  for (const s of states.filter((x) => x.stage !== 'drafted')) console.log(`${nn(s.p.n)} not drafted (${s.stage}): ${s.why || ''}`);
-  // The final answers become the pack's recordings, keyed by the document (or group) they were drafted from.
-  for (const s of drafted) {
-    // The final answer with the review's kept rewrites in it: the text the engine would have published.
-    W(path.join(pack.recordingsDir, 'drafts', `${s.p.doc}.json`), { document: s.p.doc, format: s.p.format, outline: J(ans(s.p.n, 'outline')), slides: s.answer || J(ans(s.p.n, s.final)) });
-  }
-  const dbFile = path.join(HOME, 'launch.db');
-  for (const f of [dbFile, `${dbFile}-wal`, `${dbFile}-shm`]) rmSync(f, { force: true });
-  const ldb = new Db(dbFile);
-  const ctx = makeContext({ db: ldb, packs: [pack, ...others], log: () => {} });
-  ctx.mediaDir = path.join(HOME, 'media');
-  // The launch set's photos are real: found on Commons now, licensed, screened, credited.
-  ctx.imagesLive = !args.includes('--no-images');
-  rmSync(ctx.mediaDir, { recursive: true, force: true });
-  const out = path.join(ofHome(), 'out', 'launch', pack.id);
-  rmSync(out, { recursive: true, force: true });
-  const rows = [];
-  for (const s of drafted) {
-    const res = await buildPost(ctx, { pack, formatKey: s.p.format, docKey: s.p.doc, day: s.p.day || null, subject: s.p.subject ? { text: s.p.subject, terms: [] } : null, hookId: s.p.hook, ctaText: s.p.cta, sample: true });
-    const folder = path.join(out, `${nn(s.p.n)}-${s.p.format}`);
-    exportPost(ldb, res.postId, folder);
-    const cost = price(s);
-    const review = existsSync(path.join(HOME, 'reviews', `${nn(s.p.n)}.json`)) ? J(path.join(HOME, 'reviews', `${nn(s.p.n)}.json`)) : null;
-    // An earlier round's review, kept with the post: what was wrong, and what this version answers.
-    const rounds = readdirSync(HOME).filter((d) => /^round\d+$/.test(d)).sort((a, b) => Number(a.slice(5)) - Number(b.slice(5)));
-    const earlier = rounds.map((d) => [d, path.join(HOME, d, 'reviews', `${nn(s.p.n)}.json`)]).filter(([, f]) => existsSync(f));
-    if (review && earlier.length) review.history = earlier.map(([d, f]) => `round ${d.slice(5)}: ${J(f).verdict}. ${(J(f).notes || []).join(' ')}`.slice(0, 1500));
-    W(path.join(folder, 'cost.md'), `# Cost of this post\n\nEstimated, not billed: ${cost.calls} model calls (outline, slides${s.firstReq ? ', the one redraft' : ''}, the review) at Claude Sonnet 5.5's Message Batches price, the account's cached block read from the cache, thinking given as half to twice each answer.\n\n**$${cost.lo.toFixed(4)} to $${cost.hi.toFixed(4)}**\n\nThe engine's own estimate for the same calls made directly, without batching or caching: $${res.cost.toFixed(4)} (post.json, \`cost\`).\n`);
-    W(path.join(folder, 'reviewer-notes.md'), review ? reviewNotes(review) : '# Reviewer notes\n\nNot reviewed yet.\n');
-    W(path.join(folder, 'engine-review.md'), engineReview(s));
-    rows.push({ n: s.p.n, format: s.p.format, status: res.status, reason: res.reason, cost, review });
-    console.log(`${res.status === 'sample' ? 'ok ' : 'NO '} ${nn(s.p.n)} ${s.p.format.padEnd(16)} $${cost.lo.toFixed(3)}-${cost.hi.toFixed(3)} ${review ? `review: ${review.verdict}` : ''} ${res.reason || ''}`);
+    results[p.n] = { format: p.format, status: made ? 'sample' : 'blocked', postId: made?.postId || null, attempts };
+    W(path.join(RD, 'results.json'), results);
+    if (made) exportOne(ctx, p, made.postId, attempts);
   }
   await closeBrowser();
-  W(path.join(out, 'README.md'), summary(rows));
-  console.log(`\n${rows.filter((r) => r.status === 'sample').length}/${plan.posts.length} built: ${out}`);
+  summary(ctx, results);
 }
 
-if (cmd === 'review') {
-  const out = path.join(ofHome(), 'out', 'launch', pack.id);
-  const folders = existsSync(out) ? readdirSync(out).filter((d) => /^\d\d-/.test(d)) : [];
-  for (const d of folders) {
-    const n = Number(d.slice(0, 2));
-    const folder = path.join(out, d);
-    const slides = (p) => (existsSync(path.join(folder, p)) ? readdirSync(path.join(folder, p)).sort().map((f) => path.join(folder, p, f)) : []);
-    const read = (f) => (existsSync(path.join(folder, f)) ? readFileSync(path.join(folder, f), 'utf8').trim() : '');
-    W(path.join(HOME, 'reviews', `${nn(n)}-request.md`), `# Review of one post
+function postDir(p) {
+  return path.join(OUT, `${nn(p.n)}-${p.format}`);
+}
 
-You have never heard of this account. You are a skeptical Israeli, the age of its audience, scrolling TikTok and Instagram in Hebrew. Look at the post below as you would in your feed: open each slide image (TikTok first, then the Instagram version), read the captions.
-
-The account: ${pack.meta.audience}. (Nothing else about it: judge the post, not the brand.)
-
-Answer three questions honestly, then a verdict:
-1. stop: would the cover stop your scroll? Why or why not.
-2. swipe: would you swipe to the last slide? Where would you drop off, if anywhere.
-3. saveOrSend: would you save it, send it to a friend, or comment? Which, and why.
-Also note anything that sounds like a bot or a translation, anything that seems false or unclear, and anything visual that is off (text too small, cramped, cut, ugly).
-
-Verdict "pass" only if it would stop you AND you would swipe to the end AND it gives a reason to save, send or comment. Otherwise "fail", with what would fix it.
-
-Write ONE JSON object to ${path.join(HOME, 'reviews', `${nn(n)}.json`)}:
-{ "stop": true|false, "swipe": true|false, "saveOrSend": "save"|"send"|"comment"|"none", "verdict": "pass"|"fail", "notes": ["short notes in Hebrew or English"], "fix": ["what to change, concretely, if it fails"] }
-
-## TikTok slides (in order)
-${slides('tiktok').map((f) => `- ${f}`).join('\n')}
-
-## Instagram slides
-${slides('instagram').map((f) => `- ${f}`).join('\n')}
-
-## TikTok caption
-${read('caption.txt')}
-
-## Instagram caption
-${read('caption-instagram.txt')}
-`);
+function exportOne(ctx, p, postId, attempts) {
+  const dir = postDir(p);
+  // An earlier round's post of this number goes to rounds/ first.
+  if (existsSync(dir)) {
+    const was = existsSync(path.join(dir, 'round.txt')) ? readFileSync(path.join(dir, 'round.txt'), 'utf8').trim() : 'r0';
+    const to = path.join(OUT, 'rounds', was, path.basename(dir));
+    mkdirSync(path.dirname(to), { recursive: true });
+    rmSync(to, { recursive: true, force: true });
+    renameSync(dir, to);
   }
-  console.log(`${folders.length} review requests in ${path.join(HOME, 'reviews')}`);
+  exportPost(ctx.db, postId, dir);
+  const post = loadPost(ctx.db, postId);
+  W(path.join(dir, 'round.txt'), `r${round}`);
+  W(path.join(dir, 'cost.md'), costMd(ctx.db, post, attempts));
+  W(path.join(dir, 'images.md'), imagesMd(ctx.db, post));
+  W(path.join(dir, 'engine-review.md'), engineReviewMd(ctx.db, post, attempts));
+  W(path.join(dir, 'source-list.md'), sourceList(ctx.db, post));
 }
 
-/** The engine's own review of the post, before the blind one: scores, what it flagged, what the rewrite changed. */
-function engineReview(s) {
-  const v = s.vetted || { scores: [], flagged: [], applied: [] };
-  return `# The engine's review
-
-The step every post takes before it is queued (src/voice/review.js): the reviewing model scores each text from 0 (a person wrote it) to 10 (a bot did) and says when a text claims more than its facts. A text at ${REWRITE_AT} or more, or with a fact problem, is rewritten once, and a rewrite is kept only if the post still passes every check. Answered here by a Claude Code subagent on the engine's exact request, as the drafts were.
-
-${v.scores.map((r) => `- ${r.where}: ${r.botScore}/10${r.tells.length ? ` (${r.tells.join(', ')})` : ''}${r.factProblem ? `. **Fact problem:** ${r.factProblem}` : ''}`).join('\n')}
-
-${v.applied.length ? `## Rewritten\n\n${v.applied.map((a) => `- ${a.where}\n  - before: ${a.from}\n  - after: ${a.to}`).join('\n')}` : v.flagged.length ? '## Rewritten\n\nNothing kept.' : 'Nothing flagged.'}
-`;
+function summary(ctx, results) {
+  const lines = [`# Launch round ${round}: ${packId}`, '', '| # | Format | Kind | Status | Attempts | Topic | API cost (with attempts) |', '|---|---|---|---|---|---|---|'];
+  for (const p of plan.posts) {
+    const r = results[p.n];
+    if (!r) continue;
+    const f = resolveFormat(ctx.db, ctx.pack(packId), p.format);
+    const c = costOf(ctx.db, r.attempts.map((a) => a.postId));
+    const topic = r.attempts.at(-1)?.topic || '';
+    lines.push(`| ${p.n} | ${p.format} | ${kindName(f)} (${groupOf(f)}) | ${r.status} | ${r.attempts.length} | ${topic} | ${usd(c.prod)} |`);
+  }
+  W(path.join(RD, 'summary.md'), lines.join('\n'));
+  console.log(lines.join('\n'));
 }
 
-function reviewNotes(r) {
-  return `# Reviewer notes
-
-A separate reviewer that had not seen the drafting, looking at the rendered post as a skeptical Israeli who has never heard of the account.
-
-- Would it stop the scroll: **${r.stop ? 'yes' : 'no'}**
-- Would they swipe to the end: **${r.swipe ? 'yes' : 'no'}**
-- Save, send or comment: **${r.saveOrSend}**
-- Verdict: **${r.verdict}**
-
-${(r.notes || []).map((x) => `- ${x}`).join('\n')}
-${r.fix?.length ? `\nWhat would fix it:\n${r.fix.map((x) => `- ${x}`).join('\n')}\n` : ''}${r.history ? `\nEarlier rounds:\n${r.history.map((h) => `- ${h}`).join('\n')}\n` : ''}`;
+/** Three reviewers per post, three posts per reviewer: reviewer k reads posts k, k+1 and k+2 (wrapping). */
+function assign(ns) {
+  return ns.map((_, k) => ({ reviewer: `R${k + 1}`, posts: [0, 1, 2].map((d) => ns[(k + d) % ns.length]) }));
 }
 
-function summary(rows) {
-  const lo = rows.reduce((a, r) => a + r.cost.lo, 0) / Math.max(1, rows.length);
-  const hi = rows.reduce((a, r) => a + r.cost.hi, 0) / Math.max(1, rows.length);
-  return `# Launch set: ${pack.meta.displayName}
-
-${rows.length} posts, built by the engine from recorded documents and drafts written by a Claude Code subagent on the engine's exact prompts (no API key spent). Each folder has the slides for both platforms (\`tiktok/\`, \`instagram/\`), both captions, \`sources.md\` (every fact, its quote and its source), \`cost.md\`, \`engine-review.md\` (the engine's own review and what its rewrite changed), \`reviewer-notes.md\` (the blind review, with the earlier rounds' verdicts) and \`post.json\` (the full trace).
-
-The Review column is the last blind review: a separate subagent playing a skeptical Israeli who has never heard of the account, told to pass a post only if it would stop the scroll, be swiped to the end and give a reason to save, send or comment. It is one strict opinion, written down for you to weigh; whether a post goes out is yours to decide.
-
-| # | Format | Built | Cost (est.) | Review |
-|---|---|---|---|---|
-${rows.map((r) => `| ${r.n} | ${r.format} | ${r.status === 'sample' ? 'yes' : `no: ${r.reason}`} | $${r.cost.lo.toFixed(3)} to $${r.cost.hi.toFixed(3)} | ${r.review ? r.review.verdict : 'not yet'} |`).join('\n')}
-
-Average per post: **$${lo.toFixed(3)} to $${hi.toFixed(3)}** (estimated, batch and cache, thinking as a range).
-`;
+function review() {
+  const results = J(path.join(RD, 'results.json'));
+  const made = plan.posts.filter((p) => results[p.n]?.status === 'sample');
+  const bundles = path.join(RD, 'review');
+  rmSync(bundles, { recursive: true, force: true });
+  for (const p of made) {
+    const src = postDir(p);
+    const dst = path.join(bundles, nn(p.n));
+    // Only what a viewer sees: the slides, the captions and where the facts come from.
+    for (const plat of ['tiktok', 'instagram']) if (existsSync(path.join(src, plat))) cpSync(path.join(src, plat), path.join(dst, plat), { recursive: true });
+    for (const f of ['caption.txt', 'caption-instagram.txt', 'source-list.md']) if (existsSync(path.join(src, f))) cpSync(path.join(src, f), path.join(dst, f));
+  }
+  const plan3 = made.length >= 3 ? assign(made.map((p) => p.n)) : made.map((p, k) => ({ reviewer: `R${k + 1}`, posts: made.map((x) => x.n) }));
+  W(path.join(RD, 'reviewers.json'), plan3);
+  console.log(`${made.length} posts in ${bundles}; ${plan3.length} reviewers: ${plan3.map((r) => `${r.reviewer} ${r.posts.join(',')}`).join(' · ')}`);
 }
+
+function verdicts() {
+  const results = J(path.join(RD, 'results.json'));
+  const dir = path.join(RD, 'reviews');
+  // A reviewer's file is read leniently: a Hebrew abbreviation's quote mark (מנכ"ל) left unescaped is the gershayim it stands for.
+  const lenient = (file) => {
+    const text = readFileSync(file, 'utf8');
+    try {
+      return JSON.parse(text);
+    } catch {
+      return JSON.parse(text.replace(/([֐-׿])"([֐-׿])/g, '$1״$2'));
+    }
+  };
+  const all = existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith('.json')).flatMap((f) => lenient(path.join(dir, f)).map((r) => ({ ...r, reviewer: path.basename(f, '.json') }))) : [];
+  const table = ['| # | Format | Pass votes | Verdict | Stop / Swipe / Act |', '|---|---|---|---|---|'];
+  let passed = 0;
+  const per = {};
+  for (const p of plan.posts) {
+    const r = results[p.n];
+    if (r?.status !== 'sample') {
+      table.push(`| ${p.n} | ${p.format} | - | not made (${r?.attempts?.at(-1)?.reason || 'not run'}) | |`);
+      continue;
+    }
+    const mine = all.filter((x) => Number(x.post) === p.n);
+    const votes = mine.filter((x) => String(x.verdict).toLowerCase() === 'pass').length;
+    const ok = votes >= 2;
+    if (ok) passed++;
+    per[p.n] = { votes, of: mine.length, pass: ok };
+    const sw = (k) => mine.filter((x) => x[k]).length;
+    table.push(`| ${p.n} | ${p.format} | ${votes} of ${mine.length} | ${ok ? 'PASS' : 'fail'} | ${sw('stop')} / ${sw('swipe')} / ${sw('act')} |`);
+    const notes = [`# Reviewer notes, round ${round}: post ${p.n} (${p.format})`, '', `Verdict: **${ok ? 'PASS' : 'FAIL'}** (${votes} of ${mine.length} reviewers passed it; it passes at 2).`, ''];
+    for (const x of mine) {
+      notes.push(`## ${x.reviewer}: ${String(x.verdict).toUpperCase()}`, '', `Stops the scroll: ${x.stop ? 'yes' : 'no'}. Swipes to the end: ${x.swipe ? 'yes' : 'no'}. Saves, sends or comments: ${x.act ? 'yes' : 'no'}.`, '');
+      for (const k of ['why', 'notes', 'doubts', 'fixes']) if (x[k]?.length) notes.push(`**${k}**`, '', ...(Array.isArray(x[k]) ? x[k] : [x[k]]).map((t) => `- ${t}`), '');
+    }
+    if (existsSync(postDir(p))) W(path.join(postDir(p), 'reviewer-notes.md'), notes.join('\n'));
+  }
+  const head = [`# Blind review, round ${round}: ${packId}`, '', `${passed} of ${plan.posts.length} passed (a post passes when at least 2 of its 3 reviewers pass it: it stops the scroll, it gets swiped to the end, it gives a reason to save, send or comment).`, ''];
+  W(path.join(RD, 'verdicts.md'), [...head, ...table].join('\n'));
+  W(path.join(RD, 'verdicts.json'), { round, passed, of: plan.posts.length, posts: per });
+  console.log([...head, ...table].join('\n'));
+}
+
+function status() {
+  for (const r of rounds()) {
+    const f = path.join(HOME, `r${r}`, 'verdicts.json');
+    const res = existsSync(path.join(HOME, `r${r}`, 'results.json')) ? J(path.join(HOME, `r${r}`, 'results.json')) : {};
+    const made = Object.values(res).filter((x) => x.status === 'sample').length;
+    console.log(`r${r}: ${made} made${existsSync(f) ? `, ${J(f).passed} of ${J(f).of} passed the blind review` : ''}`);
+  }
+}
+
+/**
+ * What the launch rounds' calls would cost through the API: per call type, per
+ * attempt (made or stopped), and per post made, counting the attempts the checks
+ * stopped before it. The numbers behind docs/costs.md's forecast.
+ */
+function costs() {
+  const tags = {};
+  let made = 0;
+  let attempts = 0;
+  let prod = 0;
+  let list = 0;
+  for (const r of rounds()) {
+    const file = path.join(HOME, `r${r}`, 'launch.db');
+    if (!existsSync(file)) continue;
+    const db = new Db(file);
+    for (const row of db.all("SELECT tag, model, api_usd, usage_json FROM spend WHERE api = 'claude-cli'")) {
+      const u = j(row.usage_json, {}) || {};
+      const t = (tags[row.tag] ??= { calls: 0, input: 0, output: 0, prod: 0, list: 0, model: row.model });
+      t.calls++;
+      t.input += u.priced?.input ?? (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0);
+      t.output += u.priced?.output ?? (u.output_tokens || 0);
+      t.prod += row.api_usd || 0;
+      t.list += u.listUsd || 0;
+      prod += row.api_usd || 0;
+      list += u.listUsd || 0;
+    }
+    made += db.get("SELECT COUNT(*) AS n FROM posts WHERE status = 'sample'").n;
+    attempts += db.get('SELECT COUNT(*) AS n FROM posts').n;
+    db.close();
+  }
+  const lines = [`# Launch costs: ${packId}`, '', `${attempts} attempts, ${made} posts made, over rounds ${rounds().join(', ')}.`, '', '| Call | Model | Calls | Avg tokens in | Avg out | API (batched, cached) | List |', '|---|---|---|---|---|---|---|'];
+  for (const [tag, t] of Object.entries(tags)) lines.push(`| ${tag} | ${String(t.model).replace('claude-', '')} | ${t.calls} | ${Math.round(t.input / t.calls).toLocaleString()} | ${Math.round(t.output / t.calls).toLocaleString()} | ${usd(t.prod)} | ${usd(t.list)} |`);
+  lines.push('', `Per attempt: API ${usd(prod / Math.max(1, attempts))}, list ${usd(list / Math.max(1, attempts))}.`, `Per post made, the stopped attempts included: API ${usd(prod / Math.max(1, made))}, list ${usd(list / Math.max(1, made))}.`);
+  W(path.join(HOME, 'costs.md'), lines.join('\n'));
+  console.log(lines.join('\n'));
+  return { made, attempts, prod, list };
+}
+
+if (cmd === 'run') await run();
+else if (cmd === 'costs') costs();
+else if (cmd === 'review') review();
+else if (cmd === 'verdicts') verdicts();
+else status();

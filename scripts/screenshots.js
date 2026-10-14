@@ -28,7 +28,8 @@ await new Promise((resolve, reject) => {
     if (buf.includes('open http://')) resolve();
   });
   server.on('exit', (c) => reject(new Error(`demo exited ${c}`)));
-  setTimeout(() => reject(new Error('demo did not start')), 180_000);
+  // The demo builds its posts first; on a busy machine that takes minutes.
+  setTimeout(() => reject(new Error('demo did not start')), 900_000);
 });
 
 const base = `http://127.0.0.1:${port}`;

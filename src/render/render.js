@@ -6,6 +6,7 @@ import { tokenOf } from '../verify/claims.js';
 import { page, SIZES } from './html.js';
 import { buildSlide } from './templates/index.js';
 import { kindName, ranksOf } from '../formats/kinds.js';
+import { slideHasVisual } from './visuals.js';
 
 // Slides to JPEG, through headless Chromium, because Hebrew needs real
 // bidirectional layout and shaping and the browser is the thing that has it.
@@ -59,7 +60,7 @@ export class RenderError extends Error {
 const FIT_FLOOR = 0.6;
 
 /** One HTML page to one JPEG. Returns { file, fitted }. */
-export async function renderHtml(html, { size, file }) {
+export async function renderHtml(html, { size, file, floor = FIT_FLOOR }) {
   const geo = SIZES[size];
   const browser = await getBrowser();
   const context = await browser.newContext({ viewport: { width: geo.w, height: geo.h }, deviceScaleFactor: 1, locale: 'he-IL', javaScriptEnabled: true });
@@ -136,11 +137,14 @@ export async function renderHtml(html, { size, file }) {
     // comma, a point, a colon or a dash, never across a sentence's end. Text already
     // isolated (a source name, a keyword, a handle) is left as it is.
     await tab.evaluate(() => {
-      const RUN = /[A-Za-z0-9$€£](?:[A-Za-z0-9$€£%&+'’]|[.,:/–-](?=[A-Za-z0-9])| (?=[A-Za-z0-9$€£]))*/g;
+      // An underscore is part of a name ("budget_tokens" came out "tokens_budget"), and so are the brackets of a call.
+      // A command's flags are part of it: "npx frugon --demo" came out "demo--" when the dashes were left outside.
+      const RUN = /(?:(?<!\S)--?(?=[A-Za-z]))?[A-Za-z0-9$€£](?:[A-Za-z0-9$€£%&+'’_]|[.,:/–=-](?=[A-Za-z0-9_])|-(?=-[A-Za-z])|\(\)| (?=[A-Za-z0-9$€£]|--?[A-Za-z]))*/g;
       const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
       const nodes = [];
       for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-        if (!/[֐-׿]/.test(n.nodeValue) || !/[A-Za-z0-9]/.test(n.nodeValue)) continue;
+        // A node with no Hebrew is set right to left too: a graphic's "2003–04" came out "04–2003".
+        if (!/[A-Za-z0-9]/.test(n.nodeValue)) continue;
         if (n.parentElement.closest('bdi,.probe,style,script')) continue;
         // The page itself is dir="rtl"; an element inside it that sets its own direction is already isolated.
         const own = n.parentElement.closest('[dir]');
@@ -157,6 +161,8 @@ export async function renderHtml(html, { size, file }) {
           if (m.index > at) frag.append(n.nodeValue.slice(at, m.index));
           const b = document.createElement('bdi');
           b.dir = 'ltr';
+          // A score, a range or a name with no space in it never breaks across lines ("3–0" broke as "3–" and "0").
+          if (!/\s/.test(m[0])) b.style.whiteSpace = 'nowrap';
           b.textContent = m[0];
           frag.append(b);
           at = m.index + m[0].length;
@@ -185,12 +191,47 @@ export async function renderHtml(html, { size, file }) {
         last.after(mark);
         const baseline = mark.getBoundingClientRect().bottom;
         mark.remove();
-        return baseline > box.bottom + 1;
+        // A line wider than its box is cut as surely as one below it: "$120 מיליון" lost its last letters on a cover.
+        // Measured on the text itself: a box's scroll width also counts what is not drawn.
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const ink = range.getBoundingClientRect();
+        const sideways = ink.width > 0 && (ink.left < box.left - 2 || ink.right > box.right + 2);
+        return baseline > box.bottom + 1 || sideways || (el.classList.contains('vis') && inside(el, box));
       };
-      const out = [];
-      for (const el of document.querySelectorAll('.fit')) {
+      // A graphic is cut inside itself: a price card ran past the graphic's bottom, and "CodeFast" broke as "CodeF / ast"
+      // in a card too narrow for it, while the graphic's last line of text fitted. So every box in it must sit inside
+      // the graphic, and every line of text inside the box that holds it. A word never breaks: it is set smaller.
+      const inside = (el, box) => {
+        // A part a box of the graphic clips on purpose (a bar's segments inside their track) is not cut.
+        const clipped = (d) => {
+          for (let p = d.parentElement; p && p !== el; p = p.parentElement) if (getComputedStyle(p).overflow !== 'visible') return true;
+          return false;
+        };
+        for (const d of el.querySelectorAll('*')) {
+          if (clipped(d)) continue;
+          const r = d.getBoundingClientRect();
+          if (r.width && r.height && (r.bottom > box.bottom + 1 || r.right > box.right + 2 || r.left < box.left - 2)) return true;
+        }
+        const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+        const range = document.createRange();
+        for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+          if (!n.nodeValue.trim()) continue;
+          let holder = n.parentElement;
+          while (holder !== el && /^(inline|contents)$/.test(getComputedStyle(holder).display)) holder = holder.parentElement;
+          const h = holder.getBoundingClientRect();
+          range.selectNodeContents(n);
+          const t = range.getBoundingClientRect();
+          if (t.width && (t.right > h.right + 2 || t.left < h.left - 2)) return true;
+        }
+        return false;
+      };
+      const els = [...document.querySelectorAll('.fit')];
+      const base = new Map(els.map((el) => [el, parseFloat(getComputedStyle(el).fontSize)]));
+      let out = [];
+      for (const el of els) {
         if (!over(el)) continue;
-        const from = parseFloat(getComputedStyle(el).fontSize);
+        const from = base.get(el);
         let px = from;
         while (over(el) && px > from * floor) {
           px *= 0.98;
@@ -198,10 +239,21 @@ export async function renderHtml(html, { size, file }) {
         }
         out.push({ text: el.textContent.trim().slice(0, 40), from: Math.round(from), to: Math.round(px), fits: !over(el) });
       }
+      // Boxes that share a slide take room from each other: a title, a graphic and a text squeezed one box to
+      // nothing, and no size of it alone could fit. Then everything on the slide is set smaller together.
+      if (out.some((f) => !f.fits)) {
+        for (let scale = 0.96; scale >= floor; scale *= 0.96) {
+          for (const el of els) el.style.fontSize = `${base.get(el) * scale}px`;
+          if (!els.some(over)) {
+            out = els.map((el) => ({ text: el.textContent.trim().slice(0, 40), from: Math.round(base.get(el)), to: Math.round(base.get(el) * scale), fits: true }));
+            break;
+          }
+        }
+      }
       return out;
-    }, FIT_FLOOR);
+    }, floor);
     const failed = fitted.filter((f) => !f.fits);
-    if (failed.length) throw new RenderError(`too long for the slide even at ${Math.round(FIT_FLOOR * 100)}% size: "${failed[0].text}..."`, 'overflow');
+    if (failed.length) throw new RenderError(`too long for the slide even at ${Math.round(floor * 100)}% size: "${failed[0].text}..."`, 'overflow');
 
     const dir = await tab.evaluate(() => [document.documentElement.dir, document.documentElement.lang]);
     if (dir[0] !== 'rtl' || dir[1] !== 'he') throw new RenderError('the slide is not right to left Hebrew', 'rtl');
@@ -241,20 +293,28 @@ export function slidePlaces(slides) {
   });
 }
 
+const dataUri = (file) => `data:${/\.png$/i.test(file) ? 'image/png' : /\.svg$/i.test(file) ? 'image/svg+xml' : 'image/jpeg'};base64,${readFileSync(file).toString('base64')}`;
+
 /**
  * Render every slide of a post for every platform of its pack.
- * post: { id, hook, sub, caption, token, extra }; slides: [{ kind, role, title, body, a, b, factKeys, sources }];
- * photo: an image row (with .file), drawn on the cover or on the last slide (photoOn).
+ * post: { id, hook, sub, caption, token, extra }; slides: [{ kind, role, title, body, a, b, factKeys, sources, visual }];
+ * photos: Map(slide index -> image row with .file): the cover's (or the last slide's)
+ * is drawn behind the whole slide, a content slide's as a framed picture; or, from
+ * an older caller, one photo drawn on the cover or on the last slide (photoOn).
  * Returns { tiktok: [files], instagram: [files] }.
  */
-export async function renderPost({ pack, post, slides, photo = null, photoOn = 'cover', format = null, outDir }) {
+export async function renderPost({ pack, post, slides, photos = null, photo = null, photoOn = 'cover', format = null, outDir }) {
   const expected = tokenOf({ slides, caption: post.caption, hook: post.hook, sub: post.sub, extra: post.extra || {} });
   if (!post.token || post.token !== expected) {
     throw new RenderError('refused: this text was not checked by the fact gate (or changed after it)', 'unverified');
   }
-  const photoUri = photo?.file ? `data:image/jpeg;base64,${readFileSync(photo.file).toString('base64')}` : null;
+  const byIdx = photos instanceof Map ? photos : new Map(photo ? [[photoOn === 'last' ? slides.length - 1 : 0, photo]] : []);
+  const uri = new Map([...byIdx].filter(([, p]) => p?.file).map(([i, p]) => [i, dataUri(p.file)]));
+  const brand = pack.brandLogo ? dataUri(pack.brandLogo) : null;
   const items = slides.filter((s) => s.kind === 'item').length;
   const places = slidePlaces(slides);
+  // Photographs left off a slide that could not fit them, per platform: not shown, not credited.
+  const dropped = {};
   const postKind = format ? kindName(format) : 'list';
   const extra = post.extra || {};
   const out = {};
@@ -277,14 +337,37 @@ export async function renderPost({ pack, post, slides, photo = null, photoOn = '
         subject: extra.subject || {},
         keywords: extra.keywords || [],
         cta: extra.cta ? { kind: post.ctaKind || 'save', text: extra.cta } : null,
+        coverVisual: extra.coverVisual || null,
+        brand: brand && (s.kind === 'cover' || i === slides.length - 1) ? brand : null,
       };
-      const onThis = (photoOn === 'cover' && s.kind === 'cover') || (photoOn === 'last' && i === slides.length - 1);
-      const usePhoto = onThis && photoUri && pack.theme.options?.coverPhoto !== false;
-      const html = page({ theme: pack.theme, size, slide, parts: buildSlide(pack.theme, slide), photo: usePhoto ? photoUri : null });
+      // The cover's photograph, and a guess-who's reveal, fill the slide; a content slide's sits in a frame.
+      const full = uri.has(i) && (s.kind === 'cover' || (i === slides.length - 1 && s.role === 'reveal')) && pack.theme.options?.coverPhoto !== false;
+      // A guess-who's cover shows its answer's photograph blurred past recognition: a real picture that teases, never tells.
+      const tease = !full && s.kind === 'cover' && postKind === 'guess-who' && uri.has(slides.length - 1) && pack.theme.options?.coverPhoto !== false;
+      if (uri.has(i) && !full) slide.photo = uri.get(i);
+      slide.hasPhoto = Boolean(full || tease);
+      slide.tease = Boolean(tease);
+      slide.hasVisual = s.kind === 'item' && slideHasVisual(slide);
       const file = path.join(outDir, `${size}-${String(i + 1).padStart(2, '0')}.jpg`);
-      await renderHtml(html, { size, file });
+      // A slide that does not fit with everything on it is drawn again: without its framed photograph (a
+      // presentation choice: the text and the graphic are what was checked), then with its type allowed smaller.
+      const tries = [{ ...slide }, ...(slide.photo ? [{ ...slide, photo: null, hasVisual: s.kind === 'item' && slideHasVisual({ ...slide, photo: null }) }] : [])];
+      let done = false;
+      for (const [k, sl] of [...tries.map((t) => [FIT_FLOOR, t]), [0.45, tries.at(-1)]].entries()) {
+        const html = page({ theme: pack.theme, size, slide: sl[1], parts: buildSlide(pack.theme, sl[1]), photo: full ? uri.get(i) : tease ? uri.get(slides.length - 1) : null, blur: tease });
+        try {
+          await renderHtml(html, { size, file, floor: sl[0] });
+          if (slide.photo && !sl[1].photo) (dropped[size] ??= new Set()).add(i);
+          done = true;
+          break;
+        } catch (e) {
+          if (e.code !== 'overflow' || k === tries.length) throw e;
+        }
+      }
+      if (!done) throw new RenderError('the slide did not render', 'overflow');
       out[size].push(file);
     }
   }
+  Object.defineProperty(out, 'dropped', { value: dropped, enumerable: false });
   return out;
 }

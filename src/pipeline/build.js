@@ -10,15 +10,17 @@ import { refreshSource } from '../sources/index.js';
 import { ensureFormats, groupsOf, mixOf, pickFormat, pickHook } from '../formats/rotation.js';
 import { contentRange, ctasOf, factFree, groupOf, hookPatterns, kindName, kindOf, kindProblems, linesOfBody, ranksOf, shapeProblems, structureNumbers } from '../formats/kinds.js';
 import { resolveFormat } from '../trends/index.js';
-import { isGenericQuestion, mechanicalFix, normHe, tellsIn } from '../voice/tells.js';
+import { isGenericQuestion, LIMITS, mechanicalFix, normHe, tellsIn } from '../voice/tells.js';
 import { BLOCK_AT, REWRITE_AT, reviewTexts } from '../voice/review.js';
 import { checkRules } from '../rules/check.js';
-import { gate, verifyFact } from '../verify/claims.js';
+import { gate, numbersIn, verifyFact } from '../verify/claims.js';
 import { findImage } from '../images/index.js';
+import { normVisual, slideHasVisual, visualProblems, visualsOf, visualText } from '../render/visuals.js';
 import { renderPost } from '../render/render.js';
 import { israelDate } from '../schedule/israel.js';
 import { upcoming } from '../schedule/events.js';
-import { outlinePrompt, outlineUser, rewritePrompt, rewriteUser, slidesPrompt, slidesUser } from './prompts.js';
+import { detailsPrompt, detailsUser, outlinePrompt, outlineUser, rewritePrompt, rewriteUser, slidesPrompt, slidesUser, visualsNeeded } from './prompts.js';
+import { aboutSubject, research } from '../sources/research.js';
 
 // One post, from topic to a rendered, queued slideshow:
 //
@@ -98,12 +100,24 @@ export function hashtagsFor(pack, format, seed, text = null) {
  * sources, not used lately. A document a blocked or rejected post was drafted
  * from counts as used too, or the next post would draft the same failure again.
  */
+/** How long a source's last read stands before it is read again. */
+export const SOURCE_TTL_MS = 6 * 3600_000;
+
 export async function candidateDocs(ctx, pack, { usedWithinDays = 45, day = null } = {}) {
   const sources = ctx.db.all("SELECT * FROM sources WHERE account_id = ? AND status = 'approved' ORDER BY id", pack.id);
   // The pages of the events around this day, for a source that reads them (a fight week).
   const events = pack.meta.events ? upcoming(ctx.db, pack.id, day || israelDate(now()), 8).map((e) => decodeURIComponent(String(e.url || '').split('/wiki/')[1] || '').replace(/_/g, ' ')).filter(Boolean) : [];
   const docs = [];
-  for (const src of sources) for (const d of await refreshSource(ctx.db, ctx.sources, src, { day, events })) docs.push({ ...d, sourceName: src.name, sourceKey: src.key });
+  // A source read in the last six hours, for the same day, is not read again: its documents are in the database.
+  // Every post reading every source was some forty requests a post, and Wikipedia throttles a reader that asks that often.
+  const forDay = day || israelDate(now());
+  for (const src of sources) {
+    const last = j(src.last_docs_json, null);
+    const fresh = ctx.sources?.kind === 'live' && last?.day === forDay && src.last_ok_at && now() - Date.parse(src.last_ok_at) < SOURCE_TTL_MS;
+    const rows = fresh ? (last.ids.length ? ctx.db.all(`SELECT * FROM documents WHERE id IN (${last.ids.map(() => '?').join(',')})`, ...last.ids) : []) : await refreshSource(ctx.db, ctx.sources, src, { day, events });
+    if (!fresh && ctx.sources?.kind === 'live') ctx.db.update('sources', src.id, { last_docs_json: { day: forDay, ids: rows.map((r) => r.id) } });
+    for (const d of rows) docs.push({ ...d, sourceName: src.name, sourceKey: src.key });
+  }
   const since = new Date(now() - usedWithinDays * DAY).toISOString();
   const used = new Set(
     ctx.db
@@ -131,6 +145,32 @@ export function candidatesOf(docs) {
   // a fact names its document by that number.
   for (const c of out.values()) c.docs.sort((a, b) => String(a.key || '').localeCompare(String(b.key || '')) || a.id - b.id);
   return [...out.values()];
+}
+
+/**
+ * The candidates a format may be drafted from. A format that names its sources
+ * (formats.json "sources": source ids) takes documents from those only, in the
+ * order it names them: a match story drafted from a results table wasted six
+ * outline calls before it found an article. An on-this-day post takes only the
+ * documents that mention its day.
+ */
+export function poolFor(format, candidates, day, { maxAgeDays = null } = {}) {
+  let pool = kindName(format) === 'on-this-day' ? candidates.filter((c) => c.docs.some((d) => mentionsDay(d.text, day))) : candidates;
+  // A pack whose news ages fast (research.maxAgeDays) takes no topic whose dated documents are older: a 2023 launch
+  // thread read as stale to every reader, however it was framed. An undated page (docs, a price list) stays.
+  if (maxAgeDays && kindName(format) !== 'on-this-day') {
+    const since = new Date(Date.parse(`${day}T00:00:00Z`) - maxAgeDays * DAY).toISOString();
+    pool = pool.filter((c) => !c.docs.some((d) => d.published_at && String(d.published_at) < since));
+  }
+  // A topic from the bank was chosen for one kind of post.
+  pool = pool.filter((c) => !String(c.key).startsWith('bank:') || String(c.key).split(':')[1] === kindName(format));
+  const want = format.sources || [];
+  if (want.length) {
+    const rank = (c) => Math.max(...c.docs.map((d) => want.indexOf(d.sourceKey)));
+    // In the order the format names its sources, and within a source in the order it lists its pages.
+    pool = pool.filter((c) => c.docs.every((d) => want.includes(d.sourceKey))).map((c) => ({ c, r: rank(c), id: Math.min(...c.docs.map((d) => d.id)) })).sort((a, b) => a.r - b.r || a.id - b.id).map((x) => x.c);
+  }
+  return pool;
 }
 
 const MONTHS_EN = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -182,7 +222,7 @@ export function igCaption({ hook, captionShort, question }) {
 }
 
 /** What the gate and the token hold beyond the slides, in one fixed order. */
-const extraOf = (d) => ({ captionIg: d.captionIg || '', keywords: d.keywords || [], subject: d.subject || {}, cta: d.cta?.text || '' });
+const extraOf = (d) => ({ captionIg: d.captionIg || '', keywords: d.keywords || [], subject: d.subject || {}, cta: d.cta?.text || '', ...(d.coverVisual ? { coverVisual: d.coverVisual } : {}) });
 
 /** The fact gate, with what this kind of post allows: its structure numbers, its fact-free roles. */
 export function gateDraft(format, draft, facts) {
@@ -217,6 +257,13 @@ export function checkPost(ctx, pack, draft, facts, format = null) {
       if (String(s.title || '').length > 70) problems.push({ where: `slide ${draft.slides.indexOf(s)} title`, code: 'length', msg: 'the title is over 70 characters' });
       if (String(s.body || '').length > 260) problems.push({ where: `slide ${draft.slides.indexOf(s)} text`, code: 'length', msg: 'the text is over 260 characters' });
     }
+    // Pictures as much as words: with the cover (which always has one), at least half the slides carry a visual.
+    const allowed = visualsOf(pack);
+    for (const s of content) for (const msg of visualProblems(s.visual, allowed, `slide ${draft.slides.indexOf(s)}`)) problems.push({ where: 'visual', code: 'shape', msg });
+    for (const msg of visualProblems(draft.coverVisual, allowed, 'the cover')) problems.push({ where: 'visual', code: 'shape', msg });
+    const have = content.filter(slideHasVisual).length;
+    const need = visualsNeeded(content.length);
+    if (have < need) problems.push({ where: 'visual', code: 'shape', msg: `only ${have} of the ${content.length} content slides carry a visual: at least ${need} need one (with the cover, half the post)` });
   }
   const g = gateDraft(f, draft, facts);
   for (const msg of g.problems) problems.push({ where: 'facts', code: 'verify', msg });
@@ -240,6 +287,34 @@ export function joinCaption(caption, question) {
   // bot (a blind review caught "the same question twice"), even when the words differ.
   if (!q || (c && flat(c).endsWith(flat(q))) || /\?\s*$/.test(c)) return c;
   return [c, q].filter(Boolean).join(' ');
+}
+
+/**
+ * A slide that states a number one of the post's verified facts holds, without
+ * citing that fact, cites it: when exactly one verified fact's quote holds the
+ * number, the citation is bookkeeping, not a claim ("2022" on a slide, the year in
+ * a fact the slide forgot to list, blocked a post after its redraft). A number two
+ * facts hold, or none, is left for the gate. Returns what was added, per slide.
+ */
+export function citeNumbers(draft, facts) {
+  const out = [];
+  const good = facts.filter((f) => f.verified);
+  const holds = good.map((f) => ({ key: f.key, nums: numbersIn(f.quote, { words: true, hebrew: true }) }));
+  draft.slides.forEach((sl, i) => {
+    if (sl.kind !== 'item') return;
+    const cited = new Set(sl.factKeys || []);
+    const have = new Set(holds.filter((h) => cited.has(h.key)).flatMap((h) => [...h.nums]));
+    const text = `${sl.title} ${sl.body} ${sl.a || ''} ${sl.b || ''} ${visualText(sl.visual)}`;
+    for (const x of numbersIn(text, { hebrew: true })) {
+      if (have.has(x)) continue;
+      const by = holds.filter((h) => h.nums.has(x));
+      if (by.length !== 1) continue;
+      sl.factKeys = [...(sl.factKeys || []), by[0].key];
+      for (const n of by[0].nums) have.add(n);
+      out.push(`slide ${i}: cites ${by[0].key} for ${x}`);
+    }
+  });
+  return out;
 }
 
 /** Fix the mechanical tells in every text of a draft, in place. Returns what changed, per text. */
@@ -301,7 +376,7 @@ export function keepItems(format, items, good) {
  * does with each answer, and what the launch set's tools check an answer with.
  * Returns { draft, checked, fixes }.
  */
-export function draftFromAnswer(ctx, pack, { format, answer: d, outline, items, facts, closer = null, hook = null, cta = null }) {
+export function draftFromAnswer(ctx, pack, { format, answer: d, outline, items, facts, closer = null, hook = null, cta = null, attempt = 0 }) {
   const legacy = kindName(format) === 'list';
   const draft = {
     hook: String(d.hook || '').trim(),
@@ -319,14 +394,25 @@ export function draftFromAnswer(ctx, pack, { format, answer: d, outline, items, 
       ...(d.slides || []).map((s, i) => ({
         kind: 'item', role: legacy ? 'item' : String(s.role || items[i]?.role || '').trim(),
         title: String(s.title || '').trim(), body: String(s.body || '').trim(), a: String(s.a || '').trim(), b: String(s.b || '').trim(), factKeys: (s.facts || []).map(String),
+        ...(legacy ? {} : { visual: normVisual(s.visual), imageQuery: String(s.imageQuery || '').trim() }),
       })),
       ...(closer ? [{ kind: 'closer', role: 'closer', title: closer.title, body: closer.body || '', factKeys: [] }] : []),
     ],
   };
+  if (!legacy) draft.coverVisual = normVisual(d.coverVisual);
   draft.captionIg = igCaption(draft);
   // What code can fix, code fixes: no model call for a stray exclamation mark.
-  const fixes = fixDraft(draft);
+  const fixes = [...fixDraft(draft), ...citeNumbers(draft, facts)];
   const checked = checkPost(ctx, pack, draft, facts, format);
+  // The details the research found are what makes a post worth finishing: at least three of them on the slides.
+  const details = facts.filter((f) => f.verified && f.detail).map((f) => f.key);
+  if (details.length) {
+    const cited = new Set(draft.slides.flatMap((s) => s.factKeys || []));
+    const used = details.filter((k) => cited.has(k)).length;
+    // A first draft is asked for three; a redraft that kept two still tells the post's moments, and passes.
+    const need = Math.min(attempt > 0 ? 2 : 3, details.length);
+    if (used < need) checked.problems.push({ where: 'details', code: 'shape', msg: `the slides use ${used} of the details (${details.join(', ')}): at least ${need} of them belong on the slides, each cited by its id` });
+  }
   // The slides follow the outline's plan: the same roles, in order.
   const roles = draft.slides.filter((s) => s.kind === 'item').map((s) => s.role).join(',');
   if (!legacy && roles !== items.map((it) => it.role).join(',')) checked.problems.unshift({ where: 'shape', code: 'shape', msg: `the slides must follow the outline's roles in order (${items.map((it) => it.role).join(', ')})` });
@@ -339,11 +425,138 @@ export function draftFromAnswer(ctx, pack, { format, answer: d, outline, items, 
  * Lamiaceae" tells a reader nothing about where to look.
  */
 export function sourceLabel(db, fact, { article = true } = {}) {
-  const row = db.get('SELECT s.name, s.config_json, d.title FROM sources s LEFT JOIN documents d ON d.id = ? WHERE s.id = ?', fact.document_id, fact.source_id);
+  const row = db.get('SELECT s.name, s.config_json, d.title, d.url FROM sources s LEFT JOIN documents d ON d.id = ? WHERE s.id = ?', fact.document_id, fact.source_id);
   if (!row) return null;
   const kind = j(row.config_json, {})?.api?.kind;
-  if (kind === 'wikipedia') return article && row.title ? `ויקיפדיה: ${String(row.title).replace(/\s*\(Wikipedia[^)]*\)\s*$/, '')}` : 'ויקיפדיה';
+  const wiki = () => (article && row.title ? `ויקיפדיה: ${String(row.title).replace(/\s*\(Wikipedia[^)]*\)\s*$/, '')}` : 'ויקיפדיה');
+  if (kind === 'wikipedia') return wiki();
+  // A topic bank's page is named by where it is from, never by the bank: "מקור: מאגר הנושאים" told a reader nothing.
+  if (kind === 'bank') return bankLabel(row.url, row.title, wiki);
   return row.name;
+}
+
+const HOSTS = {
+  'news.ycombinator.com': 'Hacker News', 'platform.claude.com': 'Anthropic', 'code.claude.com': 'Anthropic', 'docs.anthropic.com': 'Anthropic', 'developers.openai.com': 'OpenAI', 'openai.com': 'OpenAI',
+  'ai.google.dev': 'Google', 'vercel.com': 'Vercel', 'www.netlify.com': 'Netlify', 'supabase.com': 'Supabase', 'stripe.com': 'Stripe', 'docs.github.com': 'GitHub', 'github.blog': 'GitHub', 'cursor.com': 'Cursor', 'www.wix.com': 'Wix', 'trustmrr.com': 'TrustMRR',
+};
+
+/** The label of a page from a topic bank: its site's own name (a Wikipedia article as any other). */
+export function bankLabel(url, title, wiki = () => 'ויקיפדיה') {
+  let host = '';
+  try {
+    host = new URL(url).hostname;
+  } catch {
+    return title || null;
+  }
+  if (/(^|\.)wikipedia\.org$/.test(host)) return wiki();
+  return HOSTS[host] || host.replace(/^www\./, '');
+}
+
+/**
+ * A kind's runs kept to their size: a plan with three "turn" slides where the kind
+ * takes two keeps the two with the most facts (in their order). Only runs that are
+ * too long are touched; a missing segment is the shape check's to report.
+ */
+export function fitShape(format, items) {
+  const k = kindOf(format);
+  if (kindName(format) === 'list' || k.repeat) return { items, trimmed: [] };
+  const out = [];
+  const trimmed = [];
+  let i = 0;
+  for (const [role, , max] of k.segments) {
+    const run = [];
+    while (i < items.length && items[i].role === role) run.push(items[i++]);
+    const keep = new Set([...run].sort((a, b) => (b.facts || []).length - (a.facts || []).length).slice(0, max));
+    for (const it of run) (keep.has(it) ? out : trimmed).push(it);
+  }
+  return { items: [...out, ...items.slice(i)], trimmed: trimmed.map((it) => `${it.role}: ${it.point}`) };
+}
+
+/**
+ * One topic's plan: its facts verified against their stored documents, the
+ * details research found put on the slides they belong to (a slide left without a
+ * fact takes a spare one), the items kept to the kind's shape. Returns { facts,
+ * good, items, trimmed } or, when the plan cannot carry the post, { why }: the
+ * topic is then left for the next, not the post blocked.
+ */
+export function planFrom(ctx, { pack, format, outline, cand, details = [] }) {
+  const docOf = new Map(cand.refs.map((d) => [d.ref, d]));
+  const facts = [];
+  for (const f of outline.facts || []) {
+    const d = docOf.get(String(f.doc || '').trim()) || (cand.refs.length === 1 ? cand.refs[0] : null);
+    const row = { key: f.id, claim: f.claim, quote: f.quote, document_id: d?.id ?? null, source_id: d?.source_id ?? null };
+    const v = verifyFact(ctx.db, row, { accountId: pack.id, maxQuoteWords: pack.rules.maxQuoteWords || 40 });
+    facts.push({ ...row, verified: v.ok, error: v.error });
+  }
+  facts.push(...details);
+  const good = new Set(facts.filter((f) => f.verified).map((f) => f.key));
+  const planned = (outline.items || []).map((it) => ({ ...it, facts: [...(it.facts || [])] }));
+  for (const d of details) if (d.verified && d.item > 0 && planned[d.item - 1]) planned[d.item - 1].facts.push(d.key);
+  // A slide of the plan research left without a fact takes the next detail no slide claimed, in the order found:
+  // the slides call writes it around that detail, where dropping it broke the post's shape.
+  const spare = details.filter((d) => d.verified && !planned.some((it) => it.facts.includes(d.key)));
+  for (const it of planned) if (!it.facts.some((k) => good.has(k)) && !factFree(format, it.role) && spare.length) it.facts.push(spare.shift().key);
+  const fitted = fitShape(format, keepItems(format, planned, good));
+  const items = fitted.items;
+  outline.items = planned;
+  const shape = kindName(format) === 'list' ? (items.length < format.items[0] ? [`only ${items.length}`] : []) : shapeProblems(format, items.map((it) => it.role));
+  if (shape.length || !good.size) {
+    const why = kindName(format) === 'list' ? `רק ${items.length} פריטים עם עובדה מאומתת, הפורמט צריך ${format.items[0]}` : `אחרי בדיקת העובדות הפוסט לא שומר על הצורה של ${kindOf(format).name}: ${shape.join('; ') || 'אין עובדות מאומתות'}`;
+    return { why, facts };
+  }
+  return { facts, good, items, trimmed: fitted.trimmed };
+}
+
+/** The words research looks for in a long article: the subject's names and the topic's own words. */
+export function subjectNames(outline) {
+  const s = outline.subject || {};
+  const text = [s.a, s.b, s.answer, outline.topic, outline.imageQuery, ...(outline.research || [])].filter(Boolean).join(' ');
+  return [...new Set(text.split(/[^\p{L}\p{N}'-]+/u).filter((w) => w.length >= 3 && !/^(the|and|של|את|עם|על|מול|final|season|cup)$/i.test(w)))];
+}
+
+/**
+ * Research, then the details: the documents the outline named are read and
+ * stored (sources/research.js), and one call pulls out of them, and out of the
+ * post's own documents, the specific details a fan would want: what someone said,
+ * the minute, the moment, the backstory, what came after, a telling number. Each
+ * is verified against its stored document like any fact. A topic with fewer than
+ * the pack's minimum (3 by default) verified details is not drafted: `short`
+ * says so, and the post moves on to the next topic. Offline, with no recorded
+ * answer, the step does not run.
+ */
+export async function gatherDetails(ctx, { pack, format, outline, cand, ttl = '5m' }) {
+  const need = pack.meta.research?.minDetails ?? 3;
+  const names = subjectNames(outline);
+  const found = await research(ctx, { pack, terms: outline.research || [], names, have: cand.docs.map((d) => d.url), docKey: cand.key });
+  const docs = [
+    ...cand.refs.map((d) => ({ ...d, text: aboutSubject(d.text, names, 3500) })),
+    ...found.map((d, i) => ({ ...d, ref: `R${i + 1}`, sourceName: ctx.db.get('SELECT name FROM sources WHERE id = ?', d.source_id)?.name || '' })),
+  ];
+  const p = detailsPrompt(pack, { ttl });
+  let res;
+  try {
+    res = await askJson(ctx, {
+      task: 'details', role: 'draft', system: p.system, user: detailsUser({ format, outline, facts: outline.facts || [], docs }), schema: p.schema, effort: 'low', maxTokens: 6000,
+      meta: { recordingsDir: pack.recordingsDir, docKey: cand.key, format: format.base || format.id, attempt: 0 },
+    });
+  } catch (e) {
+    if (e instanceof NoRecording && ctx.mode === 'recorded') return { ran: false, facts: [], docs: found, need, short: false, usd: 0 };
+    throw e;
+  }
+  const byRef = new Map(docs.map((d) => [d.ref, d]));
+  const taken = new Set((outline.facts || []).map((f) => String(f.id)));
+  const facts = [];
+  for (const x of res.data.details || []) {
+    let key = String(x.id || '').trim() || `X${facts.length + 1}`;
+    while (taken.has(key)) key = `X${key}`;
+    taken.add(key);
+    const d = byRef.get(String(x.doc || '').trim());
+    const row = { key, claim: String(x.claim || ''), quote: String(x.quote || ''), document_id: d?.id ?? null, source_id: d?.source_id ?? null, detail: String(x.kind || 'detail').trim() || 'detail', item: Number.isInteger(x.item) ? x.item : 0 };
+    const v = verifyFact(ctx.db, row, { accountId: pack.id, maxQuoteWords: pack.rules.maxQuoteWords || 40 });
+    facts.push({ ...row, verified: v.ok, error: v.error });
+  }
+  const verified = facts.filter((f) => f.verified).length;
+  return { ran: true, facts, docs: found, need, found: facts.length, verified, short: verified < need, usd: res.usd };
 }
 
 /** The post as a draft again, from what the database holds: for an edit, and for the gate before publishing. */
@@ -352,8 +565,12 @@ export function postDraft(post) {
   const d = {
     hook: post.hook || '', sub: post.sub || '', caption: post.caption || '', captionShort: data.captionShort || '', question: data.question || '',
     subject: data.subject || {}, keywords: data.keywords || [], cta: data.cta || null, hookPattern: post.hook_pattern || '',
-    slides: post.slides.map((s) => ({ kind: s.kind, role: s.role || (s.kind === 'item' ? 'item' : s.kind), title: s.title || '', body: s.body || '', a: s.data?.a || '', b: s.data?.b || '', factKeys: s.factKeys })),
+    slides: post.slides.map((s) => ({
+      kind: s.kind, role: s.role || (s.kind === 'item' ? 'item' : s.kind), title: s.title || '', body: s.body || '', a: s.data?.a || '', b: s.data?.b || '', factKeys: s.factKeys,
+      ...(s.data?.visual !== undefined || s.data?.imageQuery !== undefined ? { visual: s.data?.visual || null, imageQuery: s.data?.imageQuery || '' } : {}),
+    })),
   };
+  if (data.coverVisual !== undefined) d.coverVisual = data.coverVisual || null;
   d.captionIg = post.caption_ig || null;
   return d;
 }
@@ -419,12 +636,16 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
 
     let outline = null;
     let cand = null;
+    let details = [];
+    let plan = null;
+    let lastWhy = '';
+    let lastKind = 'no_source';
     const recent = db
       .all("SELECT topic FROM posts WHERE account_id = ? AND topic IS NOT NULL AND status NOT IN ('blocked') ORDER BY created_at DESC LIMIT 12", pack.id)
       .map((r) => r.topic);
     tries: for (const f of formatsToTry) {
       // On this day: only documents that mention this day of the year.
-      const pool = kindName(f) === 'on-this-day' ? candidates.filter((c) => c.docs.some((d) => mentionsDay(d.text, postDay))) : candidates;
+      const pool = poolFor(f, candidates, postDay, { maxAgeDays: pack.meta.research?.maxAgeDays || null });
       // At most maxDocs documents per format reach the model. A document with no
       // recording for this format (offline) never did, so it does not use up a turn.
       let tried = 0;
@@ -442,10 +663,26 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
             step(db, postId, 'outline', 'skipped', { format: f.id, documents: c.docs.map((d) => d.id), url: c.docs[0].url, why: res.data.why }, res.usd);
             continue;
           }
+          step(db, postId, 'outline', 'ok', { format: f.id, documents: c.docs.map((d) => d.id), url: c.docs[0].url, topic: res.data.topic, items: res.data.items.length, facts: res.data.facts.length, research: res.data.research || [] }, res.usd);
+          // ---- research: more about this topic, and the details a fan would want, before any slide
+          const det = await gatherDetails(pctx, { pack, format: f, outline: res.data, cand: { ...c, refs }, ttl });
+          if (det.ran) step(db, postId, 'details', det.short ? 'failed' : 'ok', { topic: res.data.topic, documents: det.docs.map((d) => d.url), found: det.found, verified: det.verified, need: det.need, refused: det.facts.filter((x) => !x.verified).map((x) => ({ key: x.key, error: x.error })) }, det.usd);
+          // Fewer details than the minimum: not this topic. General wording never fills the gap.
+          if (det.short) continue;
+          // The facts verified and the plan kept to the kind's shape; a plan that cannot keep it leaves the topic for the next.
+          const made = planFrom(pctx, { pack, format: f, outline: res.data, cand: { ...c, refs }, details: det.facts });
+          if (made.why) {
+            step(db, postId, 'plan', 'failed', { topic: res.data.topic, why: made.why, refused: made.facts.filter((x) => !x.verified).map((x) => ({ key: x.key, error: x.error })) });
+            lastWhy = made.why;
+            // A plan lost to facts its quotes do not hold is a fact-check failure (the rails pause an account on those), not a missing source.
+            if (made.facts.some((x) => !x.verified)) lastKind = 'fact_check';
+            continue;
+          }
           outline = res.data;
           cand = { ...c, refs };
           format = f;
-          step(db, postId, 'outline', 'ok', { format: f.id, documents: c.docs.map((d) => d.id), url: c.docs[0].url, topic: outline.topic, items: outline.items.length, facts: outline.facts.length }, res.usd);
+          details = det.facts;
+          plan = made;
           break tries;
         } catch (e) {
           if (e instanceof NoRecording) continue;
@@ -453,27 +690,13 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
         }
       }
     }
-    if (!outline) return block('no_source', 'אף מסמך חדש לא הספיק לפוסט באחד הפורמטים');
+    if (!outline) return block(lastWhy ? lastKind : 'no_source', lastWhy ? `אף נושא לא החזיק פוסט שלם: ${lastWhy}` : 'אף מסמך חדש לא הספיק לפוסט באחד הפורמטים');
     db.update('posts', postId, { topic: outline.topic, format_id: format.id, kind: kindName(format), grp: groupOf(format) });
 
-    // ---- facts: each verified against its stored document, before any slide is written
-    const docOf = new Map(cand.refs.map((d) => [d.ref, d]));
-    const facts = [];
-    for (const f of outline.facts) {
-      const d = docOf.get(String(f.doc || '').trim()) || (cand.refs.length === 1 ? cand.refs[0] : null);
-      const row = { key: f.id, claim: f.claim, quote: f.quote, document_id: d?.id ?? null, source_id: d?.source_id ?? null };
-      const v = verifyFact(db, row, { accountId: pack.id, maxQuoteWords: pack.rules.maxQuoteWords || 40 });
-      facts.push({ ...row, verified: v.ok, error: v.error });
-    }
-    for (const f of facts) db.insert('facts', { post_id: postId, key: f.key, claim: f.claim, quote: f.quote, document_id: f.document_id, source_id: f.source_id, verified: f.verified ? 1 : 0, error: f.error });
-    const good = new Set(facts.filter((f) => f.verified).map((f) => f.key));
-    step(db, postId, 'facts', good.size ? 'ok' : 'failed', { verified: good.size, refused: facts.filter((f) => !f.verified).map((f) => ({ key: f.key, error: f.error })) });
-    const items = keepItems(format, outline.items, good);
-    const shape = kindName(format) === 'list' ? (items.length < format.items[0] ? [`only ${items.length}`] : []) : shapeProblems(format, items.map((it) => it.role));
-    if (shape.length || !good.size) {
-      const why = kindName(format) === 'list' ? `רק ${items.length} פריטים עם עובדה מאומתת, הפורמט צריך ${format.items[0]}` : `אחרי בדיקת העובדות הפוסט לא שומר על הצורה של ${kindOf(format).name}: ${shape.join('; ') || 'אין עובדות מאומתות'}`;
-      return block('fact_check', why, { refused: facts.filter((f) => !f.verified).map((f) => f.error), shape });
-    }
+    // ---- facts: verified against their stored documents before any slide is written (planFrom), stored here
+    const { facts, good, items } = plan;
+    for (const f of facts) db.insert('facts', { post_id: postId, key: f.key, claim: f.claim, quote: f.quote, document_id: f.document_id, source_id: f.source_id, verified: f.verified ? 1 : 0, error: f.error, detail: f.detail || null });
+    step(db, postId, 'facts', 'ok', { verified: good.size, refused: facts.filter((f) => !f.verified).map((f) => ({ key: f.key, error: f.error })), trimmed: plan.trimmed });
     const verifiedFacts = facts.filter((f) => f.verified);
 
     // ---- slides, then every check; one redraft with the reasons
@@ -492,23 +715,25 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     let draft = null;
     let checked = null;
     let lastProblems = [];
+    let lastAnswer = null;
     for (let attempt = 0; attempt < 2; attempt++) {
       let res;
       try {
         res = await askJson(pctx, {
-          task: 'slides', role: 'draft', system: sp.system, user: slidesUser({ format, n: items.length, outline: { ...outline, items }, facts: verifiedFacts, edits, problems: lastProblems.map(say), hook, cta }), schema: sp.schema,
+          task: 'slides', role: 'draft', system: sp.system, user: slidesUser({ format, n: items.length, outline: { ...outline, items }, facts: verifiedFacts, edits, problems: lastProblems.map(say), lastDraft: lastAnswer, hook, cta, day: postDay }), schema: sp.schema,
           effort: EFFORT.slides, maxTokens: MAX_TOKENS.slides, meta: { recordingsDir: pack.recordingsDir, docKey: cand.key, format: format.base || format.id, attempt },
         });
       } catch (e) {
         if (e instanceof NoRecording && attempt > 0) break;
         throw e;
       }
-      const made = draftFromAnswer(pctx, pack, { format, answer: res.data, outline, items, facts, closer, hook, cta });
+      const made = draftFromAnswer(pctx, pack, { format, answer: res.data, outline, items, facts, closer, hook, cta, attempt });
       draft = made.draft;
       checked = made.checked;
       step(db, postId, attempt ? 'redraft' : 'slides', checked.problems.length ? 'failed' : 'ok', { problems: checked.problems.map(say), fixed: made.fixes }, res.usd);
       if (!checked.problems.length) break;
       lastProblems = checked.problems;
+      lastAnswer = res.data;
     }
     if (!draft) return block('voice', 'הטיוטה לא נכתבה');
     if (checked.problems.length) {
@@ -526,13 +751,67 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     // the code gate proves every number is quoted, not that the sentence around
     // it is true to the quote.
     const texts = textsOf(draft);
-    const review = await reviewTexts(pctx, { pack, texts, facts: verifiedFacts });
+    // A slide's graphic is read too: its names and numbers must be in the facts. A graphic
+    // the reviewer doubts is dropped, not rewritten: it is data, not a sentence.
+    const shown = draft.slides.map((s, i) => (s.visual ? { where: `slide ${i} visual`, kind: 'visual', role: 'visual', text: visualText(s.visual), idx: i } : null)).filter(Boolean);
+    const review = await reviewTexts(pctx, { pack, texts: [...texts, ...shown], facts: verifiedFacts });
+    // A graphic the reviewer doubts goes to the rewrite like a sentence, as its data: corrected, or dropped when it
+    // cannot be. Dropping it outright left posts short of their visuals, and the final gate refused them.
+    const visReviews = review.reviews.slice(texts.length).map((r, k) => ({ ...r, ...shown[k], index: texts.length + k, kind: 'visual' }));
+    const dropped = [];
+    review.reviews = review.reviews.slice(0, texts.length);
     const applied = [];
     // The rewrite is one bounded call on the flagged lines only, never a second
     // redraft of the post: it runs once even after the slides used their redraft
     // (measured: without it, half the posts a strong reviewer flagged were lost),
     // and whatever it does not fix drops the post.
-    const flagged = review.reviews.map((r, i) => ({ ...r, index: i, where: texts[i].where, text: texts[i].text })).filter((r) => r.botScore >= REWRITE_AT || r.factProblem);
+    // Each flagged text goes with what it must keep: its limits, and for a slide the facts it cites.
+    const factsFor = (t) => (t.idx != null ? verifiedFacts.filter((f) => (draft.slides[t.idx]?.factKeys || []).includes(f.key)) : verifiedFacts);
+    const flagged = [
+      ...review.reviews
+        .map((r, i) => ({ ...r, index: i, where: texts[i].where, text: texts[i].text, limits: LIMITS[texts[i].kind] || null, uses: factsFor(texts[i]).map((f) => f.key) }))
+        .filter((r) => r.botScore >= REWRITE_AT || r.factProblem),
+      ...visReviews.filter((v) => v.factProblem).map((v) => ({ ...v, botScore: 1, text: JSON.stringify(draft.slides[v.idx].visual), uses: factsFor(v).map((f) => f.key) })),
+    ];
+    const rejected = [];
+    // A rewrite is kept when it adds no problem the post did not already have: a check it fails is its own,
+    // a check the post already failed (a graphic the review dropped) is the final gate's to report.
+    const applyRewrites = (rewrites, round) => {
+      const out = [];
+      for (const rw of rewrites || []) {
+        const vis = visReviews.find((v) => v.index === rw.index);
+        const t = vis || texts[rw.index];
+        const r = vis || review.reviews[rw.index];
+        if (!t || !r || r.rewritten || (r.botScore < REWRITE_AT && !r.factProblem)) continue;
+        const text = vis ? String(rw.text || '').trim() : mechanicalFix(String(rw.text || '').trim()).text;
+        if (!text) continue;
+        const next = structuredClone(draft);
+        if (vis) {
+          let v = null;
+          try {
+            v = normVisual(JSON.parse(text));
+          } catch {
+            out.push({ index: rw.index, text, problems: ['the corrected graphic is not JSON'] });
+            continue;
+          }
+          if (!v) continue;
+          next.slides[t.idx].visual = v;
+        } else if (t.where === 'cover') next.hook = text;
+        else if (t.where === 'cover line 2') next.sub = text;
+        else if (t.where === 'caption') next.caption = text;
+        else if (t.where === 'caption short') next.captionShort = text;
+        else next.slides[t.idx][t.field] = text;
+        next.captionIg = igCaption(next);
+        const before = new Set(checkPost(pctx, pack, draft, facts, format).problems.map(say));
+        const added = checkPost(pctx, pack, next, facts, format).problems.map(say).filter((p) => !before.has(p));
+        if (!added.length) {
+          draft = next;
+          applied.push({ where: t.where, from: t.text, to: text, score: r.botScore, round });
+          r.rewritten = true;
+        } else out.push({ index: rw.index, text, problems: added });
+      }
+      return out;
+    };
     if (flagged.length && pctx.llm.kind === 'claude') {
       const rp = rewritePrompt(pack, { ttl });
       try {
@@ -540,35 +819,37 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
           task: 'rewrite', role: 'rewrite', system: rp.system, user: rewriteUser({ flagged, facts: verifiedFacts }), schema: rp.schema, effort: EFFORT.rewrite, maxTokens: MAX_TOKENS.rewrite,
           meta: { recordingsDir: pack.recordingsDir, docKey: cand.key, format: format.base || format.id, attempt: 1 },
         });
-        for (const rw of res.data.rewrites || []) {
-          const t = texts[rw.index];
-          const r = review.reviews[rw.index];
-          if (!t || !r || (r.botScore < REWRITE_AT && !r.factProblem)) continue;
-          const text = mechanicalFix(String(rw.text || '').trim()).text;
-          if (!text) continue;
-          const next = structuredClone(draft);
-          if (t.where === 'cover') next.hook = text;
-          else if (t.where === 'cover line 2') next.sub = text;
-          else if (t.where === 'caption') next.caption = text;
-          else if (t.where === 'caption short') next.captionShort = text;
-          else next.slides[t.idx][t.field] = text;
-          next.captionIg = igCaption(next);
-          if (!checkPost(pctx, pack, next, facts, format).problems.length) {
-            draft = next;
-            applied.push({ where: t.where, from: t.text, to: text, score: r.botScore });
-            r.rewritten = true;
-          }
+        rejected.push(...applyRewrites(res.data.rewrites, 1));
+        // A rewrite the checks refused gets one more bounded call, told why, on those texts only: one in three
+        // was refused (a limit, a number its slide does not cite), and each one left drops the whole post.
+        let usd = res.usd;
+        if (rejected.length) {
+          const again = rejected.map((x) => ({ ...flagged.find((f) => f.index === x.index), last: x.text, refused: x.problems }));
+          const res2 = await askJson(pctx, {
+            task: 'rewrite', role: 'rewrite', system: rp.system, user: rewriteUser({ flagged: again, facts: verifiedFacts }), schema: rp.schema, effort: EFFORT.rewrite, maxTokens: MAX_TOKENS.rewrite,
+            meta: { recordingsDir: pack.recordingsDir, docKey: cand.key, format: format.base || format.id, attempt: 2 },
+          });
+          usd += res2.usd;
+          const still = applyRewrites(res2.data.rewrites, 2);
+          rejected.length = 0;
+          rejected.push(...still);
         }
-        step(db, postId, 'rewrite', 'ok', { flagged: flagged.length, kept: applied.length }, res.usd);
+        step(db, postId, 'rewrite', 'ok', { flagged: flagged.length, kept: applied.length, refused: rejected.map((x) => ({ where: (texts[x.index] || visReviews.find((v) => v.index === x.index))?.where, text: x.text, problems: x.problems })) }, usd);
       } catch (e) {
         if (e instanceof BudgetError) throw e;
-        step(db, postId, 'rewrite', 'failed', { error: String(e.message).slice(0, 200) });
+        step(db, postId, 'rewrite', 'failed', { error: String(e.message).slice(0, 200), kept: applied.length });
       }
+    }
+    // A doubted graphic the rewrite did not fix is dropped: a wrong number drawn is worse than none.
+    for (const v of visReviews) {
+      if (!v.factProblem || v.rewritten) continue;
+      draft.slides[v.idx].visual = null;
+      dropped.push({ where: v.where, why: v.factProblem });
     }
     const scores = review.reviews.map((r) => (r.rewritten ? Math.min(r.botScore, REWRITE_AT - 1) : r.botScore));
     const worst = Math.max(0, ...scores);
     const unfixed = review.reviews.map((r, i) => ({ ...r, where: texts[i].where })).filter((r) => r.factProblem && !r.rewritten);
-    step(db, postId, 'review', worst >= BLOCK_AT || unfixed.length ? 'failed' : 'ok', { reviewer: review.reviewer, worst, scores: texts.map((t, i) => ({ where: t.where, score: review.reviews[i].botScore, tells: review.reviews[i].tells, factProblem: review.reviews[i].factProblem || undefined })), rewrites: applied });
+    step(db, postId, 'review', worst >= BLOCK_AT || unfixed.length ? 'failed' : 'ok', { reviewer: review.reviewer, worst, scores: texts.map((t, i) => ({ where: t.where, score: review.reviews[i].botScore, tells: review.reviews[i].tells, factProblem: review.reviews[i].factProblem || undefined })), rewrites: applied, visualsDropped: dropped });
     if (unfixed.length) return block('review', `הבודק מצא משפט שאומר יותר מהעובדות: ${unfixed.slice(0, 2).map((r) => `${r.where}: ${r.factProblem}`).join(' · ')}`);
     if (worst >= BLOCK_AT) return block('voice', `נשמע כמו בוט (${worst}/10)${applied.length ? ' גם אחרי שכתוב' : ''}`);
 
@@ -577,13 +858,10 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     if (final.problems.length) return block('fact_check', final.problems.slice(0, 3).map(say).join(' · '));
     step(db, postId, 'verify', 'ok', { token: final.gate.token, facts: verifiedFacts.length, slides: draft.slides.length });
 
-    // ---- a photograph, licensed, recorded and screened, where the kind puts one
-    let image = null;
+    // ---- photographs: licensed, recorded, screened, and checked against what each slide says
     const photoOn = kindOf(format).photo;
-    if (pack.theme.options?.coverPhoto && photoOn && outline.imageQuery) {
-      image = await findImage({ ...pctx, mode: ctx.mode }, { pack, query: outline.imageQuery, postId }).catch((e) => (ctx.log?.(`image: ${e.message}`), null));
-      step(db, postId, 'image', image ? (image.safety === 'review' ? 'info' : 'ok') : 'skipped', image ? { provider: image.provider, license: image.license, author: image.author, source: image.source_url, on: photoOn, safety: image.safety, screen: j(image.safety_json, null) } : { query: outline.imageQuery, mode: ctx.mode });
-    }
+    const photos = await findPhotos({ ...pctx, mode: ctx.mode }, { pack, format, draft, outline, postId });
+    const image = photos.get(0) || photos.get(draft.slides.length - 1) || null;
 
     // ---- render
     const factSource = new Map(facts.map((f) => [f.key, sourceLabel(db, f)]));
@@ -593,7 +871,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     const plainSource = new Map(facts.map((f) => [f.key, sourceLabel(db, f, { article: false })]));
     const slides = draft.slides.map((s) => ({ ...s, sources: s.factKeys.map((k) => (s.role === 'clue' ? plainSource : factSource).get(k)) }));
     const outDir = path.join(ctx.mediaDir || mediaDir(), 'posts', postId);
-    const files = await renderPost({ pack, format, post: { id: postId, hook: draft.hook, sub: draft.sub, caption: draft.caption, token: final.gate.token, extra: extraOf(draft), ctaKind: draft.cta?.kind }, slides, photo: image, photoOn, outDir });
+    const files = await renderPost({ pack, format, post: { id: postId, hook: draft.hook, sub: draft.sub, caption: draft.caption, token: final.gate.token, extra: extraOf(draft), ctaKind: draft.cta?.kind }, slides, photos, outDir });
     step(db, postId, 'render', 'ok', { platforms: Object.keys(files), slides: slides.length });
 
     // ---- store and queue
@@ -602,8 +880,9 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
       slides.forEach((s, i) =>
         db.insert('slides', {
           post_id: postId, idx: i, kind: s.kind, role: s.role || null, title: s.title, body: s.body, fact_ids_json: s.factKeys,
-          data_json: s.a || s.b ? { a: s.a, b: s.b } : null,
-          image_id: image && ((s.kind === 'cover' && photoOn === 'cover') || (photoOn === 'last' && i === slides.length - 1)) ? image.id : null,
+          data_json: s.a || s.b || s.visual || s.imageQuery ? { a: s.a, b: s.b, ...(s.visual !== undefined ? { visual: s.visual, imageQuery: s.imageQuery || '' } : {}) } : null,
+          // A photograph the renderer had to leave off on every platform is not this post's: not shown, not credited.
+          image_id: Object.keys(files).every((size) => files.dropped?.[size]?.has(i)) ? null : photos.get(i)?.id ?? null,
           files_json: Object.fromEntries(Object.entries(files).map(([k, v]) => [k, v[i]])),
         })
       );
@@ -612,15 +891,75 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     step(db, postId, 'queue', 'ok', { status, slot: slotAt });
     return finish(status, {
       hook: draft.hook, sub: draft.sub, caption: draft.caption, caption_ig: draft.captionIg, hashtags_json: tags, review_score: worst, hook_pattern: draft.hookPattern,
-      data_json: { subject: draft.subject, keywords: draft.keywords, cta: draft.cta, captionShort: draft.captionShort, question: draft.question, day: kindName(format) === 'on-this-day' ? postDay : undefined },
-      checks_json: { token: final.gate.token, reviewer: review.reviewer, scores, rewrites: applied, image: image ? image.id : null, imageSafety: image?.safety || null },
-      media_json: files, ai_label: image?.ai_generated && image?.realistic ? 1 : 0,
+      data_json: { subject: draft.subject, keywords: draft.keywords, cta: draft.cta, captionShort: draft.captionShort, question: draft.question, day: kindName(format) === 'on-this-day' ? postDay : undefined, coverVisual: draft.coverVisual },
+      checks_json: { token: final.gate.token, reviewer: review.reviewer, scores, rewrites: applied, image: image ? image.id : null, imageSafety: image?.safety || null, images: [...photos.values()].map((p) => p.id), photoOn },
+      media_json: files, ai_label: [...photos.values()].some((p) => p.ai_generated && p.realistic) ? 1 : 0,
     });
   } catch (e) {
     if (e instanceof BudgetError) return block('budget', e.message);
     step(db, postId, 'error', 'failed', { error: String(e.message).slice(0, 500) });
     return { ...finish('blocked', { reason: String(e.message).slice(0, 300) }), kind: e.code === 'overflow' || e.code === 'fonts' ? 'render' : 'error' };
   }
+}
+
+/**
+ * The photographs of one post: the cover's (or a guess-who's reveal) from the
+ * outline's query where the kind and the theme put one, and a content slide's
+ * from its own imageQuery. Each must name its subject in its own title,
+ * description or categories, pass the image screen, and show what its slide says
+ * to the model's eye (images/index.js). A slide whose photograph does not pass
+ * keeps its graphic: a wrong picture is worse than none. At most four searches a
+ * post; the same query twice is searched once. Returns Map(slide index -> image row).
+ */
+export async function findPhotos(ctx, { pack, format, draft, outline, postId }) {
+  const out = new Map();
+  const providers = pack.meta.imagery?.providers || [];
+  if (!providers.length) return out;
+  const kind = kindName(format);
+  const photoOn = kindOf(format).photo;
+  const last = draft.slides.length - 1;
+  const wants = [];
+  if (pack.theme.options?.coverPhoto && photoOn && outline.imageQuery) {
+    const idx = photoOn === 'last' ? last : 0;
+    const s = draft.slides[idx];
+    wants.push({ idx, query: outline.imageQuery, claim: idx === 0 ? `${draft.hook} ${draft.sub || ''}` : `${s.title} ${s.body}` });
+  }
+  // A clue's photograph would give the answer away; a meme is the account's own design.
+  if (photoOn && kind !== 'meme') {
+    draft.slides.forEach((s, i) => {
+      if (s.kind !== 'item' || !s.imageQuery || s.role === 'clue' || (photoOn === 'last' && i === last && wants.length)) return;
+      wants.push({ idx: i, query: s.imageQuery, claim: `${s.title} ${s.body}` });
+    });
+  }
+  const seen = new Set();
+  for (const w of wants) {
+    const key = w.query.toLowerCase().trim();
+    if (seen.has(key) || seen.size >= 4) continue;
+    seen.add(key);
+    let img = await findImage(ctx, { pack, query: w.query, postId, claim: w.claim }).catch((e) => (ctx.log?.(`image: ${e.message}`), null));
+    // A cover whose query found nothing tries the post's own subject by name ("Haim Revivo" rather than "Revivo goal Spain 1998").
+    const who = String(draft.subject?.answer || draft.subject?.a || '').trim();
+    if (!img && w.idx === 0 && /[A-Za-z]/.test(who) && who.toLowerCase() !== key && !seen.has(who.toLowerCase())) {
+      seen.add(who.toLowerCase());
+      img = await findImage(ctx, { pack, query: who, postId, claim: w.claim }).catch(() => null);
+    }
+    step(ctx.db, postId, 'image', img ? (img.safety === 'review' ? 'info' : 'ok') : 'skipped', img ? { slide: w.idx, query: w.query, provider: img.provider, license: img.license, author: img.author, source: img.source_url, safety: img.safety, match: j(img.match_json, null) } : { slide: w.idx, query: w.query, mode: ctx.mode });
+    if (img) out.set(w.idx, img);
+  }
+  // A cover still without its own photograph takes a portrait one of its slides found (the post's person, checked
+  // against that slide): every reader asked for a face on the cover over the kind's drawn art.
+  // Only a portrait of the post's own subject moves (a cover about Natan Levy once took a slide's photograph of Dana
+  // White), and never in a ranking (it would show number one) or a guess-who (the answer).
+  const subjectWords = String(`${draft.subject?.a || ''} ${draft.subject?.answer || ''} ${outline.imageQuery || ''}`).toLowerCase().split(/\s+/).filter((w) => w.length >= 3);
+  if (!out.has(0) && wants.some((w) => w.idx === 0) && photoOn === 'cover' && !['ranking', 'guess-who'].includes(kind)) {
+    const portrait = [...out.entries()].find(([i, img]) => i > 0 && String(img.query).toLowerCase().split(/\s+/).some((w) => subjectWords.includes(w)));
+    if (portrait) {
+      out.set(0, portrait[1]);
+      out.delete(portrait[0]);
+      step(ctx.db, postId, 'image', 'ok', { slide: 0, moved: portrait[0], query: portrait[1].query });
+    }
+  }
+  return out;
 }
 
 /** A stored post with its slides and facts, as the website and the publisher see it. */

@@ -5,19 +5,65 @@
   "handle": "demo.atzitz",
   "language": "he",
   "description": "A fictional demo account: houseplants and balcony herbs for people with a small apartment. The brand, its handle and its sources are invented.",
-  "topics": ["צמחי בית", "צמחי תבלין במרפסת", "השקיה ואור"],
+  "topics": [
+    "צמחי בית",
+    "צמחי תבלין במרפסת",
+    "השקיה ואור"
+  ],
   "audience": "people in city apartments with a balcony or a windowsill who want their plants to survive",
-  "platforms": ["tiktok", "instagram"],
+  "platforms": [
+    "tiktok",
+    "instagram"
+  ],
   "publisher": "dry",
-  "zernio": { "profileId": "", "accounts": { "tiktok": "", "instagram": "" }, "tiktokPrivacy": "SELF_ONLY" },
+  "zernio": {
+    "profileId": "",
+    "accounts": {
+      "tiktok": "",
+      "instagram": ""
+    },
+    "tiktokPrivacy": "SELF_ONLY"
+  },
   "schedule": {
     "postsPerDay": 2,
-    "windows": [[12, 14], [19, 22]],
-    "slots": ["12:40", "19:40"],
-    "slotsByDay": { "5": ["12:15"], "6": ["21:00"] }
+    "windows": [
+      [
+        12,
+        14
+      ],
+      [
+        19,
+        22
+      ]
+    ],
+    "slots": [
+      "12:40",
+      "19:40"
+    ],
+    "slotsByDay": {
+      "5": [
+        "12:15"
+      ],
+      "6": [
+        "21:00"
+      ]
+    }
   },
-  "autonomy": { "mode": "approve" },
-  "budget": { "monthlyUsd": 10 },
+  "autonomy": {
+    "mode": "approve"
+  },
+  "budget": {
+    "monthlyUsd": 10
+  },
   "compliance": [],
-  "imagery": { "providers": ["commons", "pexels", "unsplash"] }
+  "imagery": {
+    "providers": [
+      "commons",
+      "pexels",
+      "unsplash"
+    ]
+  },
+  "research": {
+    "minDetails": 0
+  }
 }

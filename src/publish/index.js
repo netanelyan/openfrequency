@@ -9,7 +9,7 @@ import { israelDate } from '../schedule/israel.js';
 import { verifyFact } from '../verify/claims.js';
 import { formatOfPost, gateDraft, loadPost, postDraft } from '../pipeline/build.js';
 import { exportPost } from '../pipeline/export.js';
-import { imageCredit } from '../images/index.js';
+import { imageCredit, waitingImages } from '../images/index.js';
 import { canRun, pauseAccount, publishErrorStreak } from '../autonomy/rails.js';
 import { isStrike, postBody, publishZernio, zernioConfigured } from './zernio.js';
 import { instagramConfigured, isRefusal, isThrottle, isTokenProblem, publishInstagram } from './instagram.js';
@@ -104,9 +104,8 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
   const run = canRun(db, pack.id);
   if (!run.ok) throw new PublishRefused(run.why, 'paused');
   if (post.status !== 'approved') throw new PublishRefused(`the post is ${post.status}, not approved`, 'not_approved');
-  // A photograph the screen could not clear waits for a person to look at it.
-  const img = post.checks?.image ? db.get('SELECT safety, reviewed_at FROM images WHERE id = ?', post.checks.image) : null;
-  if (img && img.safety && img.safety !== 'ok' && !img.reviewed_at) throw new PublishRefused('התמונה מחכה לבדיקה של אדם (דם, פציעה, סימן מים): אשרו אותה בדף הפוסט', 'image_review');
+  // A photograph the screen could not clear waits for a person to look at it: every one on the post, not only the cover's.
+  if (waitingImages(db, post).length) throw new PublishRefused('התמונה מחכה לבדיקה של אדם (דם, פציעה, סימן מים): אשרו אותה בדף הפוסט', 'image_review');
 
   const problems = recheck(db, post, pack);
   if (problems.length) {

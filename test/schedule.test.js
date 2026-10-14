@@ -4,7 +4,7 @@ import { inShabbat, inRest, restAt, restWindow, assertNotShabbat, shabbatWindow,
 import { hebrewDate, yomTovBetween, yomTovOn } from '../src/schedule/hebrew.js';
 import { sunset } from '../src/schedule/sun.js';
 import { addDays, hhmm, israelInstant } from '../src/schedule/israel.js';
-import { slotsFor } from '../src/schedule/slots.js';
+import { postsOn, slotsFor } from '../src/schedule/slots.js';
 
 // HARD RULE 9: nothing posts from Friday sunset to Saturday night, Israel time.
 
@@ -144,4 +144,14 @@ test('slots on a festival are dropped and named, never scheduled', () => {
   const erev = slotsFor('2027-10-10', schedule);
   assert.deepEqual(erev.slots.map((d) => hhmm(d)), ['08:10'], 'the evening slot on erev Yom Kippur is dropped');
   assert.equal(erev.dropped[0].why, 'יום כיפור');
+});
+
+test('a cut rate of half a post spreads evenly: 1.5 a day is three posts in two days, 0.5 a post every other day', () => {
+  const days = Array.from({ length: 10 }, (_, i) => addDays('2026-11-01', i));
+  const sum = (p) => days.reduce((s, d) => s + postsOn(d, p), 0);
+  assert.equal(sum(1.5), 15);
+  assert.equal(sum(0.5), 5);
+  assert.ok(days.every((d) => [1, 2].includes(postsOn(d, 1.5)) && [0, 1].includes(postsOn(d, 0.5))));
+  assert.equal(postsOn('2026-11-01', 2), 2);
+  assert.equal(postsOn('2026-11-01', undefined), null);
 });
