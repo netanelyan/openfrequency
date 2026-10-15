@@ -955,3 +955,8 @@ engine can act on, and what changed:
     is not taken for one; "פאונד", never "ליברה".
   - *A head-to-head's two values may run to three words each* (the check was refusing
     previews that had them).
+- **The public slide folder is readable by the web server on purpose.** The service runs
+  with umask 0077, so the slides it copied for Instagram and Zernio to fetch were
+  readable by it alone: Caddy would have answered 403 and every publish failed. The
+  deploy test wrote its sample file as root and never saw it. Now that one folder and
+  its slides are 755 and 644; the rest of the private folder stays the service's own.

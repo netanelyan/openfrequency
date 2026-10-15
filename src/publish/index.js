@@ -1,4 +1,4 @@
-import { copyFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { now, nowIso } from '../core/clock.js';
@@ -85,9 +85,15 @@ function publicUrls(post, platform) {
   const base = String(process.env.MEDIA_PUBLIC_BASE_URL || '').replace(/\/$/, '');
   if (!/^https:\/\//.test(base)) throw new PublishRefused('MEDIA_PUBLIC_BASE_URL is not an https address: Zernio and Instagram fetch slides by URL', 'no_media_url');
   const token = `${post.id}-${randomBytes(6).toString('hex')}`;
-  const dir = ensureDir(path.join(dataDir(), 'public', token));
+  // Readable by the web server on purpose: the service runs with umask 0077, and a slide only it could read would be
+  // a 403 to Instagram and Zernio. Only this folder; the rest of the private folder stays the service's own.
+  const root = ensureDir(path.join(dataDir(), 'public'));
+  const dir = ensureDir(path.join(root, token));
+  for (const d of [root, dir]) chmodSync(d, 0o755);
   return (post.media[platform] || []).map((f) => {
-    copyFileSync(f, path.join(dir, path.basename(f)));
+    const to = path.join(dir, path.basename(f));
+    copyFileSync(f, to);
+    chmodSync(to, 0o644);
     return `${base}/${token}/${path.basename(f)}`;
   });
 }
