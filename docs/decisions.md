@@ -878,3 +878,80 @@ engine can act on, and what changed:
   graphic's flex box, clipped its own last rows, and the check took the clipping for a
   deliberate one. The parts of a graphic keep their size, so anything too tall runs out
   of the graphic, where the fit pass sees it and sets it smaller.
+- **The owner's review of the launch set (2026-10-15) became account settings, not engine
+  defaults.** No handle on the slides (the platform already shows whose post it is), no
+  source line on them (the post's record and its caption keep every source and every
+  photograph's credit), a photograph behind every slide, a closing "follow" slide instead
+  of a call to action on the last one, and shorter slides. Each is a switch in
+  `theme.json` or `pack.json`, so another account can choose otherwise. The background
+  is blurred and veiled in the theme's own ground colour, so the text keeps the contrast
+  its template was designed for; a guess-who's answer is never used as one, since a face
+  can show through a blur. A post with no photograph of its own searches its account's
+  scenes (`backgroundQueries`).
+- **The closing slide is the account's approved text, drawn after the fact gate.** It
+  makes no claim, so it is not part of the post's token; a pack validator bounds its
+  length.
+- **A pack can only tighten the text limits.** `writing` lowers a limit (the owner asked
+  for less text per slide); a value above the engine's is ignored, since the engine's
+  limits come from what fits a slide.
+- **Backgrounds come from the post's own subject and its scene, checked like any photo.**
+  Cycling every photograph of a post put Messi's face behind a post about Ronaldinho, and
+  an unchecked scene search put a basketball arena behind a post about a match. Now the pool
+  is the cover's photograph and one scene photograph, and the scene is checked by the
+  vision model against what it must show.
+- **Accented letters, apostrophes and slash commands are part of a Latin run.** "L'Équipe"
+  came out reversed, and "/clear" as "clear/"; Mbappé, Agüero and Modrić were at risk.
+- **"The only one" keeps every condition.** A slide shortened "the only player to win all
+  six" to three of them, which is false; the drafting and the review now both say so.
+- **A ranking states every place's number and follows it.** Messi's and Ronaldo's totals
+  were missing from a top scorers list, and a win streak of 14 stood at number 1 above
+  one of 16. Both are checked in code.
+- **A head-to-head's cover shows no single face** (a third player's photograph went out
+  labelled as one of the two), and every photograph's check is told the post's topic
+  (Guardiola in a Bayern tracksuit stood on a Manchester City post).
+- **A post with a fixed subject keeps its own pages and its event's numbers.** A fight
+  week's card has only its fighters' pages: a stopped attempt no longer uses them up, and
+  the card's name and date, from the approved event calendar, may be on the cover.
+- **A launch round also remembers the topics that failed**, so the next attempt finds a
+  new one instead of telling a rejected story again.
+- **A name can be shared.** For an athlete, a photograph with nothing of the sport in it
+  is most likely someone else with the same name (an "Alex Pereira" at the seaside).
+- **A head-to-head's cover shows both sides, each on its own half.** With no face at all
+  the fight-week previews failed every reader's first second; with one face, a third
+  player went out under two names. The outline now names a photograph for side b too
+  (`imageQueryB`), and the cover is split only when both are found and checked.
+- **A head-to-head's stats bear on the question.** Debut dates and the number of rounds
+  scheduled filled a preview's slides and decided nothing.
+- **An English sentence quoted in a Hebrew line is one run.** Its commas and periods split
+  it into pieces that the line then reversed.
+- **Instagram Login's account id is `user_id`.** The node's `id` is app-scoped; the
+  professional account's id (the one Meta's dashboard shows, 17841...) is its `user_id`.
+  `instagram:check` compared the wrong one and reported a correct pack as wrong.
+- **The cap is $20 a month, and the Anthropic API has a spend file of its own.** The owner
+  raised the cap from $15 to $20 on 2026-10-15, with a warning at $15, and asked for a
+  safety net that a lost database cannot reset. Every API call now also answers to
+  `$OF_HOME/data/anthropic-spend.json` (by UTC month, written whole and renamed into
+  place, one log line a call): a model missing from the pricing table is refused rather
+  than priced at a guess, and a missing or unreadable file blocks every API call until
+  `npm run budget -- init` creates it. The ledger in the database still reserves each
+  call's worst case and splits the cap between the accounts.
+- **The owner's second review (2026-10-15), applied to the engine as a whole:**
+  - *TikTok's own buttons, caption and tabs never cover a slide's text.* The TikTok safe
+    area is now 250px from the top, 560px from the bottom, 190px from the right (where a
+    Hebrew line starts) and 100px from the left; the account's mark moved to the top.
+  - *A shadow under every line on a photograph or a background*, in the theme's own
+    ground colour on a background and in black on a photograph, so a picture never eats
+    the text.
+  - *A guess-who's cover is a mosaic, nine blocks across*: blurred, half the readers
+    still knew Zlatan from the photograph alone.
+  - *The head-to-head's stat is a duel panel*: the two names small, the two values large
+    in their colours, a "מול" chip between them, and a proportional bar under two plain
+    amounts of the same thing.
+  - *A cover makes them need the second slide*: a question or a promise the slides
+    answer ("איך ברצלונה עשו את הבלתי אפשרי בקאמפ נואו?"), never a headline that is
+    already over.
+  - *Spoken Hebrew*: the spoken imperative (תעקבו, תשמרו, תשלחו, תכתבו), never the
+    formal one, checked in code before the words a request goes on with, so a past tense
+    is not taken for one; "פאונד", never "ליברה".
+  - *A head-to-head's two values may run to three words each* (the check was refusing
+    previews that had them).

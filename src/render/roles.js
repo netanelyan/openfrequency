@@ -54,10 +54,16 @@ export const ROLE_CSS = `
 .lines li{font:400 42px/1.38 var(--text);padding-inline-start:34px;position:relative}
 .s-instagram .lines li{font-size:37px}
 .lines li::before{content:'';position:absolute;inset-inline-start:0;top:.55em;width:14px;height:14px;border-radius:50%;background:var(--accent)}
-.vs{display:flex;align-items:stretch;gap:22px}
-.vs .side{flex:1;min-width:0;display:flex;flex-direction:column;gap:12px;padding:30px 28px;border-radius:var(--radius);background:rgba(var(--ink-rgb),.06);border:3px solid rgba(var(--accent-rgb),.6)}
-.vs .side.b{border-color:rgba(var(--accent2-rgb),.7)}
-.vs .val{font:700 128px/0.98 var(--display);color:var(--accent);unicode-bidi:isolate;text-align:right;overflow-wrap:normal;word-break:keep-all;hyphens:none;max-height:260px}
+.vs{display:flex;flex-direction:column;gap:24px;padding:36px 36px 32px;border-radius:var(--radius);background:linear-gradient(180deg,rgba(var(--ink-rgb),.09),rgba(var(--ink-rgb),.03));border:2px solid rgba(var(--ink-rgb),.12);box-shadow:0 18px 50px rgba(0,0,0,.25)}
+.vs .row{display:flex;align-items:flex-end;gap:18px}
+.vs .side{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+.vs .side.b{align-items:flex-end;text-align:left}
+.vs .val{font:800 132px/0.95 var(--headline);color:var(--accent);unicode-bidi:isolate;overflow-wrap:normal;word-break:keep-all;hyphens:none;max-height:260px}
+.vs .side.b .val{text-align:left}
+.vs .bar{display:flex;gap:6px;height:16px;border-radius:8px;overflow:hidden}
+.vs .bar i{display:block;min-width:12px}
+.vs .bar .a{background:var(--accent)}
+.vs .bar .b{background:var(--accent2)}
 .vs .val.m{font-size:92px}
 .vs .val.l{font-size:66px}
 .vs .val.xl{font-size:52px}
@@ -66,8 +72,8 @@ export const ROLE_CSS = `
 .s-instagram .vs .val.m{font-size:78px}
 .s-instagram .vs .val.l{font-size:58px}
 .s-instagram .vs .val.xl{font-size:46px}
-.vs .who{font:700 34px/1.2 var(--text);color:var(--muted)}
-.vs .mid-vs{align-self:center;font:700 40px var(--display);color:var(--muted)}
+.vs .who{font:700 30px/1.2 var(--text);color:var(--muted);letter-spacing:.02em}
+.vs .vs-dot{align-self:center;margin-bottom:34px;padding:10px 18px;border-radius:999px;border:2px solid rgba(var(--ink-rgb),.2);font:700 28px var(--text);color:var(--muted)}
 .versus{display:flex;align-items:center;gap:26px;font:700 64px/1.05 var(--display)}
 .versus .a{color:var(--accent)}
 .versus .b{color:var(--accent2)}
@@ -120,7 +126,7 @@ body.layer .frame{z-index:2}
 .cta .icon{flex:none;width:52px;height:52px}
 .s-instagram .cta{font-size:34px;padding:18px 26px;margin-top:22px}
 .payoff .rtitle{color:var(--accent)}
-body.has-photo .rtag,body.has-photo .vs .side{background:rgba(0,0,0,.35)}
+body.has-photo .rtag,body.has-photo .vs{background:rgba(0,0,0,.35)}
 `;
 
 const tag = (text, cls = '') => `<div class="rtag ${cls}">${he(text)}</div>`;
@@ -172,7 +178,7 @@ export function roleInner(s) {
   // The last slide carries the call to action and, under it, the keywords (TikTok's search
   // reads every slide; on the cover they would give a guess-who or a twist away). Two blind
   // reviews read a keyword row as SEO, so it is a small, faint footnote, not a line of tags.
-  const last = s.isLast ? `${ctaHtml(s.cta)}${keywordsHtml(s.keywords)}` : '';
+  const last = s.isLast ? `${ctaHtml(s.cta)}${s.noKeywords ? '' : keywordsHtml(s.keywords)}` : '';
   const src = sourceLine(s);
   let inner = '';
   if (r === 'stat') {
@@ -182,7 +188,14 @@ export function roleInner(s) {
       return n <= 4 ? '' : n <= 7 ? ' m' : n <= 11 ? ' l' : ' xl';
     };
     const val = (v) => `<div class="val fit${size(v)}" dir="auto">${he(v)}</div>`;
-    inner = `${title(s)}<div class="vs"><div class="side a">${val(s.a)}<div class="who">${he(subj.a || '')}</div></div><div class="mid-vs">מול</div><div class="side b">${val(s.b)}<div class="who">${he(subj.b || '')}</div></div></div>${body(s)}`;
+    // A bar only for two plain amounts of the same thing ("213" against "260"), never for a record or a word.
+    const amount = (v) => {
+      const t = String(v || '').trim();
+      return /^[$€£]?\d[\d,.]*\s*(%|[\u0590-\u05FF"']{1,10})?$/.test(t) ? Number(t.replace(/[^\d.]/g, '')) : null;
+    };
+    const [na, nb] = [amount(s.a), amount(s.b)];
+    const bar = na > 0 && nb > 0 ? `<div class="bar"><i class="a" style="flex:${na} 1 0"></i><i class="b" style="flex:${nb} 1 0"></i></div>` : '';
+    inner = `${title(s)}<div class="vs"><div class="row"><div class="side a"><div class="who">${he(subj.a || '')}</div>${val(s.a)}</div><div class="vs-dot">מול</div><div class="side b"><div class="who">${he(subj.b || '')}</div>${val(s.b)}</div></div>${bar}</div>${body(s)}`;
   } else if (r === 'rank') {
     inner = `<div class="rank${s.rank === 1 ? ' one' : ''}"><small>#</small>${s.rank}</div>${title(s)}${body(s)}`;
   } else if (r === 'ranks') {

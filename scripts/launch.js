@@ -172,9 +172,10 @@ function seedPassed(db, pack) {
     const old = new Db(path.join(HOME, `r${r}`, 'launch.db'));
     for (const [n, x] of Object.entries(J(v).posts || {})) {
       const id = `seed-r${r}-${n}`;
-      const post = x.pass && res[n]?.postId ? old.get('SELECT topic, hook, format_id, created_at FROM posts WHERE id = ?', res[n].postId) : null;
+      // A failed post's topic is kept too, as rejected: the readers turned it down, so the next attempt finds another.
+      const post = res[n]?.postId ? old.get('SELECT topic, hook, format_id, created_at FROM posts WHERE id = ?', res[n].postId) : null;
       if (!post || db.get('SELECT id FROM posts WHERE id = ?', id)) continue;
-      db.insert('posts', { id, account_id: pack.id, format_id: post.format_id, topic: post.topic, hook: post.hook, status: 'published', reason: `passed in round ${r}`, created_at: post.created_at, updated_at: post.created_at });
+      db.insert('posts', { id, account_id: pack.id, format_id: post.format_id, topic: post.topic, hook: post.hook, status: x.pass ? 'published' : 'rejected', reason: x.pass ? `passed in round ${r}` : `failed the blind review in round ${r}`, created_at: post.created_at, updated_at: post.created_at });
     }
     old.close();
   }

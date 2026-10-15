@@ -11,7 +11,8 @@ import { coverInner, drawsRole, ROLE_CSS, roleInner } from '../roles.js';
 // renderer shrinks it until it fits, down to a floor, and refuses the slide past
 // that floor rather than cutting the text.
 
-const handleTag = (s) => `<bdi>@${he(s.handle)}</bdi>`;
+// An account can leave its handle off the slides (theme.options.handleTag false): the platform shows whose post it is.
+const handleTag = (s) => (s.noHandle ? '' : `<bdi>@${he(s.handle)}</bdi>`);
 
 /* ------------------------------------------------------------------ bubble */
 
@@ -325,9 +326,9 @@ body.s-tiktok .lines li{font-size:52px}
 .src{font:500 26px var(--text);color:var(--muted);margin-top:26px}
 .k-closer h2{font:400 120px/1.02 var(--display);max-height:460px}
 .rtitle{font-family:var(--display);font-weight:400}
-.vs .side{border-radius:6px;border-width:0;border-top:10px solid var(--accent);background:rgba(var(--ink-rgb),.07)}
-.vs .side.b{border-top-color:var(--ink)}
+.vs{border-radius:6px;border-width:0;border-top:10px solid var(--accent)}
 .vs .side.b .val{color:var(--ink)}
+.vs .bar .b{background:var(--ink)}
 .vs .val{font-weight:400}
 .rank{font-weight:400}
 .answer,.myth-text,.meme .punch{font-weight:400}

@@ -87,6 +87,11 @@ export function validatePack(pack) {
   }
   for (const k of ['display', 'text']) if (!isFont(theme.fonts?.[k])) p.push(`theme.json: fonts.${k} "${theme.fonts?.[k]}" is not a bundled font`);
   for (const v of theme.visuals || []) if (!VISUAL_TYPES.includes(v)) p.push(`theme.json: visuals: "${v}" is not a graphic the engine draws (${VISUAL_TYPES.join(', ')})`);
+  const o = theme.options || {};
+  for (const k of ['handleTag', 'sourceLine', 'slideKeywords', 'backgroundPhoto', 'coverPhoto']) if (o[k] !== undefined && typeof o[k] !== 'boolean') p.push(`theme.json: options.${k} is true or false`);
+  if (o.backgroundVeil !== undefined && !(Number(o.backgroundVeil) >= 0.5 && Number(o.backgroundVeil) <= 0.95)) p.push('theme.json: options.backgroundVeil is from 0.5 to 0.95 (below 0.5 the text loses its contrast)');
+  if (theme.backgroundQueries !== undefined && !(Array.isArray(theme.backgroundQueries) && theme.backgroundQueries.every((q) => typeof q === 'string' && q.trim()))) p.push('theme.json: backgroundQueries is a list of search phrases');
+  if (o.backgroundPhoto && !(theme.backgroundQueries || []).length) p.push('theme.json: options.backgroundPhoto needs backgroundQueries, for the posts with no photograph of their own');
 
   // ---- sources.json
   const list = sources.sources || [];
@@ -150,6 +155,11 @@ export function validatePack(pack) {
   const maxAge = meta.research?.maxAgeDays;
   if (maxAge !== undefined && !(Number.isInteger(maxAge) && maxAge >= 7)) p.push('pack.json: research.maxAgeDays is a whole number of days, 7 or more');
   if (meta.bio !== undefined && [...String(meta.bio)].length > 80) p.push('pack.json: bio is over 80 characters, the limit on TikTok');
+  if (meta.endSlide !== undefined && !(isObj(meta.endSlide) && String(meta.endSlide.title || '').trim() && [...String(meta.endSlide.title)].length <= 60 && [...String(meta.endSlide.body || '')].length <= 120)) p.push('pack.json: endSlide needs a title (up to 60 characters) and may have a body (up to 120)');
+  for (const [k, v] of Object.entries(meta.writing || {})) {
+    if (!['cover', 'slideTitle', 'slideBody', 'slideLines'].includes(k) || !isObj(v)) p.push(`pack.json: writing.${k} is not a text the pack can limit (cover, slideTitle, slideBody, slideLines)`);
+    else for (const [m, n] of Object.entries(v)) if (!['maxChars', 'sentences', 'maxWords'].includes(m) || !(Number.isInteger(n) && n > 0)) p.push(`pack.json: writing.${k}.${m} must be maxChars, sentences or maxWords, a whole number`);
+  }
   if ([...String(meta.displayName || '')].length > 30) p.push('pack.json: displayName is over 30 characters, the limit on Instagram and TikTok');
   if (!Array.isArray(formats.caption?.questions) || !formats.caption.questions.length) p.push('formats.json: caption.questions must list at least one question');
   const tags = [...(formats.hashtags?.broad || []), ...(formats.hashtags?.niche || [])];

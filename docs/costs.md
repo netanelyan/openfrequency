@@ -1,12 +1,13 @@
-# Costs: live on $15 a month
+# Costs: live on $20 a month
 
 2026-10-13, updated 2026-10-14. What the engine costs to run, what each service
 gives for free, what every phase 2 change did to the cost of a post, and the month
 at the planned volume. The current forecast is the section
 [The full pipeline, measured on real token counts](#the-full-pipeline-measured-on-real-token-counts-2026-10-14):
-**about $27 at 180 posts, expected, and $36 in the worst case: over $15.** The
-planner cuts volume to fit: **about 86 posts a month expected, 71 in the worst
-case**, one a day per account, never a cheaper model or a shorter prompt.
+**about $27 at 180 posts, expected, and $36 in the worst case.** The owner raised
+the cap from $15 to **$20** on 2026-10-15 ([The cap at $20](#the-cap-at-20-2026-10-15)).
+The planner cuts volume to fit, never a cheaper model or a shorter prompt: **about
+119 posts a month expected at $20**, 86 in the worst case (at $15 it was 86 and 71).
 
 ## The rule
 
@@ -279,6 +280,22 @@ What would bring the volume back up, none of it taken because each one trades
 quality: fewer stopped attempts (the main lever: half the cost of a post made is
 attempts that did not make it), shorter source text into the outline (most of its
 14,000 tokens), and a cheaper model for the details step.
+
+## The cap at $20 (2026-10-15)
+
+The owner raised the monthly cap for the Anthropic API from $15 to $20, with a
+warning at $15 (`ANTHROPIC_MONTHLY_BUDGET_USD`, `ANTHROPIC_BUDGET_WARN_USD`). Every
+API call is also checked against a spend file of its own
+(`$OF_HOME/data/anthropic-spend.json`), which fails closed when it is missing.
+
+What fits on November 2026's calendar (152 slots at two a day) and $19 (the cap less
+the 5% engine reserve):
+
+| Cost per post | The planner's rates | Posts | AI cost |
+|---|---|---|---|
+| $0.115 (the best first round) | 2 a day each | 152 | $17.48 |
+| **$0.15 (expected)** | **1, 1.5 and 2 a day** | **119** | **$17.85** |
+| $0.20 (the worst first round) | 1 a day each | 86 | $17.20 |
 
 ## Measuring the real thing
 

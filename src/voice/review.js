@@ -27,7 +27,7 @@ You get the texts of one slideshow post: the cover line, each slide, the caption
 
 - botScore: 0 means clearly a person wrote it, 10 means obviously a bot. Be strict: a text that is balanced, complete and polished, that sounds like a brochure or a school summary, that praises in general terms or opens with a stock phrase scores high. Translated-sounding Hebrew scores high.
 - tells: only what gives it away, a few English words each ("stock opener", "translated Hebrew", "too polished", "brochure tone"). Empty when nothing does.
-- factIssue: true only if the text states something its facts do not support. factProblem: when factIssue is true, what; else an empty string (never a note that concludes the text is fine). The source's own words decide: a fact whose summary says more than its source supports nothing. A text marked as a myth, a joke, an opinion or a question to the reader is not the post's claim: a myth is wrong on purpose (the next slide corrects it). Flag it only when a fact inside it (a number, a name, a result) is wrong. Every specific detail a text states (a name, a number, a minute or a round, a quote, what someone said, the moment itself) must be in the source words of the facts above: a detail none of them holds is a fact problem, however likely it sounds.`;
+- factIssue: true only if the text states something its facts do not support. factProblem: when factIssue is true, what; else an empty string (never a note that concludes the text is fine). The source's own words decide: a fact whose summary says more than its source supports nothing. A text marked as a myth, a joke, an opinion or a question to the reader is not the post's claim: a myth is wrong on purpose (the next slide corrects it). Flag it only when a fact inside it (a number, a name, a result) is wrong. Every specific detail a text states (a name, a number, a minute or a round, a quote, what someone said, the moment itself) must be in the source words of the facts above: a detail none of them holds is a fact problem, however likely it sounds. A claim of "the only", "the first", "never" or "every" that leaves out conditions its fact has is a fact problem: "the only one to win A, B and C" is false when the fact says the only one to win A, B, C, D, E and F.`;
 
 /**
  * What a slide that carries no fact of its own is doing, so the review does not
@@ -109,7 +109,7 @@ export function heuristicReview(texts, pack) {
   const bodies = texts.filter((t) => t.kind === 'slideBody').map((t) => normHe(t.text).split(' ')[0]).filter(Boolean);
   const sameOpening = bodies.length >= 3 && new Set(bodies).size === 1;
   return texts.map((t) => {
-    const tells = tellsIn(t.text, { kind: t.kind, extra }).map((x) => x.msg);
+    const tells = tellsIn(t.text, { kind: t.kind, extra, pack }).map((x) => x.msg);
     let score = 1 + Math.min(6, tells.length * 2);
     const sentences = sentencesOf(t.text);
     const avg = sentences.length ? sentences.reduce((n, s) => n + s.split(/\s+/).length, 0) / sentences.length : 0;

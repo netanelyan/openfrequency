@@ -4,6 +4,7 @@ import { addDays, israelDate } from '../schedule/israel.js';
 import { slotsFor } from '../schedule/slots.js';
 import { postScore } from '../formats/rotation.js';
 import { ENGINE_RESERVE, globalCap, monthReserved, monthSpend } from './ledger.js';
+import { limits } from './anthropic.js';
 
 // The month, planned against the cap: what was spent, what the rest of the
 // month will cost at the planned volume, and how many posts the money left buys.
@@ -35,7 +36,8 @@ import { ENGINE_RESERVE, globalCap, monthReserved, monthSpend } from './ledger.j
 export const DEFAULT_COST_PER_POST = 0.15;
 /** The least a cut leaves an account: a post every other day. */
 export const MIN_PER_DAY = 0.5;
-export const WARN_AT = 0.8;
+/** The warning level as a share of the cap, when ANTHROPIC_BUDGET_WARN_USD is not set: $15 of $20. */
+export const WARN_AT = 0.75;
 
 /** AI spend per produced post over the last 30 days: every call, including the ones that ended blocked. */
 export function costPerPost(db, accountId, t = now()) {
@@ -159,7 +161,9 @@ export function planMonth(db, packs, { t = now(), env = process.env } = {}) {
   const avg = rows.length ? rows.reduce((s, r) => s + r.costPerPost, 0) / rows.length : DEFAULT_COST_PER_POST;
   const forecast = spent + reserved + rows.reduce((s, r) => s + r.remainingPosts * r.costPerPost, 0);
   const left = Math.max(0, cap - spent - reserved);
-  const level = spent >= cap - 1e-9 || left < avg ? 'stop' : spent >= cap * WARN_AT ? 'warn' : sum > pool ? 'short' : 'ok';
+  // The warning level is ANTHROPIC_BUDGET_WARN_USD ($15), never above the cap.
+  const warnUsd = Math.min(cap, limits(env).warn);
+  const level = spent >= cap - 1e-9 || left < avg ? 'stop' : spent >= warnUsd - 1e-9 ? 'warn' : sum > pool ? 'short' : 'ok';
   return {
     month,
     cap,
@@ -168,6 +172,7 @@ export function planMonth(db, packs, { t = now(), env = process.env } = {}) {
     forecast,
     left,
     postsLeft: Math.floor(left / avg),
+    warnAt: cap ? warnUsd / cap : WARN_AT,
     costPerPost: avg,
     level,
     nextMonth: addDays(monthEnd(today), 1),

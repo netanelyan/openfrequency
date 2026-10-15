@@ -61,7 +61,7 @@ export const KINDS = {
     photo: 'last',
     cta: 'comment',
     subject: ['answer'],
-    prompt: `guess-who: the cover asks them to guess a famous person (or club, or company) from clues. 3 "clue" slides (4 at most), from hard to easy, each one sourced fact that never names the answer, and never names anything that gives it away at once. The "reveal" slide is last: its title is the answer (subject.answer) and its body one sourced line. The answer appears nowhere before the reveal: not on the cover, not in a clue, not in the captions or the keywords. The cover asks the question and gives no clue of its own (no year, title or deed that points to the answer): the clues are the slides'. The answer is someone the account's audience knows by name: a guess nobody can get is no game. Never number a clue yourself ("רמז 1"): the design draws the badges.`,
+    prompt: `guess-who: the cover asks them to guess a famous person (or club, or company) from clues. 3 "clue" slides (4 at most), from hard to easy, each one sourced fact that never names the answer, and never names anything that gives it away at once. The "reveal" slide is last: its title is the answer (subject.answer) and its body one sourced line. The answer appears nowhere before the reveal: not on the cover, not in a clue, not in the captions or the keywords. The cover asks the question and gives no clue of its own (no year, title or deed that points to the answer): the clues are the slides'. The answer is someone the account's audience knows by name: a guess nobody can get is no game. The first two clues are ones only a real fan could place: no nationality, no club, no shirt number in them; the giveaway comes last. The captions never repeat the clues. Never number a clue yourself ("רמז 1"): the design draws the badges.`,
   },
   'head-to-head': {
     group: 'number',
@@ -71,7 +71,7 @@ export const KINDS = {
     photo: 'cover',
     cta: 'comment',
     subject: ['a', 'b'],
-    prompt: `head-to-head: two subjects still argued over (two players, two coaches, two teams, two eras, two products), never one past match whose winner everyone knows; subject.a and subject.b (short names, as the slides call them). 3 to 6 "stat" slides (a coming fight's sources rarely hold more than three numbers both sides share): title is the stat's name, a and b are the two values exactly as the quotes give them (digits, with their unit), body one short line of context; each stat slide cites the facts that hold both values. Compare like with like: the same competition and period for both, said on the slide. Both values of every stat are real values from the quotes, and the same measure on both sides (a record against a record, never an age against a result): never a dash or "אין נתון" (drop a stat one side does not have). When the two meet at a coming event (a fight, a match), the cover or the first stat names the event and its date from the quotes: a matchup without a when reads as old news. The cover asks the question and never shows the values (no price table or stat grid on the cover): the slides reveal them one at a time. The last slide, "verdict", answers the cover's question in its first words and takes a side: who the numbers favour and the one stat that decides it, with no new number. Never a hedge.`,
+    prompt: `head-to-head: two subjects still argued over (two players, two coaches, two teams, two eras, two products), never one past match whose winner everyone knows, never two options whose answer is plain before the first slide (the cheaper tier of the same family is cheaper), and never two that are the same on most of their numbers (three slides of "$2.00 מול $2.00" is no contest); subject.a and subject.b (short names, as the slides call them). 3 to 6 "stat" slides (a coming fight's sources rarely hold more than three numbers both sides share): title is the stat's name, a and b are the two values exactly as the quotes give them (digits, with their unit; at most three words each), body one short line of context; each stat slide cites the facts that hold both values. Compare like with like: the same competition and period for both, said on the slide. Both values of every stat are real values from the quotes, and the same measure on both sides (a record against a record, never an age against a result): never a dash or "אין נתון" (drop a stat one side does not have). When the two meet at a coming event (a fight, a match), the cover or the first stat names the event and its date from the quotes: a matchup without a when reads as old news. Every stat bears on the question the cover asks (for a fight: the record, wins by knockout and by submission, title fights, reach, the last fights); never one that decides nothing (a debut date, the number of rounds scheduled). The cover asks the question and never shows the values (no price table or stat grid on the cover): the slides reveal them one at a time. The last slide, "verdict", answers the cover's question in its first words and takes a side: who the numbers favour and the one stat that decides it, with no new number. Never a hedge.`,
   },
   ranking: {
     group: 'number',
@@ -115,7 +115,7 @@ export const KINDS = {
     factFree: ['joke'],
     photo: null,
     cta: 'send',
-    prompt: `meme: text-led jokes about the audience's insider pain, in the account's own design (never a meme template, a film still or another page's picture). 3 to 5 "joke" slides: title is the setup (a situation every one of them knows), body the punchline, short and spoken. A joke that states a fact (a rate, a deadline, a sum) cites it. The last slide, "truth", is the real fact behind the jokes, sourced. Punch at the situation, never at a group of people.`,
+    prompt: `meme: text-led jokes about the audience's insider pain, in the account's own design (never a meme template, a film still or another page's picture). 3 to 5 "joke" slides: title is the setup (a situation every one of them knows), body the punchline, short and spoken. A joke that states a fact (a rate, a deadline, a sum) cites it. The last slide, "truth", is the real fact behind the jokes, sourced. Punch at the situation, never at a group of people. Every joke slide is a joke (a setup and a twist a reader would send to a friend), never a fact read out: a price list is not a meme. The captions never promise a number of jokes.`,
   },
   list: {
     group: 'number',
@@ -218,7 +218,7 @@ export function kindProblems(format, post) {
   if (name === 'head-to-head') {
     content.forEach((s, i) => {
       if (s.role === 'stat' && !(String(s.a || '').trim() && String(s.b || '').trim())) out.push(`slide ${i + 1}: a stat slide needs both values (a and b)`);
-      if (s.role === 'stat' && String(s.a || '').length + String(s.b || '').length > 32) out.push(`slide ${i + 1}: a and b are values, not sentences (at most a few characters each)`);
+      if (s.role === 'stat' && String(s.a || '').length + String(s.b || '').length > 40) out.push(`slide ${i + 1}: a and b are values, not sentences (at most three words each: "27-4", "13 נוקאאוטים", "פה אחד")`);
       if (s.role === 'stat' && [s.a, s.b].some((v) => !/[\p{L}\p{N}]/u.test(String(v || '')))) out.push(`slide ${i + 1}: a stat needs a real value on both sides, never a dash: drop a stat one side does not have`);
     });
   }
@@ -246,7 +246,23 @@ export function kindProblems(format, post) {
     if (ranks && linesOfBody(ranks.body).length !== 5) out.push('the "ranks" slide holds places 10 to 6: exactly five lines in its body');
     content.forEach((s, i) => {
       if (/(?:^|\s)(?:#\s?\d|מקום\s+(?:ה|ראשון|שני|\d))/.test(`${s.title} ${s.body}`)) out.push(`slide ${i + 1}: no place numbers in the text, the design draws them`);
+      if (s.role === 'rank' && !/\d/.test(`${s.title} ${s.body} ${JSON.stringify(s.visual || '')}`)) out.push(`slide ${i + 1}: a rank slide states the number that ranks it (a total, a count), number 1's included`);
     });
+    // The order follows the number: a win streak of 14 went out at number 1 above one of 16. The number that ranks a
+    // slide is its graphic's value, or its first number that is not a year; it must rise (or fall) from 5th to 1st.
+    const rankNum = (s) => {
+      const v = s.visual?.items?.[0]?.value;
+      // The body before the title: a title can be a name with a number in it ("UFC 229").
+      const from = v != null ? [String(v)] : [...numbersIn(String(s.body || ''), { hebrew: true }), ...numbersIn(String(s.title || ''), { hebrew: true })];
+      const n = from.map((x) => Number(String(x).replace(/,/g, ''))).find((x) => Number.isFinite(x) && !(x >= 1900 && x <= 2100));
+      return n ?? null;
+    };
+    const nums = content.filter((s) => s.role === 'rank').map(rankNum);
+    if (nums.length >= 3 && nums.every((n) => n != null)) {
+      const up = nums.every((n, k) => k === 0 || n >= nums[k - 1]);
+      const down = nums.every((n, k) => k === 0 || n <= nums[k - 1]);
+      if (!up && !down) out.push(`the ranking's order does not follow its number (${nums.join(', ')} from 5th to 1st): order the places by the number that ranks them`);
+    }
   }
   if (name === 'iceberg') content.forEach((s, i) => linesOfBody(s.body).length > 3 && out.push(`slide ${i + 1}: a layer holds 1 to 3 short lines`));
   if (name === 'myth-fact') {

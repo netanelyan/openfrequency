@@ -5,6 +5,7 @@ import { ensureDir } from '../core/paths.js';
 import { tokenOf } from '../verify/claims.js';
 import { page, SIZES } from './html.js';
 import { buildSlide } from './templates/index.js';
+import { endParts } from './end.js';
 import { kindName, ranksOf } from '../formats/kinds.js';
 import { slideHasVisual } from './visuals.js';
 
@@ -95,6 +96,25 @@ export async function renderHtml(html, { size, file, floor = FIT_FLOOR }) {
       throw new RenderError(`fonts did not load (${[...font.broken, ...font.same].join(', ')}): refusing to render, the Hebrew would not be ours`, 'fonts');
     }
 
+    // A guess-who's cover: its answer's photograph as a coarse mosaic, nine blocks across. Blurred, half the readers
+    // still knew Zlatan at a glance; in blocks a hand wide there is colour and mood, and no face.
+    await tab.evaluate(async () => {
+      for (const img of document.querySelectorAll('img.photo.blur')) {
+        await img.decode().catch(() => {});
+        if (!img.naturalWidth) continue;
+        const cols = 9;
+        const rows = Math.max(1, Math.round((cols * innerHeight) / innerWidth));
+        const c = document.createElement('canvas');
+        c.width = cols;
+        c.height = rows;
+        const g = c.getContext('2d');
+        const r = Math.max(cols / img.naturalWidth, rows / img.naturalHeight);
+        g.drawImage(img, (cols - img.naturalWidth * r) / 2, (rows - img.naturalHeight * r) * 0.3, img.naturalWidth * r, img.naturalHeight * r);
+        img.src = c.toDataURL('image/png');
+        await img.decode().catch(() => {});
+      }
+    });
+
     // A photograph: measure the brightest band where the text sits and set the scrim.
     await tab.evaluate(() => {
       const img = document.querySelector('img.photo');
@@ -139,12 +159,12 @@ export async function renderHtml(html, { size, file, floor = FIT_FLOOR }) {
     await tab.evaluate(() => {
       // An underscore is part of a name ("budget_tokens" came out "tokens_budget"), and so are the brackets of a call.
       // A command's flags are part of it: "npx frugon --demo" came out "demo--" when the dashes were left outside.
-      const RUN = /(?:(?<!\S)--?(?=[A-Za-z]))?[A-Za-z0-9$€£](?:[A-Za-z0-9$€£%&+'’_]|[.,:/–=-](?=[A-Za-z0-9_])|-(?=-[A-Za-z])|\(\)| (?=[A-Za-z0-9$€£]|--?[A-Za-z]))*/g;
+      const RUN = /(?:(?:(?<!\S)--?|(?<![^\s-])\/)(?=[A-Za-z]))?[A-Za-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u024F0-9$€£](?:[A-Za-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u024F0-9$€£%&+'’_]|[.,:/–=-](?=[A-Za-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u024F0-9_])|-(?=-[A-Za-z])|\(\)|[.,;:!?](?= [A-Za-zÀ-ÖØ-öø-ɏ])| (?=[A-Za-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u024F0-9$€£]|--?[A-Za-z]))*/g;
       const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
       const nodes = [];
       for (let n = walker.nextNode(); n; n = walker.nextNode()) {
         // A node with no Hebrew is set right to left too: a graphic's "2003–04" came out "04–2003".
-        if (!/[A-Za-z0-9]/.test(n.nodeValue)) continue;
+        if (!/[A-Za-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u024F0-9]/.test(n.nodeValue)) continue;
         if (n.parentElement.closest('bdi,.probe,style,script')) continue;
         // The page itself is dir="rtl"; an element inside it that sets its own direction is already isolated.
         const own = n.parentElement.closest('[dir]');
@@ -170,6 +190,9 @@ export async function renderHtml(html, { size, file, floor = FIT_FLOOR }) {
         frag.append(n.nodeValue.slice(at));
         n.replaceWith(frag);
       }
+      // A run isolated when the page was built never breaks either: "GPT-5.6" wrapped at its hyphen, and the line
+      // reversed the pieces ("GPT--ב 5.6").
+      for (const b of document.querySelectorAll('bdi')) if (!/\s/.test(b.textContent)) b.style.whiteSpace = 'nowrap';
     });
 
     // Shrink any block that overflows, 2% a step, down to the floor.
@@ -311,6 +334,18 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
   const byIdx = photos instanceof Map ? photos : new Map(photo ? [[photoOn === 'last' ? slides.length - 1 : 0, photo]] : []);
   const uri = new Map([...byIdx].filter(([, p]) => p?.file).map(([i, p]) => [i, dataUri(p.file)]));
   const brand = pack.brandLogo ? dataUri(pack.brandLogo) : null;
+  const opts = pack.theme.options || {};
+  const noHandle = opts.handleTag === false;
+  const noSources = opts.sourceLine === false;
+  // The closing "follow" slide, when the account has one, takes the call to action off the last content slide.
+  const end = pack.meta.endSlide?.title ? pack.meta.endSlide : null;
+  const kindNow = format ? kindName(format) : 'list';
+  // Every slide on a photograph (theme.options.backgroundPhoto): its own, else one of the post's, in turn, else the
+  // one found for the post's scene ('bg'). Never a guess-who's answer, whose face would show through the blur.
+  // The post's own subject (the cover's photograph, never a guess-who's answer) and its scene; a slide's portrait of
+  // someone else stays on that slide.
+  const pool = opts.backgroundPhoto ? [...(uri.has(0) && kindNow !== 'guess-who' ? [uri.get(0)] : []), ...(uri.has('bg') ? [uri.get('bg')] : [])] : [];
+  const bgFor = (i) => (opts.backgroundPhoto ? (typeof i === 'number' && uri.has(i) && !(kindNow === 'guess-who' && i === slides.length - 1) ? uri.get(i) : pool.length ? pool[i % pool.length] : null) : null);
   const items = slides.filter((s) => s.kind === 'item').length;
   const places = slidePlaces(slides);
   // Photographs left off a slide that could not fit them, per platform: not shown, not credited.
@@ -332,20 +367,25 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
         hook: post.hook,
         sub: post.sub,
         handle: pack.meta.handle,
+        noHandle,
+        noSources,
+        noKeywords: opts.slideKeywords === false,
         displayName: pack.meta.displayName,
         postKind,
         subject: extra.subject || {},
         keywords: extra.keywords || [],
-        cta: extra.cta ? { kind: post.ctaKind || 'save', text: extra.cta } : null,
+        cta: extra.cta && !end ? { kind: post.ctaKind || 'save', text: extra.cta } : null,
         coverVisual: extra.coverVisual || null,
-        brand: brand && (s.kind === 'cover' || i === slides.length - 1) ? brand : null,
+        brand: brand && (s.kind === 'cover' || (!end && i === slides.length - 1)) ? brand : null,
       };
       // The cover's photograph, and a guess-who's reveal, fill the slide; a content slide's sits in a frame.
       const full = uri.has(i) && (s.kind === 'cover' || (i === slides.length - 1 && s.role === 'reveal')) && pack.theme.options?.coverPhoto !== false;
       // A guess-who's cover shows its answer's photograph blurred past recognition: a real picture that teases, never tells.
       const tease = !full && s.kind === 'cover' && postKind === 'guess-who' && uri.has(slides.length - 1) && pack.theme.options?.coverPhoto !== false;
       if (uri.has(i) && !full) slide.photo = uri.get(i);
-      slide.hasPhoto = Boolean(full || tease);
+      // A head-to-head's cover: both sides, each on its own half.
+      const split = s.kind === 'cover' && postKind === 'head-to-head' && uri.has('ca') && uri.has('cb') ? [uri.get('ca'), uri.get('cb')] : null;
+      slide.hasPhoto = Boolean(full || tease || split);
       slide.tease = Boolean(tease);
       slide.hasVisual = s.kind === 'item' && slideHasVisual(slide);
       const file = path.join(outDir, `${size}-${String(i + 1).padStart(2, '0')}.jpg`);
@@ -354,7 +394,7 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
       const tries = [{ ...slide }, ...(slide.photo ? [{ ...slide, photo: null, hasVisual: s.kind === 'item' && slideHasVisual({ ...slide, photo: null }) }] : [])];
       let done = false;
       for (const [k, sl] of [...tries.map((t) => [FIT_FLOOR, t]), [0.45, tries.at(-1)]].entries()) {
-        const html = page({ theme: pack.theme, size, slide: sl[1], parts: buildSlide(pack.theme, sl[1]), photo: full ? uri.get(i) : tease ? uri.get(slides.length - 1) : null, blur: tease });
+        const html = page({ theme: pack.theme, size, slide: sl[1], parts: buildSlide(pack.theme, sl[1]), photo: full ? uri.get(i) : tease ? uri.get(slides.length - 1) : null, blur: tease, split, bg: bgFor(i) });
         try {
           await renderHtml(html, { size, file, floor: sl[0] });
           if (slide.photo && !sl[1].photo) (dropped[size] ??= new Set()).add(i);
@@ -365,6 +405,12 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
         }
       }
       if (!done) throw new RenderError('the slide did not render', 'overflow');
+      out[size].push(file);
+    }
+    if (end) {
+      const sl = { kind: 'end', handle: pack.meta.handle, noHandle, brand };
+      const file = path.join(outDir, `${size}-${String(slides.length + 1).padStart(2, '0')}.jpg`);
+      await renderHtml(page({ theme: pack.theme, size, slide: sl, parts: endParts(pack), bg: bgFor(slides.length) }), { size, file, floor: 0.45 });
       out[size].push(file);
     }
   }

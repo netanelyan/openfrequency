@@ -14,7 +14,9 @@ import { VISUAL_CSS } from './visuals.js';
 // bottom and on the right); Instagram is 1080x1350, what the feed crops to.
 
 export const SIZES = {
-  tiktok: { w: 1080, h: 1920, pad: { top: 210, bottom: 430, right: 150, left: 90 } },
+  // TikTok draws its tabs at the top, its buttons down the right edge (where a Hebrew line starts) and the caption,
+  // the account and the sound across the bottom: nothing of the slide's own goes there.
+  tiktok: { w: 1080, h: 1920, pad: { top: 250, bottom: 560, right: 190, left: 100 } },
   instagram: { w: 1080, h: 1350, pad: { top: 96, bottom: 96, right: 92, left: 92 } },
 };
 
@@ -29,7 +31,9 @@ export const esc = (s) =>
 // A run joins words with a space ("UFC 193", "Better Place") and parts of a name with a
 // point, a colon, a slash or a dash ("monday.com"), never across a sentence's end: as
 // one run, "Gnrgy. 450,000" put the period and half the number on the wrong side.
-const LATIN_RUN = /([A-Za-z](?:[A-Za-z0-9+#&_]|[.:/=-](?=[A-Za-z0-9_])|-(?=-[A-Za-z])|\(\)|(?<![.!?]) (?=[A-Za-z0-9]|--?[A-Za-z]))*)/;
+// Accented letters are Latin too: "L'Équipe" came out "quipeÉ'L" when the run stopped at the É and the apostrophe.
+// A slash command keeps its slash: "/clear" came out "clear/".
+const LATIN_RUN = /((?:(?<![^\s-])\/(?=[A-Za-z]))?[A-Za-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u024F](?:[A-Za-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u024F0-9+#&_]|['’](?=[A-Za-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u024F])|[.:/=-](?=[A-Za-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u024F0-9_])|-(?=-[A-Za-z])|\(\)|[.,;:!?](?= [A-Za-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u024F])|(?<![.!?]) (?=[A-Za-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u024F0-9]|--?[A-Za-z])|(?<=[.,;:!?]) (?=[A-Za-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u024F]))*)/;
 
 /**
  * Escape, and isolate every Latin run so bidi cannot reorder punctuation around it.
@@ -101,6 +105,15 @@ bdi{unicode-bidi:isolate}
 .icon svg{width:100%;height:100%;display:block}
 body.has-photo{--ink:#ffffff;--muted:rgba(255,255,255,.84);--ink-rgb:255,255,255;color:#fff}
 body.has-photo .frame{z-index:2}
+.bgphoto{position:absolute;top:-60px;left:-60px;width:calc(100% + 120px);height:calc(100% + 120px);object-fit:cover;object-position:50% 30%;filter:blur(var(--bg-blur,14px)) saturate(1.1)}
+.bgveil{position:absolute;inset:0;background:rgba(var(--bg-rgb),var(--bg-veil,.74))}
+body.has-bg .frame{z-index:2}
+body.has-bg .frame{text-shadow:0 2px 12px rgba(var(--bg-rgb),.95),0 0 3px rgba(var(--bg-rgb),.9)}
+body.has-photo .frame{text-shadow:0 2px 14px rgba(0,0,0,.7),0 0 3px rgba(0,0,0,.55)}
+.cta,.cta *,.end-handle,.end-handle *,.opinion,.duel .vs-dot{text-shadow:none}
+.split{position:absolute;inset:0;display:flex;gap:6px;background:var(--bg)}
+.split .half{flex:1;min-width:0;height:100%;object-fit:cover;object-position:50% 22%}
+body.no-handle .tag,body.no-handle .who,body.no-handle .kick,body.no-handle .stamp,body.no-handle .band{visibility:hidden}
 `;
 }
 
@@ -110,7 +123,10 @@ body.has-photo .frame{z-index:2}
 const HEADLINE_CSS = '.hook,.title,.rtitle,.k-closer h2,.versus,.answer,.myth-text,.meme .punch,.vs .val,.q,.count,.cnt,.head .n{font-family:var(--headline)}';
 
 /** The whole page for one slide. `parts` is what a template returns. */
-export function page({ theme, size, slide, parts, photo, blur = false }) {
+export function page({ theme, size, slide, parts, photo, blur = false, bg = null, split = null }) {
+  // Behind a slide with no photograph of its own, the account's background photograph, blurred and veiled in the
+  // theme's own ground colour so its text keeps the contrast it was designed with.
+  const backdrop = bg && !photo && !split;
   const families = [theme.fonts.display, theme.fonts.text, 'Heebo'];
   return `<!doctype html>
 <html lang="he" dir="rtl">
@@ -123,8 +139,10 @@ ${parts.css}
 ${VISUAL_CSS}
 ${HEADLINE_CSS}
 </style></head>
-<body class="t-${theme.template} v-${theme.variant || 'a'} k-${slide.kind} s-${size}${photo ? ' has-photo' : ''}${slide.hasVisual ? ' has-vis' : ''}${parts.bodyClass ? ` ${parts.bodyClass}` : ''}"${parts.bodyStyle ? ` style="${esc(parts.bodyStyle)}"` : ''}>
+<body class="t-${theme.template} v-${theme.variant || 'a'} k-${slide.kind} s-${size}${photo || split ? ' has-photo' : ''}${backdrop ? ' has-bg' : ''}${slide.noHandle ? ' no-handle' : ''}${slide.hasVisual ? ' has-vis' : ''}${parts.bodyClass ? ` ${parts.bodyClass}` : ''}"${parts.bodyStyle ? ` style="${esc(parts.bodyStyle)}"` : ''}>
 ${photo ? `<img class="photo${blur ? ' blur' : ''}" src="${photo}" alt=""><div class="scrim" data-scrim></div>` : ''}
+${split ? `<div class="split"><img class="half" src="${split[0]}" alt=""><img class="half" src="${split[1]}" alt=""></div><div class="scrim" data-scrim></div>` : ''}
+${backdrop ? `<img class="bgphoto" src="${bg}" alt=""><div class="bgveil"${theme.options?.backgroundVeil != null ? ` style="--bg-veil:${Number(theme.options.backgroundVeil)}"` : ''}></div>` : ''}
 ${parts.html}
 ${slide.brand ? `<img class="brand" src="${slide.brand}" alt="">` : ''}
 <div class="probe">א</div>
@@ -133,6 +151,9 @@ ${slide.brand ? `<img class="brand" src="${slide.brand}" alt="">` : ''}
 
 /** "מקור: X" under a slide, from its facts' sources. */
 export function sourceLine(slide) {
+  // An account can keep its sources off the slides (theme.options.sourceLine false); every fact still has its
+  // source in the post's record, and a photograph's credit stays in the caption.
+  if (slide.noSources) return '';
   const names = [...new Set((slide.sources || []).filter(Boolean))];
   // Each name is one isolated run with its own direction: "Wikipedia (English)"
   // must not have its parenthesis pulled across a Latin word by the Hebrew line.

@@ -2,7 +2,8 @@ import { appendFileSync } from 'node:fs';
 import path from 'node:path';
 import { isSet } from '../core/env.js';
 import { ensureDir, ofHome } from '../core/paths.js';
-import { apiEquivalent, ceilingUsd, claudeCost, MODEL_RATES, record, release, reserve, settle, WORST } from '../budget/ledger.js';
+import { apiEquivalent, ceilingUsd, claudeCost, MODEL_RATES, monthReserved, record, release, reserve, settle, WORST } from '../budget/ledger.js';
+import { checkCall, recordCall } from '../budget/anthropic.js';
 import { ClaudeError, claudeClient, requestParams, promptTokenBound } from './claude.js';
 import { cliClient, systemText } from './cli.js';
 import { recordedClient } from './recorded.js';
@@ -136,6 +137,11 @@ export async function askJson(ctx, req) {
   const fallback = Boolean(ctx.llm.fallsBack?.(model));
   const tag = req.tag || req.task;
   const ceiling = ceilingUsd({ model, promptTokens: promptTokenBound(params), maxTokens: params.max_tokens, batch, fallback });
+  // A real API call answers to the Anthropic spend file first (budget/anthropic.js): a priced model, a readable file,
+  // and room under the monthly cap for its ceiling. A refusal is a BudgetError, which skips the job.
+  const live = ctx.llm.backend === 'api';
+  if (live) checkCall({ model, ceilingUsd: ceiling, inFlightUsd: monthReserved(ctx.db).usd });
+  const paid = (m, usage, usd) => live && usage && recordCall({ model: m, usage, usd, job: tag, batch, log: ctx.log });
   const reservation = reserve(ctx.db, { pack: ctx.pack, postId: ctx.postId, usd: ceiling, tag });
   const row = { accountId: ctx.pack?.id ?? null, postId: ctx.postId, api: 'claude', tag, batch };
 
@@ -145,12 +151,18 @@ export async function askJson(ctx, req) {
   } catch (e) {
     // A failed call that was billed (a refusal, a cut-off answer) still costs money.
     if (!e.settled) {
-      if (e.usage) settle(ctx.db, reservation, { ...row, model: e.model || model, usd: claudeCost(e.usage, e.model || model, { batch }), usage: e.usage });
-      else release(ctx.db, reservation);
-    }
+      if (e.usage) {
+        const usd = claudeCost(e.usage, e.model || model, { batch });
+        settle(ctx.db, reservation, { ...row, model: e.model || model, usd, usage: e.usage });
+        paid(e.model || model, e.usage, usd);
+      } else release(ctx.db, reservation);
+    } else if (e.usage) paid(e.model || model, e.usage, e.usd ?? claudeCost(e.usage, e.model || model, { batch }));
     throw e;
   }
-  if (res.settled) return { data: res.data, usd: res.usd, estimated: false, model: res.model || model, usage: res.usage };
+  if (res.settled) {
+    paid(res.model || model, res.usage, res.usd ?? claudeCost(res.usage || {}, res.model || model, { batch }));
+    return { data: res.data, usd: res.usd, estimated: false, model: res.model || model, usage: res.usage };
+  }
   let usd;
   if (res.usage) usd = claudeCost(res.usage, res.model || model, { batch });
   else {
@@ -159,6 +171,7 @@ export async function askJson(ctx, req) {
     usd = estimateUsd(model, inTokens, estimateTokens(JSON.stringify(res.data)) * 2.5);
   }
   settle(ctx.db, reservation, { ...row, model: res.model || model, usd, estimated: res.estimated, usage: res.usage || null });
+  paid(res.model || model, res.usage, usd);
   return { data: res.data, usd, estimated: res.estimated, model: res.model || model, usage: res.usage || null };
 }
 

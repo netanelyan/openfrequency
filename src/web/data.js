@@ -34,7 +34,7 @@ export function header(ctx) {
   const waiting = ctx.db.get("SELECT COUNT(*) AS n FROM posts WHERE status = 'queued' AND sample = 0").n;
   return {
     spend: { usd: plan.spent, cap: plan.cap },
-    budget: { level: plan.level, share: plan.cap ? plan.spent / plan.cap : 0, warnAt: WARN_AT, forecast: plan.forecast, cap: plan.cap, nextMonth: plan.nextMonth, cuts: plan.accounts.filter((a) => a.cut).map((a) => ({ id: a.id, name: a.name, perDay: a.perDay, planned: a.planned })) },
+    budget: { level: plan.level, share: plan.cap ? plan.spent / plan.cap : 0, warnAt: plan.warnAt ?? WARN_AT, forecast: plan.forecast, cap: plan.cap, nextMonth: plan.nextMonth, cuts: plan.accounts.filter((a) => a.cut).map((a) => ({ id: a.id, name: a.name, perDay: a.perDay, planned: a.planned })) },
     waiting,
     globalKill: s.globalKill,
   };

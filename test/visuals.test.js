@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { DEMO, opened, tempHome } from './helpers.js';
+import { copyPack, DEMO, opened, tempHome } from './helpers.js';
 import { coverVisualHtml, normVisual, numberOf, slideHasVisual, VISUAL_TYPES, visualHtml, visualProblems, visualsOf, visualText } from '../src/render/visuals.js';
 import { SAMPLE_VISUALS } from '../src/render/samples.js';
 import { gate, tokenOf } from '../src/verify/claims.js';
 import { page } from '../src/render/html.js';
 import { buildSlide } from '../src/render/templates/index.js';
-import { closeBrowser, renderHtml } from '../src/render/render.js';
+import { closeBrowser, renderHtml, renderPost } from '../src/render/render.js';
 import { loadPack } from '../src/packs/load.js';
 import { visualsNeeded } from '../src/pipeline/prompts.js';
 import { imageCredit, namesIn, namesOf } from '../src/images/index.js';
@@ -169,11 +169,44 @@ test('a slide at its longest, a 60-character title and a 230-character text besi
       const theme = { ...pack.theme, template };
       for (const size of ['tiktok', 'instagram']) {
         const slide = { kind: 'item', role: 'beat', title, body, visual, hasVisual: true, handle: 'demo', postKind: 'story', subject: {}, keywords: [], pos: 2, total: 6, n: 2, of: 6, sources: ['Anthropic'] };
-        const { fitted } = await renderHtml(page({ theme, size, slide, parts: buildSlide(theme, slide) }), { size, file: path.join(dir, `${template}-${size}.jpg`) });
+        // As renderPost does: the usual floor, then 45% for a slide at its fullest (TikTok's own buttons and caption
+        // leave its slide a smaller safe area than Instagram's).
+        const html = page({ theme, size, slide, parts: buildSlide(theme, slide) });
+        const file = path.join(dir, `${template}-${size}.jpg`);
+        const { fitted } = await renderHtml(html, { size, file }).catch((e) => (e.code === 'overflow' ? renderHtml(html, { size, file, floor: 0.45 }) : Promise.reject(e)));
         assert.ok(fitted.every((f) => f.fits), `${template} ${size}`);
       }
     }
   } finally {
     await closeBrowser();
+  }
+});
+
+test('an account can keep its handle and its sources off the slides, stand every slide on a photograph and close with a follow slide', { timeout: 240_000 }, async () => {
+  const { home, cleanup } = tempHome();
+  try {
+    const dir = copyPack(home, 'demo', (f) => {
+      f.theme.options = { ...f.theme.options, handleTag: false, sourceLine: false, backgroundPhoto: true };
+      f.theme.backgroundQueries = ['house plants'];
+      f.pack.endSlide = { title: 'רוצים עוד?', body: 'עקבו אחרי {handle}' };
+    });
+    const pack = loadPack(dir);
+    // The page: no handle, no source line, the background under its veil.
+    const slide = { kind: 'item', role: 'beat', title: 'כותרת', body: 'גוף', postKind: 'story', subject: {}, handle: 'demo', noHandle: true, noSources: true, sources: ['ויקיפדיה'], n: 1, of: 3, pos: 1, total: 3 };
+    const html = page({ theme: pack.theme, size: 'tiktok', slide, parts: buildSlide(pack.theme, slide), bg: 'data:image/jpeg;base64,AAAA' });
+    assert.match(html, /class="[^"]*\bhas-bg\b[^"]*\bno-handle\b/);
+    assert.match(html, /<img class="bgphoto"/);
+    assert.doesNotMatch(html, /מקור:/);
+    // The post: one more slide on each platform, the follow slide, and no call to action before it.
+    const beat = (title) => ({ kind: 'item', role: 'beat', title, body: 'שורה אחת.', factKeys: [], sources: ['מקור'] });
+    const slides = [{ kind: 'cover', role: 'cover', title: '', body: '', factKeys: [] }, beat('אחת'), beat('שתיים'), beat('שלוש'), { ...beat('סוף'), role: 'payoff' }];
+    const extra = { captionIg: '', keywords: [], subject: {}, cta: 'שמרו את זה' };
+    const post = { id: 'end-test', hook: 'שער לבדיקה', sub: '', caption: 'c', extra, ctaKind: 'save' };
+    post.token = tokenOf({ slides, caption: post.caption, hook: post.hook, sub: post.sub, extra });
+    const files = await renderPost({ pack, format: { id: 't', kind: 'story', name: 'x', hooks: ['x'] }, post, slides, outDir: path.join(home, 'media', 'end') });
+    for (const p of pack.meta.platforms) assert.equal(files[p].length, slides.length + 1, `${p}: the follow slide is added`);
+  } finally {
+    await closeBrowser();
+    cleanup();
   }
 });

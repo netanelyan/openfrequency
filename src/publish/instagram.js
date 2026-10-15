@@ -157,7 +157,9 @@ export async function tokenStatus(db, pack, { t = now(), env = process.env } = {
 // ---------------------------------------------------------------- reading our own account
 
 /** The account the token reaches: { id, username, account_type, media_count }. */
-export const account = (db, pack) => graph(db, pack, igConfig(pack).userId, { params: { fields: 'id,username,media_count' }, step: 'account' });
+// With Instagram Login the node's "id" is app-scoped; the professional account's id (the one in pack.json, 17841...) is
+// its "user_id". Facebook Login's IG User node has no such field: its id is that account id.
+export const account = (db, pack) => graph(db, pack, igConfig(pack).userId, { params: { fields: igConfig(pack).auth === 'instagram' ? 'id,user_id,username,media_count' : 'id,username,media_count' }, step: 'account' });
 
 /** How many API posts are left in the rolling 24 hours (Meta's own limit; the docs disagree on 50 or 100, so it is asked). */
 export async function quota(db, pack) {

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readPack } from '../src/packs/load.js';
-import { tellsIn } from '../src/voice/tells.js';
+import { limitsFor, tellsIn } from '../src/voice/tells.js';
 import { experienceIn, fakeProofIn, badgeNextTo } from '../src/voice/honesty.js';
 import { heuristicReview, REWRITE_AT } from '../src/voice/review.js';
 import { checkRules } from '../src/rules/check.js';
@@ -109,4 +109,13 @@ test("a photo's author is named once, even when the source's markup names them t
   assert.equal(once('Unknown author Unknown author'), 'Unknown author');
   assert.equal(once('Airotcivss'), 'Airotcivss');
   assert.equal(once('Matt Lavin'), 'Matt Lavin');
+});
+
+test("an account can ask for shorter slides than the engine allows, never longer", () => {
+  const pack = { meta: { writing: { slideBody: { maxChars: 150, sentences: 2 }, slideTitle: { maxChars: 90 } } } };
+  assert.deepEqual([limitsFor('slideBody', pack).maxChars, limitsFor('slideBody', pack).sentences], [150, 2]);
+  assert.equal(limitsFor('slideTitle', pack).maxChars, 60, 'a pack cannot raise a limit');
+  const long = 'משפט ראשון קצר. משפט שני קצר. משפט שלישי קצר.';
+  assert.ok(tellsIn(long, { kind: 'slideBody', pack }).some((t) => /3 sentences|sentences/.test(t.msg)), 'three sentences where the account allows two');
+  assert.ok(!tellsIn(long, { kind: 'slideBody' }).some((t) => /sentences/.test(t.msg)), 'the engine alone allows three');
 });

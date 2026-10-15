@@ -1,9 +1,11 @@
 import { monthKey, now, nowIso } from '../core/clock.js';
 import { getSetting, settings } from '../core/store.js';
+import { BATCH_FACTOR, MODEL_RATES } from './pricing.js';
 
 // HARD RULE 7: a monthly cost cap, global and per account, that nothing can cross.
 //
-// THE GLOBAL CAP is OF_BUDGET_MONTHLY_USD in $OF_HOME/.env ($15 by default). It
+// THE GLOBAL CAP is ANTHROPIC_MONTHLY_BUDGET_USD in $OF_HOME/.env ($20 by default,
+// raised from $15 by the owner on 2026-10-15; OF_BUDGET_MONTHLY_USD is still read). It
 // covers every metered service the engine calls (Claude, Brave, image APIs)
 // and nothing else: Zernio is a subscription, billed per connected account, and
 // is tracked outside it. The website can set a lower cap, never a higher one.
@@ -24,27 +26,12 @@ import { getSetting, settings } from '../core/store.js';
 // sum of real costs never crosses the cap, however many calls are in flight
 // (a batch of the day's drafts is many reservations at once).
 //
-// Claude is priced from the usage block, at the published rates below. An
-// unknown model is billed at the dearest rate, so a typo in a setting overstates
-// the spend rather than hiding it.
+// Claude is priced from the usage block, at the published rates in pricing.js.
+// A model that is not there is refused before it is called (anthropic.js); an
+// estimate for one (a recorded answer) is billed at the dearest rate.
 
-/**
- * $ per 1M tokens (platform.claude.com/docs/en/about-claude/pricing, read
- * 2026-10-13): input, output, cache read, 5-minute and 1-hour cache writes.
- * Claude Haiku 5.5 has a second tier for prompts over 100,000 tokens.
- */
-export const MODEL_RATES = {
-  'claude-fable-5-1': { in: 10, out: 50, cacheRead: 0.25, write5m: 12.5, write1h: 20 },
-  'claude-opus-5-5': { in: 4, out: 20, cacheRead: 0.2, write5m: 5, write1h: 8 },
-  'claude-opus-5': { in: 5, out: 25, cacheRead: 0.5, write5m: 6.25, write1h: 10 },
-  'claude-sonnet-5-5': { in: 2, out: 10, cacheRead: 0.1, write5m: 2.5, write1h: 4 },
-  'claude-sonnet-5': { in: 2, out: 10, cacheRead: 0.2, write5m: 2.5, write1h: 4 },
-  'claude-haiku-5-5': { in: 0.1, out: 0.5, cacheRead: 0.01, write5m: 0.125, write1h: 0.2, long: { over: 100_000, in: 0.5, out: 2.5, cacheRead: 0.05, write5m: 0.625, write1h: 1 } },
-  'claude-haiku-4-5': { in: 1, out: 5, cacheRead: 0.1, write5m: 1.25, write1h: 2 },
-};
+export { BATCH_FACTOR, MODEL_RATES, PRICES_VERIFIED } from './pricing.js';
 export const WORST = Object.values(MODEL_RATES).reduce((a, b) => (b.in + b.out > a.in + a.out ? b : a));
-/** The Message Batches API: half price on every token, cache reads and writes included. */
-export const BATCH_FACTOR = 0.5;
 
 const ratesFor = (model, promptTokens = 0) => {
   const r = MODEL_RATES[model] || WORST;
@@ -121,13 +108,13 @@ export function monthReserved(db, accountId, t = now()) {
   return { usd: row.usd, n: row.n };
 }
 
-export const DEFAULT_MONTHLY_USD = 15;
+export const DEFAULT_MONTHLY_USD = 20;
 /** The share of the cap kept for engine-wide work (a new account's discovery and samples). */
 export const ENGINE_RESERVE = 0.05;
 
-/** The global cap: OF_BUDGET_MONTHLY_USD, or a lower one set on the website. */
+/** The global cap: ANTHROPIC_MONTHLY_BUDGET_USD (or the older OF_BUDGET_MONTHLY_USD), or a lower one set on the website. */
 export function globalCap(db, env = process.env) {
-  const fromEnv = Number(env.OF_BUDGET_MONTHLY_USD);
+  const fromEnv = Number(env.ANTHROPIC_MONTHLY_BUDGET_USD || env.OF_BUDGET_MONTHLY_USD);
   const hard = Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : DEFAULT_MONTHLY_USD;
   const set = Number(settings(db).globalBudgetUsd);
   return set > 0 ? Math.min(hard, set) : hard;

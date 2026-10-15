@@ -1,5 +1,5 @@
 import { COMPLIANCE } from '../rules/compliance.js';
-import { CONNECTIVES, FILLER, FORMAL } from '../voice/tells.js';
+import { CONNECTIVES, FILLER, FORMAL, LIMITS, limitsFor } from '../voice/tells.js';
 import { focusText } from '../sources/text.js';
 import { contentRange, groupOf, hookPatterns, kindName, kindOf, shapesPrompt } from '../formats/kinds.js';
 import { VISUAL_SCHEMA, visualsPrompt } from '../render/visuals.js';
@@ -55,6 +55,7 @@ export const OUTLINE_SCHEMA = {
       },
     },
     imageQuery: { type: 'string' },
+    imageQueryB: { type: 'string' },
     research: { type: 'array', items: { type: 'string' } },
   },
   required: ['usable', 'why', 'topic', 'subject', 'facts', 'items', 'imageQuery', 'research'],
@@ -198,6 +199,8 @@ EVERY POST:
 - keywords: 3 to 6 words people would search for, shown on the slides: names, the topic, the competition. At least one in Hebrew and one in English letters.
 - Today's date is in the request. Anything that happened more than a year before it is told with its year on the cover or the first slide, as what it shows or teaches now: never as news, never as if it just happened.
 - Every slide adds something the cover and the slides before it did not: no slide and no graphic repeats another's numbers or point.
+- Talk like a friend, in spoken Hebrew: the spoken imperative (תעקבו, תשמרו, תשלחו, תכתבו, תנחשו), never the formal one (עקבו, שמרו, שלחו, כתבו, נחשו), and the everyday word over the formal one (פאונד, not ליברה).
+- A claim of "the only", "the first", "never" or "every" keeps every condition its fact has: "the only player to win all six" shortened to three of them is false. Keep the whole list, or drop the "only".
 - Name what the post is about (the product, the person, the club, the fight) on the cover or the first slide: a post that never says whose story it is reads as a riddle nobody asked for.
 - caption: the TikTok caption, 200 to 600 characters: what the post is about in the words people search for, plus something the slides do not say. captionShort: the Instagram caption, 60 to 200 characters (the design puts the cover line before it). Neither has hashtags, links or a question.
 
@@ -238,7 +241,8 @@ RESEARCH COMES NEXT. After this plan, the engine reads the articles you name in 
 
 subject: what the kind needs, "" for the rest: a and b (the two sides of a head-to-head; a alone for what-happened), answer (guess-who), date (on-this-day, in Hebrew with the year).
 topic: the post's subject in a few Hebrew words.
-imageQuery: 2 to 5 English words for a licensed photograph that would suit the post (a famous person or place by name is fine where the account's rules allow it; never a logo, a crest, a badge, a screen, an injury); or "" if none would. The person the post is about, by full name (Cristiano Ronaldo, never Ronaldo alone), as they looked in the story's years. A ranking's cover never shows its number one (it spoils the countdown): name someone else on the list, or "". A guess-who names its answer: the design shows it blurred until the reveal.
+imageQuery: 2 to 5 English words for a licensed photograph that would suit the post (a famous person or place by name is fine where the account's rules allow it; never a logo, a crest, a badge, a screen, an injury); or "" if none would. The person the post is about, by full name (Cristiano Ronaldo, never Ronaldo alone), as they looked in the story's years. A ranking's cover never shows its number one (it spoils the countdown): name someone else on the list, or "". A guess-who names its answer: the design shows it blurred until the reveal. A head-to-head names side a here and side b in imageQueryB (full names in English): the cover shows the two side by side.
+imageQueryB: a head-to-head's side b, as above; "" for every other kind.
 research: 1 to 4 titles of encyclopedia articles, or short search phrases, that would tell this post's subject in more detail than these documents: the match, the fight, the event, the person, the product or company itself ("2005 UEFA Champions League final", "Natan Levy"). The engine reads them before the slides are written, for the details a fan would want. [] when the documents already hold them.
 
 A story, a what-happened or an on-this-day needs its ending: the post's last slide says how it ended (the result, the outcome, where it stands now). If neither these documents nor the articles you name for research would say it, the post is not usable.
@@ -251,7 +255,7 @@ const SLIDES_TASK = {
   text: `TASK: WRITE ONE POST'S TEXT.
 
 The request names the format and its kind, the content slides with their roles, the verified facts, the outline and the cover pattern to follow. Write:
-- hook: the cover line. 3 to 11 words, after the cover pattern the request names (adapt it to this post, never copy it word for word). It leads with the post's most surprising concrete detail where the pattern allows (a score, a sum, a quote, a name), never only the famous name of the story, and never the payoff the last slide holds (the cover makes them swipe for it). A count it promises ("3 רמזים", "5 ...") is the count of the slides that follow. A number only if it is the number of content slides, a top 5 or 10, or it appears in a fact's quote. hookPattern: that pattern's id.
+- hook: the cover line. 3 to 11 words, after the cover pattern the request names (adapt it to this post, never copy it word for word). It makes them need the second slide: a question or a promise that only the slides answer ("איך ברצלונה עשו את הבלתי אפשרי בקאמפ נואו?" pulls; "ברצלונה ניצחה 6:1" is already over), built on the post's most surprising concrete detail where the pattern allows (a score, a sum, a quote, a name). Never only the famous name of the story, and never the payoff the last slide holds. A count it promises ("3 רמזים", "5 ...") is the count of the slides that follow. A number only if it is the number of content slides, a top 5 or 10, or it appears in a fact's quote. hookPattern: that pattern's id.
 - sub: one short line under the cover line, or "".
 - subject: as in the outline (you may shorten a name).
 - slides: exactly the outline's content slides, the same roles in the same order, each { role, title: up to 60 characters, body: up to 230 characters in one to three short sentences (or short lines, one per line, where the shape says so), a and b: the two values on a head-to-head stat slide and "" everywhere else, facts: the ids of the facts it states }. Every number on a slide, dates and years included, must appear in the quotes of the facts it lists.
@@ -344,14 +348,17 @@ export function slidesPrompt(pack, { ttl = '5m' } = {}) {
 /** How many content slides need a visual, so that with the cover at least half of the slides have one. */
 export const visualsNeeded = (n) => Math.max(0, Math.ceil((n + 1) / 2) - 1);
 
-export function slidesUser({ format, n, outline, facts, edits = [], problems = [], lastDraft = null, hook = null, cta = null, day = null }) {
+export function slidesUser({ format, n, outline, facts, edits = [], problems = [], lastDraft = null, hook = null, cta = null, day = null, pack = null }) {
   const legacy = kindName(format) === 'list';
+  const body = limitsFor('slideBody', pack);
+  const end = pack?.meta?.endSlide?.title;
   return [
     `${formatHead(format, n)}`,
     day ? `TODAY: ${day}.` : '',
     hook ? `COVER PATTERN: [${hook.id}] ${hook.pattern}${hook.examples?.length ? ` (e.g. ${hook.examples.map((x) => `"${x}"`).join(', ')})` : ''}` : '',
     format.trend ? `Cover lines that fit this post: ${format.hooks.join(' / ')}` : '',
-    cta && !legacy ? `The design ends the last slide with this call to action, so the slides do not say it: "${cta.text}"` : '',
+    end && !legacy ? 'The design adds a closing slide that asks them to follow the account: no slide asks to save, send, follow or comment.' : cta && !legacy ? `The design ends the last slide with this call to action, so the slides do not say it: "${cta.text}"` : '',
+    body.maxChars < LIMITS.slideBody.maxChars ? `TEXT: this account keeps slides short. A slide's body is at most ${body.maxChars} characters and ${body.sentences} sentences: one point, the words a fan would say, no number the point does not need.` : '',
     !legacy ? `VISUALS: at least ${visualsNeeded(n)} of the ${n} content slides carry a visual (a stat slide's two values count).` : '',
     `TOPIC: ${outline.topic}`,
     !legacy && outline.subject ? `SUBJECT: ${Object.entries(outline.subject).filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`).join(', ') || '(none)'}` : '',

@@ -10,7 +10,7 @@ import { refreshSource } from '../sources/index.js';
 import { ensureFormats, groupsOf, mixOf, pickFormat, pickHook } from '../formats/rotation.js';
 import { contentRange, ctasOf, factFree, groupOf, hookPatterns, kindName, kindOf, kindProblems, linesOfBody, ranksOf, shapeProblems, structureNumbers } from '../formats/kinds.js';
 import { resolveFormat } from '../trends/index.js';
-import { isGenericQuestion, LIMITS, mechanicalFix, normHe, tellsIn } from '../voice/tells.js';
+import { isGenericQuestion, limitsFor, mechanicalFix, normHe, tellsIn } from '../voice/tells.js';
 import { BLOCK_AT, REWRITE_AT, reviewTexts } from '../voice/review.js';
 import { checkRules } from '../rules/check.js';
 import { gate, numbersIn, verifyFact } from '../verify/claims.js';
@@ -103,7 +103,7 @@ export function hashtagsFor(pack, format, seed, text = null) {
 /** How long a source's last read stands before it is read again. */
 export const SOURCE_TTL_MS = 6 * 3600_000;
 
-export async function candidateDocs(ctx, pack, { usedWithinDays = 45, day = null } = {}) {
+export async function candidateDocs(ctx, pack, { usedWithinDays = 45, day = null, keepBlocked = false } = {}) {
   const sources = ctx.db.all("SELECT * FROM sources WHERE account_id = ? AND status = 'approved' ORDER BY id", pack.id);
   // The pages of the events around this day, for a source that reads them (a fight week).
   const events = pack.meta.events ? upcoming(ctx.db, pack.id, day || israelDate(now()), 8).map((e) => decodeURIComponent(String(e.url || '').split('/wiki/')[1] || '').replace(/_/g, ' ')).filter(Boolean) : [];
@@ -121,7 +121,9 @@ export async function candidateDocs(ctx, pack, { usedWithinDays = 45, day = null
   const since = new Date(now() - usedWithinDays * DAY).toISOString();
   const used = new Set(
     ctx.db
-      .all("SELECT DISTINCT f.document_id FROM facts f JOIN posts p ON p.id = f.post_id WHERE p.account_id = ? AND p.created_at >= ?", pack.id, since)
+      // A post with a fixed subject (a fight week's main event) has only that subject's pages: its own stopped attempt
+      // must not use them up, or the retry finds nothing ("no new document" twice for the same card).
+      .all(`SELECT DISTINCT f.document_id FROM facts f JOIN posts p ON p.id = f.post_id WHERE p.account_id = ? AND p.created_at >= ?${keepBlocked ? " AND p.status != 'blocked'" : ''}`, pack.id, since)
       .map((r) => r.document_id)
   );
   const fresh = docs.filter((d) => !used.has(d.id));
@@ -225,11 +227,11 @@ export function igCaption({ hook, captionShort, question }) {
 const extraOf = (d) => ({ captionIg: d.captionIg || '', keywords: d.keywords || [], subject: d.subject || {}, cta: d.cta?.text || '', ...(d.coverVisual ? { coverVisual: d.coverVisual } : {}) });
 
 /** The fact gate, with what this kind of post allows: its structure numbers, its fact-free roles. */
-export function gateDraft(format, draft, facts) {
+export function gateDraft(format, draft, facts, { allow = [] } = {}) {
   const content = draft.slides.filter((s) => s.kind === 'item');
   return gate({
     slides: draft.slides, facts, caption: draft.caption, hook: draft.hook, sub: draft.sub || '', extra: extraOf(draft),
-    structure: structureNumbers(format, content), factFree: (role) => factFree(format, role),
+    structure: new Set([...structureNumbers(format, content), ...allow]), factFree: (role) => factFree(format, role),
   });
 }
 
@@ -240,7 +242,7 @@ const LATIN = /[A-Za-z]/;
 export function checkPost(ctx, pack, draft, facts, format = null) {
   const problems = [];
   const f = format || { kind: 'list' };
-  for (const t of textsOf(draft)) for (const x of tellsIn(t.text, { kind: t.kind, extra: pack.rules.bannedPhrases || [] })) problems.push({ where: t.where, code: `voice:${x.code}`, msg: x.msg });
+  for (const t of textsOf(draft)) for (const x of tellsIn(t.text, { kind: t.kind, extra: pack.rules.bannedPhrases || [], pack })) problems.push({ where: t.where, code: `voice:${x.code}`, msg: x.msg });
   for (const x of checkRules({ pack, others: ctx.packs || [], texts: textsOf(draft) })) problems.push(x);
   if (kindName(f) !== 'list') {
     const content = draft.slides.filter((s) => s.kind === 'item');
@@ -265,7 +267,8 @@ export function checkPost(ctx, pack, draft, facts, format = null) {
     const need = visualsNeeded(content.length);
     if (have < need) problems.push({ where: 'visual', code: 'shape', msg: `only ${have} of the ${content.length} content slides carry a visual: at least ${need} need one (with the cover, half the post)` });
   }
-  const g = gateDraft(f, draft, facts);
+  // A fixed subject's own numbers (the card's name and date, from the approved event calendar) may be on the cover.
+  const g = gateDraft(f, draft, facts, { allow: ctx.subjectText ? numbersIn(ctx.subjectText) : [] });
   for (const msg of g.problems) problems.push({ where: 'facts', code: 'verify', msg });
   return { problems, gate: g };
 }
@@ -602,7 +605,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
   const postId = newId('p');
   const at = nowIso();
   db.insert('posts', { id: postId, account_id: pack.id, format_id: format.id, kind: kindName(format), grp: groupOf(format), status: 'drafting', sample: sample ? 1 : 0, slot_at: slotAt, created_at: at, updated_at: at });
-  const pctx = { ...ctx, pack, postId, sources: ctx.sourcesFor ? ctx.sourcesFor(pack) : ctx.sources };
+  const pctx = { ...ctx, pack, postId, sources: ctx.sourcesFor ? ctx.sourcesFor(pack) : ctx.sources, subjectText: subject?.text || null };
   const finish = (status, patch = {}) => {
     const spend = postSpend(db, postId);
     db.update('posts', postId, { status, updated_at: nowIso(), cost_usd: spend.usd, cost_estimated: spend.estimated ? 1 : 0, ...patch });
@@ -620,7 +623,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     step(db, postId, 'format', 'info', { format: format.id, name: format.name, kind: kindName(format), group: groupOf(format) });
 
     // ---- topic: documents from approved sources
-    const docs = await candidateDocs(pctx, pack, { day: postDay });
+    const docs = await candidateDocs(pctx, pack, { day: postDay, keepBlocked: Boolean(subject?.terms?.length) });
     step(db, postId, 'topic', docs.length ? 'ok' : 'failed', { candidates: docs.length, mode: pctx.sources.kind });
     if (!docs.length) return block('no_source', 'אין מסמכים חדשים מהמקורות המאושרים');
     let candidates = candidatesOf(docs);
@@ -640,6 +643,8 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     let plan = null;
     let lastWhy = '';
     let lastKind = 'no_source';
+    // A post with a fixed subject (a fight week's card) is about it by design, preview, pick and recap alike: the
+    // "posted recently" list is for choosing a topic, and naming its own card there made the outline refuse it.
     const recent = db
       .all("SELECT topic FROM posts WHERE account_id = ? AND topic IS NOT NULL AND status NOT IN ('blocked') ORDER BY created_at DESC LIMIT 12", pack.id)
       .map((r) => r.topic);
@@ -655,7 +660,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
         const p = outlinePrompt(pack, { ttl });
         try {
           const res = await askJson(pctx, {
-            task: 'outline', role: 'draft', system: p.system, user: outlineUser(f, refs, { avoid: recent, day: postDay, subject: subject?.text, maxAgeDays: pack.meta.research?.maxAgeDays || null }), schema: p.schema, effort: EFFORT.outline, maxTokens: MAX_TOKENS.outline,
+            task: 'outline', role: 'draft', system: p.system, user: outlineUser(f, refs, { avoid: subject ? [] : recent, day: postDay, subject: subject?.text, maxAgeDays: pack.meta.research?.maxAgeDays || null }), schema: p.schema, effort: EFFORT.outline, maxTokens: MAX_TOKENS.outline,
             meta: { recordingsDir: pack.recordingsDir, docKey: c.key, format: f.base || f.id, attempt: 0 },
           });
           tried++;
@@ -720,7 +725,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
       let res;
       try {
         res = await askJson(pctx, {
-          task: 'slides', role: 'draft', system: sp.system, user: slidesUser({ format, n: items.length, outline: { ...outline, items }, facts: verifiedFacts, edits, problems: lastProblems.map(say), lastDraft: lastAnswer, hook, cta, day: postDay }), schema: sp.schema,
+          task: 'slides', role: 'draft', system: sp.system, user: slidesUser({ format, n: items.length, outline: { ...outline, items }, facts: verifiedFacts, edits, problems: lastProblems.map(say), lastDraft: lastAnswer, hook, cta, day: postDay, pack }), schema: sp.schema,
           effort: EFFORT.slides, maxTokens: MAX_TOKENS.slides, meta: { recordingsDir: pack.recordingsDir, docKey: cand.key, format: format.base || format.id, attempt },
         });
       } catch (e) {
@@ -769,7 +774,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     const factsFor = (t) => (t.idx != null ? verifiedFacts.filter((f) => (draft.slides[t.idx]?.factKeys || []).includes(f.key)) : verifiedFacts);
     const flagged = [
       ...review.reviews
-        .map((r, i) => ({ ...r, index: i, where: texts[i].where, text: texts[i].text, limits: LIMITS[texts[i].kind] || null, uses: factsFor(texts[i]).map((f) => f.key) }))
+        .map((r, i) => ({ ...r, index: i, where: texts[i].where, text: texts[i].text, limits: limitsFor(texts[i].kind, pack), uses: factsFor(texts[i]).map((f) => f.key) }))
         .filter((r) => r.botScore >= REWRITE_AT || r.factProblem),
       ...visReviews.filter((v) => v.factProblem).map((v) => ({ ...v, botScore: 1, text: JSON.stringify(draft.slides[v.idx].visual), uses: factsFor(v).map((f) => f.key) })),
     ];
@@ -897,7 +902,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     return finish(status, {
       hook: draft.hook, sub: draft.sub, caption: draft.caption, caption_ig: draft.captionIg, hashtags_json: tags, review_score: worst, hook_pattern: draft.hookPattern,
       data_json: { subject: draft.subject, keywords: draft.keywords, cta: draft.cta, captionShort: draft.captionShort, question: draft.question, day: kindName(format) === 'on-this-day' ? postDay : undefined, coverVisual: draft.coverVisual },
-      checks_json: { token: final.gate.token, reviewer: review.reviewer, scores, rewrites: applied, image: image ? image.id : null, imageSafety: image?.safety || null, images: [...photos.values()].map((p) => p.id), photoOn },
+      checks_json: { token: final.gate.token, reviewer: review.reviewer, scores, rewrites: applied, image: image ? image.id : null, bgImage: photos.get('bg')?.id ?? null, coverImages: ['ca', 'cb'].map((k) => photos.get(k)?.id).filter(Boolean), imageSafety: image?.safety || null, images: [...photos.values()].map((p) => p.id), photoOn },
       media_json: files, ai_label: [...photos.values()].some((p) => p.ai_generated && p.realistic) ? 1 : 0,
     });
   } catch (e) {
@@ -924,10 +929,26 @@ export async function findPhotos(ctx, { pack, format, draft, outline, postId }) 
   const photoOn = kindOf(format).photo;
   const last = draft.slides.length - 1;
   const wants = [];
-  if (pack.theme.options?.coverPhoto && photoOn && outline.imageQuery) {
+  // The post's topic goes with every photograph's check: the cover line alone did not tell the check that a post about
+  // Manchester City's 2017-18 season should not show Guardiola in a Bayern Munich tracksuit.
+  const about = outline.topic ? ` (the post is about: ${outline.topic})` : '';
+  // A head-to-head's cover never shows one face under two names: a photograph of a third player went out labelled as
+  // one of the two. Its cover is type and the scene behind it.
+  if (pack.theme.options?.coverPhoto && kind === 'head-to-head' && outline.imageQuery && outline.imageQueryB) {
+    // The two sides' photographs, each on its own half of the cover under its name.
+    for (const [key, query, side] of [['ca', outline.imageQuery, draft.subject?.a], ['cb', outline.imageQueryB, draft.subject?.b]]) {
+      const img = await findImage(ctx, { pack, query, postId, claim: `a portrait of ${side || query} for one half of the cover of a head-to-head${about}` }).catch((e) => (ctx.log?.(`image: ${e.message}`), null));
+      if (img) out.set(key, img);
+    }
+    if (!(out.has('ca') && out.has('cb'))) {
+      out.delete('ca');
+      out.delete('cb');
+    }
+  }
+  if (pack.theme.options?.coverPhoto && photoOn && outline.imageQuery && kind !== 'head-to-head') {
     const idx = photoOn === 'last' ? last : 0;
     const s = draft.slides[idx];
-    wants.push({ idx, query: outline.imageQuery, claim: idx === 0 ? `${draft.hook} ${draft.sub || ''}` : `${s.title} ${s.body}` });
+    wants.push({ idx, query: outline.imageQuery, claim: idx === 0 ? `${draft.hook} ${draft.sub || ''}${about}` : `${s.title} ${s.body}${about}` });
   }
   // A clue's photograph would give the answer away; a meme is the account's own design.
   if (photoOn && kind !== 'meme') {
@@ -962,6 +983,30 @@ export async function findPhotos(ctx, { pack, format, draft, outline, postId }) 
       out.set(0, portrait[1]);
       out.delete(portrait[0]);
       step(ctx.db, postId, 'image', 'ok', { slide: 0, moved: portrait[0], query: portrait[1].query });
+    }
+  }
+  // An account that puts every slide on a photograph (theme.options.backgroundPhoto) and found none it can blur
+  // behind the text (a guess-who's answer never can) takes one of its scene's (theme.backgroundQueries), the post's
+  // own subject first: a stable pick per post, so two posts in a row rarely share one.
+  // Behind the slides: the post's own subject (its cover photograph) and its scene, in turn. Every account that asks
+  // for backgrounds gets a scene, so a post never repeats one face on every slide or shows a slide's other person (Messi
+  // behind a post about Ronaldinho).
+  if (pack.theme.options?.backgroundPhoto) {
+    const scenes = pack.theme.backgroundQueries || [];
+    const start = [...String(postId)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % Math.max(1, scenes.length);
+    // The subject first only when no cover shows it already (and never a guess-who's answer or one of a head-to-head's two).
+    const subjectFirst = !out.has(0) && !['guess-who', 'head-to-head'].includes(kind) ? [outline.imageQuery] : [];
+    const queries = [...subjectFirst, ...scenes.slice(start), ...scenes.slice(0, start)].filter(Boolean);
+    for (const query of [...new Set(queries)].slice(0, 4)) {
+      // Checked like a slide's photograph, against the scene it stands for: a basketball arena came back for "football
+      // stadium night" and sat behind a football post.
+      const claim = `the blurred background of a post about ${outline.topic || pack.meta.displayName}: it must show ${query}, the sport or the setting of the post, never another sport`;
+      const img = await findImage(ctx, { pack, query, postId, claim }).catch((e) => (ctx.log?.(`background: ${e.message}`), null));
+      if (img) {
+        out.set('bg', img);
+        step(ctx.db, postId, 'image', 'ok', { slide: 'background', query });
+        break;
+      }
     }
   }
   return out;

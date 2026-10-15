@@ -66,9 +66,10 @@ test('a call never costs more than its ceiling, on any model, direct, batched or
   assert.equal(WORST, MODEL_RATES['claude-fable-5-1']);
 });
 
-test('the cap is OF_BUDGET_MONTHLY_USD, $15 by default; the website can lower it, never raise it', () => {
+test('the cap is ANTHROPIC_MONTHLY_BUDGET_USD, $20 by default (the older OF_BUDGET_MONTHLY_USD still read); the website can lower it, never raise it', () => {
   const db = new Db(':memory:');
-  assert.equal(globalCap(db, {}), 15);
+  assert.equal(globalCap(db, {}), 20);
+  assert.equal(globalCap(db, { ANTHROPIC_MONTHLY_BUDGET_USD: '12', OF_BUDGET_MONTHLY_USD: '9' }), 12, 'the new name first');
   assert.equal(globalCap(db, { OF_BUDGET_MONTHLY_USD: '9' }), 9);
   setSetting(db, 'globalBudgetUsd', 4);
   assert.equal(globalCap(db, { OF_BUDGET_MONTHLY_USD: '9' }), 4);
@@ -249,7 +250,8 @@ test('money short: the weakest account comes down first, half a post a day at a 
     const banner = budgetBanner({ level: plan.level, share: plan.spent / plan.cap, cap: plan.cap, forecast: plan.forecast, nextMonth: plan.nextMonth, cuts: plan.accounts.filter((a) => a.cut).map((a) => ({ name: a.name, perDay: a.perDay, planned: a.planned })) });
     assert.match(banner, /(פוסט כל יומיים|פוסט אחד ביום|3 פוסטים ביומיים) במקום 2 ביום/);
     if (!second.cut) assert.ok(second.alloc > demo.alloc, 'the money a cut frees goes to the account that keeps its volume');
-    // 80% spent: a warning on every page.
+    // At the warning level (ANTHROPIC_BUDGET_WARN_USD, here $12 of $15): a warning on every page.
+    process.env.ANTHROPIC_BUDGET_WARN_USD = '12';
     ctx.db.insert('spend', { account_id: null, api: 'claude', usd: 12 - plan.spent, month: '2026-10', at, estimated: 0 });
     plan = planMonth(ctx.db, ctx.packs, { t });
     assert.equal(plan.level, 'warn');
@@ -262,6 +264,7 @@ test('money short: the weakest account comes down first, half a post a day at a 
     assert.equal(r.budgetStop, true);
     assert.match(budgetBanner({ level: 'stop', share: 1, cap: 15, nextMonth: '2026-11-01', cuts: [] }), /שום פוסט לא נכתב עד/);
   } finally {
+    delete process.env.ANTHROPIC_BUDGET_WARN_USD;
     cleanup();
   }
 });

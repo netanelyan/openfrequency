@@ -353,7 +353,7 @@ export const VISUAL_CSS = `
 .art-who{display:flex;align-items:center;justify-content:flex-start}
 .art .qbig{font:700 380px/0.8 var(--display);color:var(--accent);text-shadow:0 18px 50px rgba(var(--accent-rgb),.35)}
 .s-tiktok .art .qbig{font-size:470px}
-.photo.blur{filter:blur(18px) brightness(.68) saturate(1.15);transform:scale(1.1)}
+.photo.blur{filter:brightness(.62) saturate(1.1);image-rendering:pixelated;object-position:50% 50%}
 .art .fl{fill:var(--accent2)}
 .art .sa{fill:var(--accent)}
 .art .sb{fill:var(--accent2)}
@@ -401,6 +401,6 @@ body.has-vis .vs .val:not(.m):not(.l):not(.xl){font-size:92px}
 body.has-vis.s-instagram .vs .val:not(.m):not(.l):not(.xl){font-size:70px}
 body.has-vis .clue-n b{width:90px;height:90px;font-size:52px}
 .brand{position:absolute;z-index:5;width:96px;height:96px;object-fit:contain;left:var(--pl);bottom:calc(var(--pb) - 120px)}
-.s-tiktok .brand{bottom:calc(var(--pb) - 150px)}
+.s-tiktok .brand{top:calc(var(--pt) - 120px);bottom:auto}
 .k-cover .brand{top:calc(var(--pt) - 10px);bottom:auto}
 `;

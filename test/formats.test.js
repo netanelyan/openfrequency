@@ -30,7 +30,7 @@ const SAMPLES = {
   'on-this-day': { subject: { date: '14 באוקטובר 2019' }, slides: [s('context', 'גג ריק בלב העיר', 'אף אחד לא חשב שיצמח שם משהו.'), s('moment', 'שלושים עציצים ביום אחד', 'השכנים עלו עם שתילים וכלים.'), s('moment', 'הגינה נפתחה לכולם', 'כל אחד קיבל ערוגה משלו.'), s('after', 'היום יש שם גינה קבועה', 'והיא מספקת ירק לכל הבניין.')] },
   'guess-who': { subject: { answer: 'אלוורה' }, slides: [s('clue', 'אני שורד חודש בלי מים', 'העלים שלי שומרים את המים בפנים.'), s('clue', 'יש לי שוליים קוצניים', 'אבל אני לא קקטוס.'), s('clue', 'ג׳ל מהעלים שלי מרגיע כוויות', 'הרבה בתים מחזיקים אותי במטבח.'), s('reveal', 'אלוורה', 'סוקולנט שצריך מעט מאוד מים.')] },
   'head-to-head': { subject: { a: 'נענע', b: 'בזיליקום' }, slides: [s('stat', 'שעות שמש ביום', 'בזיליקום צריך יותר.', ['f1'], { a: '4', b: '6' }), s('stat', 'רוחב העציץ', 'נענע צריכה עציץ משלה.', ['f1'], { a: '25', b: '15' }), s('stat', 'קור בלילה', 'נענע שורדת כפור.', ['f1'], { a: 'כפור', b: '10°' }), s('stat', 'כמה שנים', 'נענע חוזרת כל אביב.', ['f1'], { a: 'שנים', b: 'עונה' }), s('verdict', 'שמש של בוקר? נענע', 'פחות שמש ופחות רגישות לקור.', [])] },
-  ranking: { slides: [s('ranks', 'ועוד חמישה שכמעט נכנסו', 'פוטוס\nזמיה\nסנסיווריה\nקקטוס\nאלוורה'), s('rank', 'פילודנדרון', 'שבועיים בין השקיות.'), s('rank', 'מונסטרה', 'שבועיים וחצי.'), s('rank', 'ספטיפיליום', 'שלושה שבועות.'), s('rank', 'זמיוקולקס', 'חודש.'), s('rank', 'קקטוס', 'חודש וחצי.')] },
+  ranking: { slides: [s('ranks', 'ועוד חמישה שכמעט נכנסו', 'פוטוס\nזמיה\nסנסיווריה\nקקטוס\nאלוורה'), s('rank', 'פילודנדרון', '14 ימים בין השקיות.'), s('rank', 'מונסטרה', '18 ימים.'), s('rank', 'ספטיפיליום', '21 ימים.'), s('rank', 'זמיוקולקס', '30 ימים.'), s('rank', 'קקטוס', '45 ימים.')] },
   iceberg: { slides: [s('layer', 'כולם יודעים', 'בזיליקום אוהב שמש\nצריך להשקות'), s('layer', 'קצת פחות', 'קוטפים מלמעלה'), s('layer', 'מעטים יודעים', 'פרחים מרים את העלים'), s('layer', 'כמעט אף אחד', 'הוא קרוב משפחה של הנענע')] },
   'hot-take': { slides: [s('case', 'רוב הצמחים מתים מהשקיה', 'שורשים ספוגים נרקבים.'), s('case', 'אדמה יבשה זה לא סימן לצמא', 'השכבה העליונה מתייבשת ראשונה.'), s('case', 'עציץ בלי חור זו מלכודת', 'המים לא יוצאים.'), s('ask', 'פחות מים, יותר צמחים', 'מסכימים?', [])] },
   'myth-fact': { slides: [s('myth', 'צריך להשקות כל יום', '', []), s('fact', 'רוב צמחי הבית רוצים אדמה שמתייבשת', 'בודקים עם האצבע לפני.'), s('myth', 'צמחים לא אוהבים לדבר איתם', '', []), s('fact', 'מה שעוזר זה אור, לא שיחה', 'חלון מזרחי עושה את העבודה.')] },
@@ -229,6 +229,10 @@ test('mixed Hebrew lines: a Latin run stops at the end of a sentence, and a titl
   assert.equal(he('monday.com הודיעה'), '<bdi>monday.com</bdi> הודיעה');
   assert.equal(he('הריצו npx frugon --demo ותראו'), 'הריצו <bdi>npx frugon --demo</bdi> ותראו', "a command's flags stay with it");
   assert.equal(he('ב-Pro זה יותר'), 'ב-<bdi>Pro</bdi> זה יותר', 'a Hebrew prefix keeps its dash');
+  assert.equal(he('הם כתבו: Define success first, then iterate. Be specific.'), 'הם כתבו: <bdi>Define success first, then iterate. Be specific</bdi>.', 'an English sentence quoted in a Hebrew line is one run');
+  assert.equal(he('הקלידו /clear ו-/usage'), 'הקלידו <bdi>/clear</bdi> ו-<bdi>/usage</bdi>', 'a slash command keeps its slash');
+  assert.equal(he('לפי Équipe ו-Modrić'), 'לפי <bdi>Équipe</bdi> ו-<bdi>Modrić</bdi>', "accented letters are Latin: L'Équipe came out reversed");
+  assert.equal(he("L'Équipe"), '<bdi>L&#39;Équipe</bdi>', 'an apostrophe inside a name stays in it');
   assert.deepEqual(splitLead('7,703 שקל בחודש'), { lead: { value: '7,703', pre: '', post: '' }, rest: 'שקל בחודש' });
   assert.deepEqual(splitLead('עד 7,703 שקל'), { lead: null, rest: 'עד 7,703 שקל' });
 });
@@ -246,4 +250,12 @@ test("the review sees each fact with the source's own words, so a summary that m
   const texts = textsOf({ hook: 'h', sub: '', slides: [{ kind: 'cover', title: '', body: '' }], caption: 'c', captionShort: '' });
   const user = reviewUser({ meta: { displayName: 'דמו' }, voice: '# קול\n\n## מי מדבר\n\nגנן.' }, texts, [{ claim: 'הבזיליקום אוהב צל', quote: 'Basil needs full sun' }]);
   assert.match(user, /- הבזיליקום אוהב צל \(source: "Basil needs full sun"\)/);
+});
+
+test("a ranking's places follow the number that ranks them", () => {
+  const rank = (name, n) => ({ kind: 'item', role: 'rank', title: name, body: `${n} ניצחונות ברצף, 2006 עד 2012.`, factKeys: ['f1'] });
+  const post = (ns) => ({ hook: 'x', sub: '', subject: {}, slides: ns.map((n, i) => rank(['אלף', 'בית', 'גימל', 'דלת', 'הא'][i], n)), caption: '', captionShort: '', keywords: [] });
+  assert.match(kindProblems(fmt('ranking'), post([13, 14, 15, 16, 14])).join(' '), /does not follow its number/);
+  assert.doesNotMatch(kindProblems(fmt('ranking'), post([13, 14, 15, 16, 16])).join(' '), /does not follow/);
+  assert.doesNotMatch(kindProblems(fmt('ranking'), post([20, 15, 12, 9, 7])).join(' '), /does not follow/, 'a fastest-first ranking falls');
 });

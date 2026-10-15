@@ -81,6 +81,13 @@ export function hebrewShare(text) {
   return words.filter((w) => /[\u05D0-\u05EA]/.test(w)).length / words.length;
 }
 
+/**
+ * A formal imperative at the head of a request ("עקבו אחרי", "שמרו את", "כתבו בתגובות"). Said to a friend it is the
+ * spoken one: "תעקבו", "תשמרו", "תכתבו". Only before the words a request goes on with, so a past tense ("הם שמרו
+ * על הכדור") is not taken for one.
+ */
+const FORMAL_IMPERATIVE = /(?:^|[\s.?:,"(])(עקבו|שמרו|שלחו|כתבו|תייגו|נחשו|ספרו|הגיבו|לחצו)\s+(?:את|לנו|לחבר|לחברים|אחרי|בתגובות|מי|עכשיו|כאן|פה|ל(?=\S))/;
+
 export const LIMITS = {
   // A cover can ask, answer and tease in three short sentences ("X או Y? מי היה טוב יותר? התשובה בסוף"): eleven words bound it.
   cover: { maxChars: 70, minWords: 3, maxWords: 11, emoji: 1, sentences: 3 },
@@ -95,17 +102,29 @@ export const LIMITS = {
 };
 
 /**
+ * The limits for one kind of text in one pack: the engine's, tightened by the pack's own (pack.json
+ * "writing": { "slideBody": { "maxChars": 150, "sentences": 2 } }). A pack can ask for less, never more.
+ */
+export function limitsFor(kind, pack = null) {
+  const base = LIMITS[kind] || LIMITS.slideBody;
+  const own = pack?.meta?.writing?.[kind] || {};
+  const out = { ...base };
+  for (const [k, v] of Object.entries(own)) if (Number.isFinite(v) && (k === 'minWords' ? v >= (base[k] ?? 0) : v <= (base[k] ?? Infinity))) out[k] = v;
+  return out;
+}
+
+/**
  * Every tell in one text, as { code, msg }. Empty means it reads like a person.
  * kind: 'cover' | 'slideTitle' | 'slideBody' | 'slideLines' | 'caption' | 'captionLong' | 'captionShort'
  * extra: the pack's own banned phrases (rules.json bannedPhrases)
  */
-export function tellsIn(text, { kind = 'slideBody', extra = [] } = {}) {
+export function tellsIn(text, { kind = 'slideBody', extra = [], pack = null } = {}) {
   const out = [];
   const add = (code, msg) => out.push({ code, msg });
   const raw = String(text || '').trim();
   if (!raw) return kind === 'slideBody' || kind === 'slideLines' ? [] : [{ code: 'empty', msg: 'empty' }];
   const norm = normHe(raw);
-  const lim = LIMITS[kind] || LIMITS.slideBody;
+  const lim = limitsFor(kind, pack);
 
   for (const t of [...CONNECTIVES, ...FORMAL, ...PRAISE, ...FILLER, ...GENDERED]) if (t.re.test(norm)) add('phrase', `${t.label}: "${t.p}"`);
   for (const p of extra) if (phrase(p).test(norm)) add('banned', `banned by the pack: "${p}"`);
@@ -113,6 +132,8 @@ export function tellsIn(text, { kind = 'slideBody', extra = [] } = {}) {
   if (LONG_DASH.test(raw)) add('structure', 'a long dash (use a comma or a hyphen)');
   if (/;/.test(raw)) add('structure', 'a semicolon');
   if (/!/.test(raw)) add('register', 'an exclamation mark');
+  const formal = FORMAL_IMPERATIVE.exec(norm);
+  if (formal) add('register', `the formal imperative "${formal[1]}": say it the spoken way, "ת${formal[1]}"`);
   if (/\.\.\.|…/.test(raw)) add('structure', 'trails off with an ellipsis');
   if (ARTEFACTS.test(raw)) add('artefact', 'markdown or a template placeholder left in the text');
   if (URL_LIKE.test(raw)) add('url', 'a web address (a link in a post is a demotion and is never tappable)');

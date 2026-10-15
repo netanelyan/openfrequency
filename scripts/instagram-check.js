@@ -63,7 +63,8 @@ for (const pack of packs) {
       if (cfg.auth === 'facebook') say(st.scopes.includes('instagram_manage_contents') ? true : null, st.scopes.includes('instagram_manage_contents') ? 'instagram_manage_contents: a takedown can delete the post through the API' : 'no instagram_manage_contents: after a takedown notice the post is listed for you to delete by hand (grant it to let the engine delete)');
     }
     const a = await account(db, pack);
-    say(String(a.id) === cfg.userId, `the token reaches @${a.username} (${a.id}), ${a.media_count ?? '?'} posts${String(a.id) === cfg.userId ? '' : ` but pack.json says ${cfg.userId}`}`);
+    const accountId = String(a.user_id ?? a.id);
+    say(accountId === cfg.userId, `the token reaches @${a.username} (${accountId}), ${a.media_count ?? '?'} posts${accountId === cfg.userId ? '' : ` but pack.json says ${cfg.userId}`}`);
     const q = await quota(db, pack).catch((e) => (say(null, `quota: ${e.message}`), null));
     if (q) say(true, `publishing quota: ${q.used} of ${q.total ?? '?'} used in the last 24 hours`);
     const media = await recentMedia(db, pack, { limit: 3 });

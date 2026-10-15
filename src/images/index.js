@@ -177,7 +177,7 @@ const PROVIDER_NAME = { commons: 'Wikimedia Commons', pexels: 'Pexels', unsplash
 
 /** Every photograph a post shows: its slides' and its lead one, once each. */
 export function postImages(db, post) {
-  const ids = [...new Set([...(post.slides || []).map((s) => s.image_id), post.checks?.image].filter(Boolean))];
+  const ids = [...new Set([...(post.slides || []).map((s) => s.image_id), post.checks?.image, post.checks?.bgImage, ...(post.checks?.coverImages || [])].filter(Boolean))];
   return ids.map((id) => db.get('SELECT * FROM images WHERE id = ?', id)).filter(Boolean);
 }
 

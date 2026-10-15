@@ -47,6 +47,7 @@ Nothing in it is real, and the Results page says so.
 | `npm run user:add -- <name>` | adds a website user (asks for the password) |
 | `npm run backup` | a consistent copy of the database into `$OF_HOME/data/backups` |
 | `npm run check:public` | fails if anything committed looks private (also a pre-commit hook) |
+| `npm run budget [-- init]` | this month's Anthropic API spend, the cap, the warning level and the jobs that cost most; `init` creates the spend file once |
 | `npm run zernio:check [-- --pack <id> --send-private --confirm]` | checks the Zernio key and every pack's TikTok account id, and what Zernio will bill; with the flags, sends one private (SELF_ONLY) test post and reports whether the AI flag and the analytics work |
 | `npm run instagram:token -- --pack <id> --short <token>` | turns a short-lived Meta token into the pack's lasting one (see [Instagram](#instagram)) |
 | `npm run instagram:check [-- --pack <id> --publish --confirm]` | checks each Instagram pack's token, account, token expiry, quota and insights; publishes only with the flags |
@@ -135,9 +136,9 @@ A pack is a folder:
 
 | File | Holds |
 |---|---|
-| `pack.json` | id, display name, handle, the profile's bio, platforms, the publisher per platform, Zernio profile and account ids, the Instagram account (`instagram.userId`, `auth`, `tokenEnv`), schedule (windows, slots, posts per day), autonomy mode, its weight in the budget (`budget.share`), compliance checks, topics; `imagery` (`providers`: commons, pexels, unsplash, pack; `safety`: standard or strict); `events` and `schedule.fightWeek` for an account that follows fight cards |
+| `pack.json` | id, display name, handle, the profile's bio, platforms, the publisher per platform, Zernio profile and account ids, the Instagram account (`instagram.userId`, `auth`, `tokenEnv`), schedule (windows, slots, posts per day), autonomy mode, its weight in the budget (`budget.share`), compliance checks, topics; `imagery` (`providers`: commons, pexels, unsplash, pack; `safety`: standard or strict); `events` and `schedule.fightWeek` for an account that follows fight cards; `endSlide` (`{ title, body }`, `{handle}` for the handle): a closing slide asking to follow, drawn after every post in place of a call to action on the last slide; `writing` (`slideBody`, `slideTitle`, `slideLines`, `cover`: `maxChars`, `sentences`, `maxWords`): shorter limits than the engine's, never longer |
 | `voice.md` | who is talking, to whom, how it sounds; `## שורות טובות` and `## שורות רעות` with examples |
-| `theme.json` | a template and variant from the engine's library, colours, fonts |
+| `theme.json` | a template and variant from the engine's library, colours, fonts; `options`: `handleTag` (false: no handle on the slides), `sourceLine` (false: no source line on the slides; every fact keeps its source in the post's record, and a photograph's credit stays in the caption), `backgroundPhoto` (true: every slide on a photograph, blurred and veiled in the theme's ground colour, `backgroundVeil` 0.5 to 0.95), `coverPhoto`; `backgroundQueries`: the scenes searched when a post has no photograph of its own |
 | `sources.json` | approved sources only: type (`rss`, `web`, `api`), url, name, why it is trusted, when approved |
 | `formats.json` | the account's formats, each of one [kind](#post-formats) with its own name, weight, cover patterns (`hooks`: `{ id, pattern, examples }`) and calls to action (`ctas`: `{ kind: save|comment|send, text }`); the `mix` of entertaining formats (0.4 to 0.8, 0.6 by default); caption questions, hashtags, trend queries |
 | `rules.json` | banned phrases, regex checks, blocked image words, the maximum quote length |
@@ -270,9 +271,29 @@ to the model or to a person.
 
 ## The budget
 
-`OF_BUDGET_MONTHLY_USD` in `$OF_HOME/.env` ($15 by default) is a hard cap on every
-metered service the engine calls: Claude, Brave, the image APIs. Zernio is billed
-per connected account and is outside it (see [docs/costs.md](docs/costs.md)).
+`ANTHROPIC_MONTHLY_BUDGET_USD` in `$OF_HOME/.env` ($20 by default; the owner raised
+it from $15 on 2026-10-15) is a hard cap on the Anthropic API and the small metered
+services that share it (Brave, the image APIs). `ANTHROPIC_BUDGET_WARN_USD` ($15) is
+the warning level. Zernio is billed per connected account and is outside it (see
+[docs/costs.md](docs/costs.md)).
+
+- **One door, and a second record.** Every API call goes through `askJson`
+  (`src/llm/index.js`), and only `src/llm/claude.js` imports the SDK (a test holds
+  that). Before each call, `src/budget/anthropic.js` checks the model is in the
+  pricing table (`src/budget/pricing.js`, with the day it was verified; an unknown
+  model is refused, never guessed) and that this month's spend, plus what calls in
+  flight hold, plus this call's worst case, fits under the cap. After each call it
+  adds the real cost from the usage block (cache writes and reads, and the batch
+  discount) to `$OF_HOME/data/anthropic-spend.json`, written whole and renamed into
+  place, and writes one line to `$OF_HOME/logs/anthropic-calls.jsonl` (time, model,
+  tokens, cost, job: never the prompt or the key). A refusal is a `BudgetExceededError`:
+  the job is skipped and logged, the engine goes on.
+- **It fails closed.** When the spend file is missing or unreadable every API call is
+  blocked and the reason logged, never a silent $0. `npm run budget -- init` creates
+  it once (a new server runs it before its first live day), starting the month at
+  what the ledger recorded; it never overwrites a file that exists.
+- **`npm run budget`** prints the month's spend (UTC), the cap, the warning level and
+  the jobs that cost most.
 
 - **Nothing can spend past it.** Every paid call first reserves the most it could
   possibly cost (its prompt's bytes and its `max_tokens`, at the dearest rate it can
@@ -372,7 +393,9 @@ steps are tested end to end in a clean container by `deploy/test/run.sh`.
 3. **`private/.env`**, owned by `openfrequency`, mode 600: at least
    `SESSION_SECRET` (`openssl rand -hex 32`), `OF_ADMIN_USER`, `OF_ADMIN_PASSWORD`
    (remove it after the first start), `PUBLIC_HOST`, `MEDIA_PUBLIC_BASE_URL`,
-   `OF_BUDGET_MONTHLY_USD`, and the keys you have.
+   `ANTHROPIC_MONTHLY_BUDGET_USD`, `ANTHROPIC_BUDGET_WARN_USD`, and the keys you have.
+   Then, once, as `openfrequency`: `npm run budget -- init` (without the spend file
+   every API call is blocked).
 4. **The service:** `sudo cp deploy/openfrequency.service /etc/systemd/system/`,
    `sudo systemctl daemon-reload`, `sudo systemctl enable --now openfrequency`.
    `curl -H 'Host: 127.0.0.1:4700' http://127.0.0.1:4700/healthz` says `ok`.
