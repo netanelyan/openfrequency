@@ -842,3 +842,39 @@ engine can act on, and what changed:
   fight names its event and date.
 - **A guess-who's answer is someone the audience knows**, and the blurred photograph is
   lighter, with a question mark over it: the heavy blur read as a grey blob.
+- **Nothing inside a graphic may be cut.** The fit pass measured only where a box's last
+  line of text ended, so a price card's second row ran out of its graphic unseen and a
+  word broke inside a narrow card ("CodeF / ast"). Now every box in a graphic must sit
+  inside it and every line inside the box that holds it; words never break, they are set
+  smaller. A part clipped on purpose (a bar's segments in their track) is not counted.
+  The stress test now takes the same 45% fallback the renderer gives a slide at its
+  fullest.
+- **A run of Latin text with no space never wraps, as intended.** The test read `/s/`
+  (the letter s) where `/\s/` (a space) was meant, so runs with an "s" in them could
+  break. And a command's flags stay with it: "npx frugon --demo" came out "demo--".
+- **A guess-who needs its answer's photograph.** A bare question mark failed every
+  reader's first second, and an answer no licensed photograph shows was one most of the
+  audience did not know either. Without the photograph the post stops and the engine
+  tries another topic.
+- **A fast-moving account's story must be recent.** An encyclopedia page has no date, so
+  the date filter let a 2024 launch through as news. The outline is told the account's
+  window (`research.maxAgeDays`) against today.
+- **A forecast or a demo's numbers are claims, not results**, and say whose they are.
+- **A head-to-head may stand on three stats** (a coming fight's sources rarely hold more
+  that both sides share), its cover never shows the values, and its verdict answers the
+  cover's question first.
+- **A famous story needs an angle**: told through a detail most fans have not heard, led
+  by it. The cover leads with a concrete detail, never with the payoff, and a count it
+  promises ("3 רמזים") is checked against the slides.
+- **A photograph must show its person as the story knew them**: the face visible, the
+  club of the story (a Real Madrid shirt on a 2008 Manchester United slide misled), a
+  place filling the frame, in focus. A full name is searched, never a surname alone.
+- **A launch round knows what the rounds before it passed.** Each round runs on its own
+  database, so the outline's "posted recently" list was empty and round 3 told again a
+  story a round 2 post had already passed with. The harness now writes the earlier
+  rounds' passed posts into each new round's database (ids `seed-...`, left out of the
+  counts), as an account's own history would hold them.
+- **A graphic's parts never shrink to fit it.** A comparison table, squeezed by its
+  graphic's flex box, clipped its own last rows, and the check took the clipping for a
+  deliberate one. The parts of a graphic keep their size, so anything too tall runs out
+  of the graphic, where the fit pass sees it and sets it smaller.

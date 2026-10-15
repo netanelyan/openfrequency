@@ -229,6 +229,7 @@ Facts:
 - The claim is the fact in plain spoken Hebrew, as the account would say it. It may translate or simplify the quote; it may never add to it. A term it translates (a weight class, a title, a legal term) takes its own Hebrew name, never a neighbouring one: the slides follow the claim.
 - Never state anything the documents do not say. Never add a number that is not in the quote. A date is a number too: a claim that says when something happened or changed needs a quote that contains that date, or it leaves the date out.
 - Prefer facts that are specific, surprising and new to most people over general statements.
+- A vendor's forecast or guidance, and the numbers of a demo, an example or a sample run, are claims, not results: the claim says whose forecast or which demo it is, and a post never stands on them.
 - The angle. A story every fan of the niche already knows (the most famous final, upset or goal) is no post told the usual way: tell it through a detail from the documents most of them have never heard, and lead with that detail (the cover and the first slide). If the documents hold no such detail, prefer usable=false.
 
 Items: the content slides in order, each { role, point: what the slide says in a few Hebrew words, facts: the fact ids it states }. The roles follow the kind's shape (THE SHAPES). Every item states at least one fact, except the roles the shape says carry none.
@@ -250,7 +251,7 @@ const SLIDES_TASK = {
   text: `TASK: WRITE ONE POST'S TEXT.
 
 The request names the format and its kind, the content slides with their roles, the verified facts, the outline and the cover pattern to follow. Write:
-- hook: the cover line. 3 to 11 words, after the cover pattern the request names (adapt it to this post, never copy it word for word). It leads with the post's most surprising concrete detail where the pattern allows (a score, a sum, a quote, a name), never only the famous name of the story. A count it promises ("3 רמזים", "5 ...") is the count of the slides that follow. A number only if it is the number of content slides, a top 5 or 10, or it appears in a fact's quote. hookPattern: that pattern's id.
+- hook: the cover line. 3 to 11 words, after the cover pattern the request names (adapt it to this post, never copy it word for word). It leads with the post's most surprising concrete detail where the pattern allows (a score, a sum, a quote, a name), never only the famous name of the story, and never the payoff the last slide holds (the cover makes them swipe for it). A count it promises ("3 רמזים", "5 ...") is the count of the slides that follow. A number only if it is the number of content slides, a top 5 or 10, or it appears in a fact's quote. hookPattern: that pattern's id.
 - sub: one short line under the cover line, or "".
 - subject: as in the outline (you may shorten a name).
 - slides: exactly the outline's content slides, the same roles in the same order, each { role, title: up to 60 characters, body: up to 230 characters in one to three short sentences (or short lines, one per line, where the shape says so), a and b: the two values on a head-to-head stat slide and "" everywhere else, facts: the ids of the facts it states }. Every number on a slide, dates and years included, must appear in the quotes of the facts it lists.
@@ -318,13 +319,17 @@ function formatHead(format, n = null) {
  * their content. `day` (on-this-day): the date the post goes out on; `subject`:
  * a subject the post must be about (a fight week's main event).
  */
-export function outlineUser(format, docs, { avoid = [], maxChars = 7000, day = null, subject = null } = {}) {
+export function outlineUser(format, docs, { avoid = [], maxChars = 7000, day = null, subject = null, maxAgeDays = null } = {}) {
   const per = docs.length > 1 ? Math.max(2500, Math.floor(maxChars / docs.length)) : maxChars;
   return [
     `${formatHead(format)}${format.trend ? ` ${format.about}` : ''}`,
     day ? `TODAY: ${day}.` : '',
     day && kindName(format) === 'on-this-day' ? `THE POST GOES OUT ON: ${day}. Pick a moment that happened on this day and month in an earlier year.` : '',
     subject ? `SUBJECT: ${subject}. The post is about this.` : '',
+    // An undated page (an encyclopedia article) passes the date filter; the story inside it may still be years old.
+    maxAgeDays && day && kindName(format) !== 'on-this-day'
+      ? `FRESHNESS: this account's news ages fast. The post's story happened within ${maxAgeDays} days before TODAY, or it is a lasting how-to or price that is current now; an older launch, raise or failure is background at most, never the story.`
+      : '',
     ...docs.map((d) => `<document id="${d.ref}" source="${d.sourceName}" url="${d.url}">\n${d.title ? `# ${d.title}\n` : ''}${focusText(d.text, { maxChars: per, numbersFirst: groupOf(format) === 'number' })}\n</document>`),
     avoid.length ? `Topics this account posted recently (do not repeat them): ${avoid.join(' · ')}` : '',
   ]

@@ -655,7 +655,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
         const p = outlinePrompt(pack, { ttl });
         try {
           const res = await askJson(pctx, {
-            task: 'outline', role: 'draft', system: p.system, user: outlineUser(f, refs, { avoid: recent, day: postDay, subject: subject?.text }), schema: p.schema, effort: EFFORT.outline, maxTokens: MAX_TOKENS.outline,
+            task: 'outline', role: 'draft', system: p.system, user: outlineUser(f, refs, { avoid: recent, day: postDay, subject: subject?.text, maxAgeDays: pack.meta.research?.maxAgeDays || null }), schema: p.schema, effort: EFFORT.outline, maxTokens: MAX_TOKENS.outline,
             meta: { recordingsDir: pack.recordingsDir, docKey: c.key, format: f.base || f.id, attempt: 0 },
           });
           tried++;
@@ -862,6 +862,11 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     const photoOn = kindOf(format).photo;
     const photos = await findPhotos({ ...pctx, mode: ctx.mode }, { pack, format, draft, outline, postId });
     const image = photos.get(0) || photos.get(draft.slides.length - 1) || null;
+    // A guess-who whose answer has no licensed photograph shows a bare question mark for a cover, and an answer no
+    // photograph shows is one most of the audience does not know either: every reader failed both. Another topic.
+    if (kindName(format) === 'guess-who' && pack.theme.options?.coverPhoto && !photos.get(draft.slides.length - 1)) {
+      return block('no_photo', `אין תמונה מורשית של ${draft.subject?.answer || 'התשובה'}: נחשו-מי צריך פנים לטשטש על השער`);
+    }
 
     // ---- render
     const factSource = new Map(facts.map((f) => [f.key, sourceLabel(db, f)]));

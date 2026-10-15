@@ -66,12 +66,12 @@ export const KINDS = {
   'head-to-head': {
     group: 'number',
     name: 'ראש בראש',
-    segments: [['stat', 4, 6], ['verdict', 1, 1]],
+    segments: [['stat', 3, 6], ['verdict', 1, 1]],
     factFree: ['verdict'],
     photo: 'cover',
     cta: 'comment',
     subject: ['a', 'b'],
-    prompt: `head-to-head: two subjects still argued over (two players, two coaches, two teams, two eras, two products), never one past match whose winner everyone knows; subject.a and subject.b (short names, as the slides call them). 4 to 6 "stat" slides: title is the stat's name, a and b are the two values exactly as the quotes give them (digits, with their unit), body one short line of context; each stat slide cites the facts that hold both values. Compare like with like: the same competition and period for both, said on the slide. Both values of every stat are real values from the quotes, and the same measure on both sides (a record against a record, never an age against a result): never a dash or "אין נתון" (drop a stat one side does not have). When the two meet at a coming event (a fight, a match), the cover or the first stat names the event and its date from the quotes: a matchup without a when reads as old news. The last slide, "verdict", takes a side: who the numbers favour and the one stat that decides it, with no new number. Never a hedge.`,
+    prompt: `head-to-head: two subjects still argued over (two players, two coaches, two teams, two eras, two products), never one past match whose winner everyone knows; subject.a and subject.b (short names, as the slides call them). 3 to 6 "stat" slides (a coming fight's sources rarely hold more than three numbers both sides share): title is the stat's name, a and b are the two values exactly as the quotes give them (digits, with their unit), body one short line of context; each stat slide cites the facts that hold both values. Compare like with like: the same competition and period for both, said on the slide. Both values of every stat are real values from the quotes, and the same measure on both sides (a record against a record, never an age against a result): never a dash or "אין נתון" (drop a stat one side does not have). When the two meet at a coming event (a fight, a match), the cover or the first stat names the event and its date from the quotes: a matchup without a when reads as old news. The cover asks the question and never shows the values (no price table or stat grid on the cover): the slides reveal them one at a time. The last slide, "verdict", answers the cover's question in its first words and takes a side: who the numbers favour and the one stat that decides it, with no new number. Never a hedge.`,
   },
   ranking: {
     group: 'number',

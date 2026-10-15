@@ -241,6 +241,7 @@ export const slideHasVisual = (s) => Boolean((s.visual && !s.visual.bad) || s.ro
 
 export const VISUAL_CSS = `
 .vis{display:flex;flex-direction:column;gap:.5em;font:500 38px/1.25 var(--text);color:var(--ink);min-height:0}
+.vis>*{flex-shrink:0}
 .s-tiktok .vis{font-size:54px}
 .v-title{font:700 1em var(--text);color:var(--muted)}
 .v-tl{list-style:none;display:flex;flex-direction:column;gap:.55em;position:relative;padding-inline-start:1.3em}

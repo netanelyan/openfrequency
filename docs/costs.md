@@ -224,22 +224,26 @@ pass for what the first refused, and a vision check on every photograph.
 
 | Call | Model | Avg tokens in | Avg out | Share of the cost |
 |---|---|---|---|---|
-| outline | Sonnet 5.5 | 14,000 to 15,800 | 1,900 to 2,700 | 29% |
-| details (research) | Sonnet 5.5 | 12,200 to 13,100 | 1,000 to 1,200 | 14% |
-| slides (with its one redraft) | Sonnet 5.5 | 11,800 to 13,100 | 2,600 to 2,800 | 36% |
-| review | Sonnet 5.5 | 4,300 to 4,900 | 1,000 to 1,300 | 9% |
-| rewrite | Sonnet 5.5 | 9,900 to 10,700 | 1,000 to 1,100 | 11% |
-| image check (vision) | Haiku | about 5,100 | about 850 | under 1% |
+| outline | Sonnet 5.5 | 15,700 to 16,300 | 2,000 to 2,700 | 32% |
+| details (research) | Sonnet 5.5 | 12,200 to 13,600 | 1,060 to 1,230 | 14% |
+| slides (with its one redraft) | Sonnet 5.5 | 11,900 to 13,000 | 2,680 to 2,830 | 35% |
+| review | Sonnet 5.5 | 4,300 to 4,800 | 1,000 to 1,210 | 9% |
+| rewrite | Sonnet 5.5 | 10,100 to 10,700 | 960 to 1,060 | 10% |
+| image check (vision) | Haiku | 5,100 to 5,300 | 780 to 860 | under 1% |
 
-Over the three accounts' rounds, 102 attempts made 50 posts (the checks stopped
-the rest, and each stopped attempt is paid for):
+Over the three accounts' four rounds, 147 attempts made 79 posts (the checks
+stopped the rest, and each stopped attempt is paid for):
 
 | | Per attempt | Per post made, stopped attempts included |
 |---|---|---|
-| The three accounts | $0.067 to $0.078 | $0.126 to $0.181 |
-| All of them | $0.073 | **$0.149** |
-| The best and worst single round | | $0.111 and $0.201 |
-| The vision checks alone (3 to 9 a photo post) | $0.0005 a check | under $0.004 |
+| The three accounts | $0.075 to $0.086 | $0.134 to $0.152 |
+| All of them | $0.079 | **$0.146** |
+| A first round (every post new) | | $0.115 to $0.201 |
+| The vision checks alone (206 of them; 3 to 9 a photo post) | $0.0005 a check | under $0.004 |
+
+A last round, which made again only the posts that kept failing, cost up to $0.37
+a post made: the hardest posts are stopped most. A day's drafting is mostly first
+attempts, so the forecast uses the average.
 
 The CLI adds about 1,000 tokens of its own framing to every call, so these run a
 few percent high.
@@ -247,8 +251,8 @@ few percent high.
 | Case | Per post made | 180 posts | Inside $15? |
 |---|---|---|---|
 | Expected (the average) | $0.15 | **$27** | no |
-| Best round | $0.115 | $20.70 | no |
-| Worst round | $0.20 | **$36** | no |
+| The best first round | $0.115 | $20.70 | no |
+| The worst first round | $0.20 | **$36** | no |
 | Vision checks, included above | under $0.004 | under $0.70 | |
 
 **180 posts a month does not fit in $15.** The rule is to cut volume, not quality,

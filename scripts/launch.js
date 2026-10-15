@@ -159,6 +159,27 @@ function sourceList(db, post) {
   return ['# Sources', '', ...[...seen].map(([u, t]) => `- ${t}: ${u}`)].join('\n');
 }
 
+/**
+ * Each round has its own database, so a round never saw what the rounds before it made: round 3 told the story a
+ * passed post of round 2 had told. The posts that passed earlier are written into this round's database first (id
+ * "seed-..."), so the outline's "posted recently" list holds them, as an account's own history would.
+ */
+function seedPassed(db, pack) {
+  for (const r of rounds().filter((n) => n < round)) {
+    const v = path.join(HOME, `r${r}`, 'verdicts.json');
+    if (!existsSync(v) || !existsSync(path.join(HOME, `r${r}`, 'results.json'))) continue;
+    const res = J(path.join(HOME, `r${r}`, 'results.json'));
+    const old = new Db(path.join(HOME, `r${r}`, 'launch.db'));
+    for (const [n, x] of Object.entries(J(v).posts || {})) {
+      const id = `seed-r${r}-${n}`;
+      const post = x.pass && res[n]?.postId ? old.get('SELECT topic, hook, format_id, created_at FROM posts WHERE id = ?', res[n].postId) : null;
+      if (!post || db.get('SELECT id FROM posts WHERE id = ?', id)) continue;
+      db.insert('posts', { id, account_id: pack.id, format_id: post.format_id, topic: post.topic, hook: post.hook, status: 'published', reason: `passed in round ${r}`, created_at: post.created_at, updated_at: post.created_at });
+    }
+    old.close();
+  }
+}
+
 async function run() {
   if (llmBackend() === 'api' && !args.includes('--allow-api')) console.log('note: the API backend is selected; in dev it is refused without --allow-api');
   const ctx = context();
@@ -170,6 +191,7 @@ async function run() {
   if (pack.meta.events) await syncEvents(ctx, pack).catch((e) => console.log(`events: ${e.message}`));
   const log = path.join(RD, 'progress.jsonl');
   const results = existsSync(path.join(RD, 'results.json')) ? J(path.join(RD, 'results.json')) : {};
+  seedPassed(ctx.db, pack);
   console.log(`launch round ${round} for ${packId}, on ${llmBackend()}`);
   for (const p of plan.posts) {
     if (only && !only.has(p.n)) continue;
@@ -333,7 +355,7 @@ function costs() {
       list += u.listUsd || 0;
     }
     made += db.get("SELECT COUNT(*) AS n FROM posts WHERE status = 'sample'").n;
-    attempts += db.get('SELECT COUNT(*) AS n FROM posts').n;
+    attempts += db.get("SELECT COUNT(*) AS n FROM posts WHERE id NOT LIKE 'seed-%'").n;
     db.close();
   }
   const lines = [`# Launch costs: ${packId}`, '', `${attempts} attempts, ${made} posts made, over rounds ${rounds().join(', ')}.`, '', '| Call | Model | Calls | Avg tokens in | Avg out | API (batched, cached) | List |', '|---|---|---|---|---|---|---|'];

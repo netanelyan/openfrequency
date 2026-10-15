@@ -181,7 +181,7 @@ patterns and the calls to action.
 | `hot-take` | entertaining | the opinion (labelled as one), 3 to 5 slides of sourced case, "agree?" |
 | `myth-fact` | entertaining | 2 or 3 pairs: a myth as people say it, the fact that answers it |
 | `meme` | entertaining | 3 to 5 jokes on the account's own design, the real fact behind them last |
-| `head-to-head` | number | two sides, 4 to 6 stats with both values, the verdict last |
+| `head-to-head` | number | two sides, 3 to 6 stats with both values, the verdict last |
 | `ranking` | number | a top 5 (or a top 10, places 10 to 6 on one slide), number one last; the design draws the places |
 | `list` | number | the phase 1 shape: items and a closing slide |
 
