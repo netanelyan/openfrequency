@@ -305,6 +305,7 @@ live database in Approve mode, and prints what each post really cost, from the
 usage blocks the API returned (input, cache writes, cache reads, output). It
 spends a few tens of cents against the month's cap. It needs
 `ANTHROPIC_WORKSPACE_ID` in `private/.env`: the key there is not scoped to a
-workspace, and the API refuses it without one. After it, every call the engine
+workspace, and the API refuses it without one. The Default Workspace's ID (the ID
+column on the console's Workspaces page) is enough. After it, every call the engine
 makes is recorded the same way, and the Settings page shows the measured cost
 per post per account, which the planner uses instead of the estimate.

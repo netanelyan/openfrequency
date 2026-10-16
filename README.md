@@ -275,7 +275,9 @@ to the model or to a person.
 it from $15 on 2026-10-15) is a hard cap on the Anthropic API and the small metered
 services that share it (Brave, the image APIs). `ANTHROPIC_BUDGET_WARN_USD` ($15) is
 the warning level. Zernio is billed per connected account and is outside it (see
-[docs/costs.md](docs/costs.md)).
+[docs/costs.md](docs/costs.md)). The engine keeps the cap itself, so the key can live
+in the Default Workspace with no spend limit set in the Anthropic console (the
+console cannot set one there).
 
 - **One door, and a second record.** Every API call goes through `askJson`
   (`src/llm/index.js`), and only `src/llm/claude.js` imports the SDK (a test holds
