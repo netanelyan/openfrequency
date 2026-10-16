@@ -1051,3 +1051,12 @@ engine can act on, and what changed:
   the next topic. The fallbacks it replaces (one face filling the cover, or the
   drawn two-colour art) were passed over by every reader. An account that draws
   head-to-heads of people needs `coverPhoto` on in its theme.
+
+- **A topic from the bank is not held to the freshness rule, and an edited bank is
+  read again (2026-10-16).** An account whose news ages fast refuses a story older
+  than its `research.maxAgeDays`. A topic its owner chose for the bank is told as a
+  lesson with its year (an AI agent that deleted a company's database in July
+  2025), so the rule no longer applies to it: the outline refused every one of
+  them. A source read in the last six hours is not read again, but a bank its owner
+  has just edited is: the rewritten bank went unread while the posts it was
+  written for were being made.

@@ -1,6 +1,7 @@
+import { existsSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { newId, nowIso, now, DAY } from '../core/clock.js';
-import { mediaDir } from '../core/paths.js';
+import { mediaDir, packsDir } from '../core/paths.js';
 import { step, settings } from '../core/store.js';
 import { j } from '../db/index.js';
 import { BudgetError, guard, postSpend } from '../budget/ledger.js';
@@ -113,7 +114,12 @@ export async function candidateDocs(ctx, pack, { usedWithinDays = 45, day = null
   const forDay = day || israelDate(now());
   for (const src of sources) {
     const last = j(src.last_docs_json, null);
-    const fresh = ctx.sources?.kind === 'live' && last?.day === forDay && src.last_ok_at && now() - Date.parse(src.last_ok_at) < SOURCE_TTL_MS;
+    // A topic bank its owner has just edited is read again, whatever the clock says: a rewritten bank went unread for
+    // six hours while the posts it was written for were being made.
+    const bank = j(src.config_json, {})?.api;
+    const bankFile = bank?.kind === 'bank' ? path.join(packsDir(), pack.id, bank.file || 'topics.json') : null;
+    const edited = Boolean(bankFile && src.last_ok_at && existsSync(bankFile) && statSync(bankFile).mtimeMs > Date.parse(src.last_ok_at));
+    const fresh = !edited && ctx.sources?.kind === 'live' && last?.day === forDay && src.last_ok_at && now() - Date.parse(src.last_ok_at) < SOURCE_TTL_MS;
     const rows = fresh ? (last.ids.length ? ctx.db.all(`SELECT * FROM documents WHERE id IN (${last.ids.map(() => '?').join(',')})`, ...last.ids) : []) : await refreshSource(ctx.db, ctx.sources, src, { day, events });
     if (!fresh && ctx.sources?.kind === 'live') ctx.db.update('sources', src.id, { last_docs_json: { day: forDay, ids: rows.map((r) => r.id) } });
     for (const d of rows) docs.push({ ...d, sourceName: src.name, sourceKey: src.key });
@@ -667,7 +673,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
         const p = outlinePrompt(pack, { ttl });
         try {
           const res = await askJson(pctx, {
-            task: 'outline', role: 'draft', system: p.system, user: outlineUser(f, refs, { avoid: subject ? [] : recent, faceless: [...new Set(faceless)], day: postDay, subject: subject?.text, maxAgeDays: pack.meta.research?.maxAgeDays || null }), schema: p.schema, effort: EFFORT.outline, maxTokens: MAX_TOKENS.outline,
+            task: 'outline', role: 'draft', system: p.system, user: outlineUser(f, refs, { avoid: subject ? [] : recent, faceless: [...new Set(faceless)], day: postDay, subject: subject?.text, maxAgeDays: String(c.key).startsWith('bank:') ? null : pack.meta.research?.maxAgeDays || null }), schema: p.schema, effort: EFFORT.outline, maxTokens: MAX_TOKENS.outline,
             meta: { recordingsDir: pack.recordingsDir, docKey: c.key, format: f.base || f.id, attempt: 0 },
           });
           tried++;
