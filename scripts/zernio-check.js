@@ -45,7 +45,7 @@ for (const a of accounts) say(null, `${a.platform.padEnd(10)} ${a.id}  @${a.user
 
 // Zernio bills per connected account: the first 2 free, then $6 a month each (zernio.com/pricing, 2026-10-13).
 const paid = Math.max(0, accounts.length - 2);
-say(null, `Zernio: ${accounts.length} connected account(s), ${paid} billed: $${paid * 6} a month (outside the $15 cap)`);
+say(null, `Zernio: ${accounts.length} connected account(s), ${paid} billed: $${paid * 6} a month (outside the monthly cap)`);
 
 const packs = loadAll().filter((p) => !opt('pack') || p.id === opt('pack'));
 let bad = 0;
