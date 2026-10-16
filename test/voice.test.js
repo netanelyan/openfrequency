@@ -4,7 +4,7 @@ import { readPack } from '../src/packs/load.js';
 import { limitsFor, tellsIn } from '../src/voice/tells.js';
 import { experienceIn, fakeProofIn, badgeNextTo } from '../src/voice/honesty.js';
 import { heuristicReview, REWRITE_AT } from '../src/voice/review.js';
-import { checkRules } from '../src/rules/check.js';
+import { blockedQuery, checkRules } from '../src/rules/check.js';
 import { commonsLicenseOk, imageCredit, namesIn, needsCredit, once } from '../src/images/index.js';
 import { Db } from '../src/db/index.js';
 import { DEMO } from './helpers.js';
@@ -107,6 +107,15 @@ test("a photo found for a person names that person, not just a word of the name"
   assert.ok(namesIn('File:Holly_Holm_at_UFC_Fight_Night.jpg', ['Holly', 'Holm']));
   assert.ok(namesIn('File:Khabib_nurmagomedov_interview_2022.jpg', ['Khabib', 'Nurmagomedov', 'Gaethje']));
   assert.ok(namesIn('Pele.jpg', ['Pele']), 'a query with one name needs that one');
+});
+
+test('a pack refuses a word in an image query, not the same letters inside a name', () => {
+  const pack = { rules: { imageQueryBlock: ['ko', 'cut', 'belt', 'stock chart'] } };
+  assert.equal(blockedQuery(pack, 'Valentina Shevchenko'), null);
+  assert.equal(blockedQuery(pack, 'Alexandr Cutelaba'), null);
+  assert.equal(blockedQuery(pack, 'Ngannou KO'), 'ko');
+  assert.equal(blockedQuery(pack, 'title belts UFC'), 'belt');
+  assert.equal(blockedQuery(pack, 'a stock chart on a screen'), 'stock chart');
 });
 
 test("a photo's author is named once, even when the source's markup names them twice", () => {

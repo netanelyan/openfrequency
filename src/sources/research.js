@@ -26,6 +26,7 @@ import { wikipediaDocs } from './index.js';
 // ({ docs: [{ url, title, text }] }) or finds nothing.
 
 const MAX_DOC = 9000;
+const INFOBOX_MAX = 3000;
 const sha = (s) => createHash('sha256').update(String(s)).digest('hex');
 const HEBREW = /[֐-׿]/;
 
@@ -107,10 +108,11 @@ export async function research(ctx, { pack, terms = [], names = [], have = [], m
   const srcs = researchSources(db, pack);
   const seen = new Set(have.map((u) => String(u).toLowerCase()));
   const out = [];
-  const keep = (row) => {
+  // head: the start of the stored text kept whole (an infobox's rows are too short for aboutSubject to keep).
+  const keep = (row, head = '') => {
     if (!row || seen.has(String(row.url).toLowerCase())) return;
     seen.add(String(row.url).toLowerCase());
-    out.push({ ...row, text: aboutSubject(row.text, names) });
+    out.push({ ...row, text: head ? `${head}\n${aboutSubject(row.text.slice(head.length), names, MAX_DOC - head.length)}` : aboutSubject(row.text, names) });
   };
   if (ctx.mode === 'recorded') {
     const file = docKey ? path.join(pack.recordingsDir, 'research', `${docKey}.json`) : null;
@@ -128,7 +130,11 @@ export async function research(ctx, { pack, terms = [], names = [], have = [], m
         if (title) {
           const src = srcs.wiki[lang];
           const [doc] = await wikipediaDocs(src, { kind: 'wikipedia', lang, titles: [title] });
-          if (doc) keep(store(db, src, doc));
+          // The lead from the page's HTML carries the infobox (a fighter's wins, losses and finishes), which the
+          // plain extract drops: a tale of the tape found no record for either fighter.
+          const [box] = await wikipediaDocs(src, { kind: 'wikipedia', lang, titles: [`${title}#intro`], mode: 'rest' }).catch(() => []);
+          const head = box ? box.text.trim().slice(0, INFOBOX_MAX) : '';
+          if (doc) keep(store(db, src, head ? { ...doc, text: `${head}\n\n${doc.text}` } : doc), head);
         }
       }
       if (srcs.hn && out.length < max) for (const d of await hnDocs(term)) keep(store(db, srcs.hn, d));

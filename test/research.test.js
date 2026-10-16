@@ -99,6 +99,31 @@ test('research stores what it reads under an approved source, so every detail ca
   }
 });
 
+test("research reads a Wikipedia page with its infobox, kept whole at the top: a fighter's record is in no paragraph", async () => {
+  const { home, cleanup } = tempHome();
+  const realFetch = globalThis.fetch;
+  try {
+    withResearch(home, 3);
+    const ctx = contextFor(home);
+    const pack = ctx.pack('demo');
+    const career = Array.from({ length: 40 }, (_, i) => `In fight ${i + 1} Fighter A won against a contender in round ${(i % 3) + 1}.`).join('\n');
+    globalThis.fetch = async (url) => {
+      const u = new URL(url);
+      if (u.pathname.includes('/rest_v1/page/html/')) return new Response('<html><head><title>Fighter_A</title></head><body><section data-mw-section-id="0"><table class="infobox"><tr><th>Wins</th><td>29</td></tr><tr><th>Losses</th><td>0</td></tr></table><p>Fighter A is a retired champion.</p></section></body></html>', { status: 200, headers: { 'content-type': 'text/html' } });
+      if (u.searchParams.get('list') === 'search') return Response.json({ query: { search: [{ title: 'Fighter A' }] } });
+      return Response.json({ query: { pages: [{ title: 'Fighter A', extract: `Fighter A is a retired champion.\n== Career ==\n${career}` }] } });
+    };
+    const [doc] = await research({ ...ctx, mode: 'live' }, { pack, terms: ['Fighter A'], names: ['Fighter'] });
+    assert.match(doc.text, /^Wins \| 29\nLosses \| 0/, 'the record first, whole');
+    assert.match(doc.text, /In fight \d+ Fighter A won/);
+    const row = ctx.db.get('SELECT text FROM documents WHERE id = ?', doc.id);
+    assert.match(row.text, /Losses \| 0/, 'stored too, so a quote of the record is verified');
+  } finally {
+    globalThis.fetch = realFetch;
+    cleanup();
+  }
+});
+
 test('details are verified against their documents; fewer than the minimum leaves the topic', async () => {
   const { home, cleanup } = tempHome();
   try {

@@ -238,7 +238,7 @@ export async function findImage(ctx, { pack, query, postId = null, claim = '' })
       } catch {
         continue;
       }
-      // The screen: a picture with blood, an injury, a fighter down, a watermark or a belt is never used.
+      // The screen: a picture with blood, an injury, a fighter down, a watermark, a belt or a weapon is never used.
       const screen = await screenImage(ctx, { pack, buf: bytes.buf, type: bytes.type, meta: `${c.providerId || ''} ${c.alt || ''} ${c.categories || ''}`, postId, query, claim });
       if (screen.safety === 'refused') {
         ctx.log?.(`image refused (${screen.why}): ${c.providerId}`);

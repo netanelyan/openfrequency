@@ -187,6 +187,12 @@ export function wikiSections(text, sections = []) {
   const out = [];
   const lines = s.split('\n');
   for (const want of sections) {
+    // "intro" is the lead, the text above the first heading: a long article's summary, kept beside a section further down.
+    if (/^intro$/i.test(want)) {
+      const end = lines.findIndex((l) => /^=+\s*.*?\s*=+$/.test(l.trim()));
+      out.push(lines.slice(0, end < 0 ? lines.length : end).join('\n').trim());
+      continue;
+    }
     const i = lines.findIndex((l) => new RegExp(`^(=+)\\s*${want.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*=+$`, 'i').test(l.trim()));
     if (i < 0) continue;
     const level = /^(=+)/.exec(lines[i].trim())[1].length;
@@ -341,7 +347,11 @@ export async function bankDocs(src, api) {
         } else if (/\.wikipedia\.org\/wiki\//.test(u)) {
           const lang = /^https:\/\/(\w+)\./.exec(u)[1];
           const title = decodeURIComponent(u.split('/wiki/')[1]).replace(/_/g, ' ');
-          for (const d of await wikipediaDocs({ ...src, lang }, { kind: 'wikipedia', lang, titles: [title] })) docs.push({ ...d, group, key: group });
+          // A link that names its sections ("Jon_Jones#intro;Championships_and_accomplishments") is read from the page's
+          // HTML: the lead comes with its infobox (a fighter's record) and a section with its tables, which the plain
+          // extract drops. A long article's numbers sit past the cut, in those sections.
+          const mode = title.includes('#') ? 'rest' : 'extract';
+          for (const d of await wikipediaDocs({ ...src, lang }, { kind: 'wikipedia', lang, titles: [title], mode })) docs.push({ ...d, group, key: group });
         } else {
           const page = await getText(u);
           const text = labelTables(/\.md(\.txt)?$/.test(new URL(u).pathname) ? page.body : htmlToText(mainHtml(page.body)));

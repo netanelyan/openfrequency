@@ -1070,3 +1070,18 @@ engine can act on, and what changed:
   a restart left behind is recorded in the spend file too, and the runner raises
   the month in the spend file to the ledger's total on every tick, never lowering
   it (`npm run budget -- reconcile` does it by hand).
+
+- **A long article's numbers, a blocked word as a word, and a portrait that shows
+  the person (2026-10-16).** A person-against-person post compares records, and a
+  long Wikipedia biography keeps them past the 16,000 characters a document is
+  cut at: two careers stopped in 2010, and the outline found no number both sides
+  had. A topic's link can now name its sections (`Name#intro;Championships_and_accomplishments`):
+  it is read from the page's HTML, the lead with its infobox (wins, losses,
+  finishes) and the section with its table, which the plain extract drops. Research
+  reads each Wikipedia page with its infobox too, kept whole at the top of what the
+  details call sees: a tale of the tape with both photographs found no record for
+  either fighter. A pack's refused words in an image query are matched as words: "ko" refused a
+  fighter whose name ends in "-ko". And a portrait (one side of a head-to-head, the
+  answer of a guess-who) must show the person as the picture's main subject, not
+  one face among seven soldiers; a picture with a weapon in it, a training replica
+  too, is never used.

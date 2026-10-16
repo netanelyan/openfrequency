@@ -72,6 +72,37 @@ test('the topic bank reads each topic as one group, Hacker News through its API 
   }
 });
 
+test("a bank link that names sections reads the page's HTML: the lead with its infobox, and a section with its table", async () => {
+  const { home, cleanup } = tempHome();
+  try {
+    mkdirSync(path.join(home, 'packs', 'demo'), { recursive: true });
+    writeFileSync(path.join(home, 'packs', 'demo', 'topics.json'), JSON.stringify([
+      { topic: 'A against B', kind: 'head-to-head', about: 'x', urls: ['https://en.wikipedia.org/wiki/Fighter_A#intro;Championships_and_accomplishments'] },
+    ]));
+    const seen = [];
+    globalThis.fetch = async (url) => {
+      seen.push(String(url));
+      return new Response(
+        '<html><head><title>Fighter_A</title></head><body>' +
+          '<section data-mw-section-id="0"><table class="infobox"><tr><th>Wins</th><td>29</td></tr><tr><th>Losses</th><td>0</td></tr></table><p>Fighter A is a former champion.</p></section>' +
+          '<section data-mw-section-id="1"><h2>Career</h2><p>A long career story.</p></section>' +
+          '<section data-mw-section-id="2"><h2>Championships and accomplishments</h2><table><tr><td>Ten successful title defenses</td></tr></table></section>' +
+          '</body></html>',
+        { status: 200, headers: { 'content-type': 'text/html' } },
+      );
+    };
+    const [doc] = await bankDocs({ account_id: 'demo', key: 'topic-bank' }, { kind: 'bank' });
+    assert.ok(seen.every((u) => u.includes('/api/rest_v1/page/html/Fighter_A')), 'the page HTML, not the plain extract');
+    assert.match(doc.text, /Wins \| 29/);
+    assert.match(doc.text, /Fighter A is a former champion/);
+    assert.match(doc.text, /Ten successful title defenses/);
+    assert.ok(!/A long career story/.test(doc.text));
+    assert.equal(doc.url, 'https://en.wikipedia.org/wiki/Fighter_A');
+  } finally {
+    cleanup();
+  }
+});
+
 test('research finds Show HN posts through the API, in the founder\'s own words', async () => {
   globalThis.fetch = async () => Response.json({ hits: [{ objectID: '7', title: 'Show HN: X', story_text: '<p>First 100 users came from one post', points: 300, num_comments: 80, created_at: '2024-01-02T00:00:00Z' }] });
   const [d] = await hnDocs('X');

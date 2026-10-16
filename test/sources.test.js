@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { Db } from '../src/db/index.js';
 import { parseCsv, parseRows } from '../src/sources/csv.js';
-import { changesOf, linesOf, liveSources, refreshSource } from '../src/sources/index.js';
+import { changesOf, linesOf, liveSources, refreshSource, wikiSections } from '../src/sources/index.js';
 import { factDocuments, factProblems, factState, removeFact, saveFact } from '../src/sources/facts.js';
 import { focusText } from '../src/sources/text.js';
 import { verifyFact } from '../src/verify/claims.js';
@@ -104,4 +104,12 @@ test('a stored document keeps its expiry, so the gate can refuse it later', asyn
   const impl = { kind: 'live', read: async () => [{ url: 'https://www.btl.gov.il/x', title: 't', text: 'x'.repeat(100), expiresAt: '2026-12-31' }] };
   const [row] = await refreshSource(db, impl, src);
   assert.equal(row.expires_at, '2026-12-31');
+});
+
+test("a long article can keep its lead and a section far below it, as a fighter's record past the cut", () => {
+  const text = ['Lead line one.', 'Lead line two.', '== Career ==', 'x'.repeat(50), '== Championships and accomplishments ==', '=== Mixed martial arts ===', 'Ten successful title defenses', '== References ==', 'r'].join('\n');
+  const out = wikiSections(text, ['intro', 'Championships and accomplishments']);
+  assert.ok(out.startsWith('Lead line one.\nLead line two.'));
+  assert.ok(out.includes('Ten successful title defenses') && out.includes('Mixed martial arts'));
+  assert.ok(!out.includes('xxxx') && !out.includes('References'));
 });

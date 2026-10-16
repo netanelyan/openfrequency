@@ -42,7 +42,9 @@ export function checkRules({ pack, others = [], texts }) {
 
 /** An image search query the pack forbids (club crests, logos, a person's face...). */
 export function blockedQuery(pack, query) {
-  const q = String(query || '').toLowerCase();
-  const hit = (pack.rules?.imageQueryBlock || []).find((w) => q.includes(String(w).toLowerCase()));
+  // Whole words (and their plural): "ko" refuses "UFC KO", not "Valentina Shevchenko".
+  const words = (s) => String(s || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  const q = ` ${words(query)} `;
+  const hit = (pack.rules?.imageQueryBlock || []).find((w) => words(w) && (q.includes(` ${words(w)} `) || q.includes(` ${words(w)}s `)));
   return hit || null;
 }
