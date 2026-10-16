@@ -79,10 +79,12 @@ export const SCREEN_SCHEMA = {
     watermark: { type: 'boolean' },
     logoOrBelt: { type: 'boolean' },
     weapon: { type: 'boolean' },
+    faceX: { type: 'number' },
+    faceY: { type: 'number' },
     sure: { type: 'boolean' },
     note: { type: 'string' },
   },
-  required: ['consistent', 'mainSubject', 'blood', 'injury', 'unconscious', 'watermark', 'logoOrBelt', 'weapon', 'sure', 'note'],
+  required: ['consistent', 'mainSubject', 'blood', 'injury', 'unconscious', 'watermark', 'logoOrBelt', 'weapon', 'faceX', 'faceY', 'sure', 'note'],
   additionalProperties: false,
 };
 
@@ -93,6 +95,7 @@ const SCREEN_SYSTEM = `You check one photograph before it goes on a public socia
 - watermark: a photo agency's or anyone's watermark or credit stamped on the picture.
 - logoOrBelt: a promotion's or brand's logo as the main element (a poster, a logo filling the frame), a championship belt held up or worn, or a broadcast graphic. A logo on a backdrop, a microphone, a banner or clothing behind or on the person is not.
 - weapon: a gun, a rifle, a mounted machine gun or a knife anywhere in the picture, real or a training replica. Gloves, pads and sports gear are not.
+- faceX, faceY: where the main person's face is, its centre as a percentage of the picture's width (0 the left edge, 100 the right) and of its height (0 the top). With no face, 50 and 30.
 - sure: false when the picture is too small or unclear to tell.
 - note: a few words on what decided it.
 - mainSubject: what the picture mainly shows, in a few words (a person at a football match, a stadium from outside, a rock, a poster).
@@ -133,4 +136,24 @@ export async function screenImage(ctx, { pack, buf, type, meta = '', postId = nu
   if (strict) return { safety: 'review', why: red == null ? 'the picture could not be measured' : `a strict pack, and no model to look: red ${(red * 100).toFixed(1)}%`, red };
   if (reddish) return { safety: 'review', why: red == null ? 'the picture could not be measured' : `${(red * 100).toFixed(1)}% deep red: a person must look`, red };
   return { safety: 'ok', why: `no refusing word, ${(red * 100).toFixed(1)}% deep red`, red };
+}
+
+/**
+ * Where a picture's main face is, as a CSS object-position ("72% 18%"), from its screen; null when it was not
+ * measured. A narrow crop (one half of a head-to-head cover) aimed at the middle cut a judoka's face out of frame.
+ */
+export function focusOf(img) {
+  let screen = img?.safety_json;
+  if (typeof screen === 'string') {
+    try {
+      screen = JSON.parse(screen);
+    } catch {
+      return null;
+    }
+  }
+  const m = screen?.model;
+  const ok = (n) => typeof n === 'number' && Number.isFinite(n);
+  if (!m || !ok(m.faceX) || !ok(m.faceY)) return null;
+  const pct = (n) => Math.round(Math.min(100, Math.max(0, n)));
+  return `${pct(m.faceX)}% ${pct(m.faceY)}%`;
 }

@@ -123,7 +123,8 @@ body.no-handle .tag,body.no-handle .who,body.no-handle .kick,body.no-handle .sta
 const HEADLINE_CSS = '.hook,.title,.rtitle,.k-closer h2,.versus,.answer,.myth-text,.meme .punch,.vs .val,.q,.count,.cnt,.head .n{font-family:var(--headline)}';
 
 /** The whole page for one slide. `parts` is what a template returns. */
-export function page({ theme, size, slide, parts, photo, blur = false, bg = null, split = null }) {
+export function page({ theme, size, slide, parts, photo, photoPos = null, blur = false, bg = null, split = null, splitPos = null }) {
+  const at = (pos) => (pos ? ` style="object-position:${esc(pos)}"` : '');
   // Behind a slide with no photograph of its own, the account's background photograph, blurred and veiled in the
   // theme's own ground colour so its text keeps the contrast it was designed with.
   const backdrop = bg && !photo && !split;
@@ -140,8 +141,8 @@ ${VISUAL_CSS}
 ${HEADLINE_CSS}
 </style></head>
 <body class="t-${theme.template} v-${theme.variant || 'a'} k-${slide.kind} s-${size}${photo || split ? ' has-photo' : ''}${backdrop ? ' has-bg' : ''}${slide.noHandle ? ' no-handle' : ''}${slide.hasVisual ? ' has-vis' : ''}${parts.bodyClass ? ` ${parts.bodyClass}` : ''}"${parts.bodyStyle ? ` style="${esc(parts.bodyStyle)}"` : ''}>
-${photo ? `<img class="photo${blur ? ' blur' : ''}" src="${photo}" alt=""><div class="scrim" data-scrim></div>` : ''}
-${split ? `<div class="split"><img class="half" src="${split[0]}" alt=""><img class="half" src="${split[1]}" alt=""></div><div class="scrim" data-scrim></div>` : ''}
+${photo ? `<img class="photo${blur ? ' blur' : ''}" src="${photo}"${blur ? '' : at(photoPos)} alt=""><div class="scrim" data-scrim></div>` : ''}
+${split ? `<div class="split"><img class="half" src="${split[0]}"${at(splitPos?.[0])} alt=""><img class="half" src="${split[1]}"${at(splitPos?.[1])} alt=""></div><div class="scrim" data-scrim></div>` : ''}
 ${backdrop ? `<img class="bgphoto" src="${bg}" alt=""><div class="bgveil"${theme.options?.backgroundVeil != null ? ` style="--bg-veil:${Number(theme.options.backgroundVeil)}"` : ''}></div>` : ''}
 ${parts.html}
 ${slide.brand ? `<img class="brand" src="${slide.brand}" alt="">` : ''}

@@ -162,6 +162,19 @@ test("the account's mark is drawn where the slide asks for it (the last slide, n
   }
 });
 
+test("each half of a head-to-head cover is cropped around its face, where the screen measured one", async () => {
+  const { focusOf } = await import('../src/images/safety.js');
+  assert.equal(focusOf({ safety_json: JSON.stringify({ model: { faceX: 81.6, faceY: 14 } }) }), '82% 14%');
+  assert.equal(focusOf({ safety_json: { model: { faceX: 130, faceY: -5 } } }), '100% 0%');
+  assert.equal(focusOf({ safety_json: { model: { consistent: true } } }), null, 'a photo screened before faces were measured keeps the default crop');
+  assert.equal(focusOf({ safety_json: 'not json' }), null);
+  const pack = loadPack(DEMO);
+  const slide = { kind: 'cover', role: 'cover', hook: 'שלום', postKind: 'head-to-head', subject: { a: 'א', b: 'ב' }, handle: 'demo' };
+  const html = page({ theme: pack.theme, size: 'tiktok', slide, parts: buildSlide(pack.theme, slide), split: ['data:a', 'data:b'], splitPos: ['82% 14%', null] });
+  assert.match(html, /<img class="half" src="data:a" style="object-position:82% 14%"/);
+  assert.match(html, /<img class="half" src="data:b" alt=""/);
+});
+
 test('a slide at its longest, a 60-character title and a 230-character text beside a five-row graphic, still fits', async () => {
   const pack = loadPack(DEMO);
   const dir = path.join(os.tmpdir(), `of-vis-long-${process.pid}`);

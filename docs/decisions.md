@@ -1085,3 +1085,13 @@ engine can act on, and what changed:
   answer of a guess-who) must show the person as the picture's main subject, not
   one face among seven soldiers; a picture with a weapon in it, a training replica
   too, is never used.
+
+- **A broken graphic is dropped, not the post; a cover half is cropped around the
+  face (2026-10-16).** A preview with both photographs and every fact verified was
+  blocked because its rewrite left a comparison graphic with one row: a graphic is
+  decoration, so one still malformed after the redraft is now dropped and the post
+  checked again without it (the count of slides with a visual is still checked).
+  And each half of a head-to-head cover was cropped around the middle of its photo,
+  which cut a judoka's face out of a wide picture where she stood to one side: the
+  screen now reports where the main face is, and the cover's halves, like a cover
+  photograph, are aimed at it.

@@ -769,6 +769,15 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
       lastAnswer = res.data;
     }
     if (!draft) return block('voice', 'הטיוטה לא נכתבה');
+    // A graphic is decoration: one the redraft left malformed (a compare of one item) is dropped and the post checked
+    // again without it, not lost with every fact in it verified. The count of slides with a visual is still checked.
+    if (checked.problems.length && checked.problems.every((p) => p.where === 'visual' && /^(slide \d+|the cover): /.test(p.msg))) {
+      const bad = new Set(checked.problems.map((p) => p.msg.split(':')[0]));
+      draft.slides.forEach((s, i) => bad.has(`slide ${i}`) && (s.visual = null));
+      if (bad.has('the cover')) draft.coverVisual = null;
+      checked = checkPost(pctx, pack, draft, facts, format);
+      step(db, postId, 'visual', checked.problems.length ? 'failed' : 'ok', { dropped: [...bad], problems: checked.problems.map(say) });
+    }
     if (checked.problems.length) {
       // The law and honesty come first in the reason, then the facts, then the shape, then the voice.
       const rank = (p) => (/^(compliance|honesty|brand|rule)/.test(p.code) ? 0 : p.code === 'verify' ? 1 : /^(shape|caption|keywords|length)$/.test(p.code) ? 2 : 3);

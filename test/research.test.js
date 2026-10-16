@@ -174,6 +174,29 @@ test('a post is drafted only with three verified details, and the slides must us
   }
 });
 
+test('a graphic still malformed after the redraft is dropped, and the post goes on without it', async () => {
+  const { home, cleanup } = tempHome();
+  try {
+    withResearch(home, 3);
+    const ctx = contextFor(home);
+    const pack = ctx.pack('demo');
+    const base = llmWith(DETAILS);
+    // Every slides answer carries a compare of one row: two to five are the rule.
+    const llm = { ...base, async json(req) {
+      const r = await base.json(req);
+      if (req.task === 'slides') r.data.slides[0].visual = { type: 'compare', a: 'לפני', b: 'אחרי', items: [{ label: 'מצב העציץ', value: 'יבש', value2: 'ירוק' }] };
+      return r;
+    } };
+    const ok = await buildPost({ ...ctx, llm }, { pack, formatKey: 'plant-story', sample: true, docKey: 'pothos-story' });
+    assert.equal(ok.status, 'sample', ok.reason);
+    const st = ctx.db.get("SELECT status, detail_json FROM steps WHERE post_id = ? AND step = 'visual'", ok.postId);
+    assert.equal(st.status, 'ok');
+    assert.deepEqual(JSON.parse(st.detail_json).dropped, ['slide 1']);
+  } finally {
+    cleanup();
+  }
+});
+
 test("a slide's uncited number is cited when exactly one verified fact holds it", async () => {
   const { citeNumbers } = await import('../src/pipeline/build.js');
   const facts = [

@@ -8,6 +8,7 @@ import { buildSlide } from './templates/index.js';
 import { endParts } from './end.js';
 import { kindName, ranksOf } from '../formats/kinds.js';
 import { slideHasVisual } from './visuals.js';
+import { focusOf } from '../images/safety.js';
 
 // Slides to JPEG, through headless Chromium, because Hebrew needs real
 // bidirectional layout and shaping and the browser is the thing that has it.
@@ -333,6 +334,8 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
   }
   const byIdx = photos instanceof Map ? photos : new Map(photo ? [[photoOn === 'last' ? slides.length - 1 : 0, photo]] : []);
   const uri = new Map([...byIdx].filter(([, p]) => p?.file).map(([i, p]) => [i, dataUri(p.file)]));
+  // Each photograph cropped around its face, where its screen measured one.
+  const focus = new Map([...byIdx].filter(([, p]) => p?.file).map(([i, p]) => [i, focusOf(p)]));
   const brand = pack.brandLogo ? dataUri(pack.brandLogo) : null;
   const opts = pack.theme.options || {};
   const noHandle = opts.handleTag === false;
@@ -399,7 +402,7 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
       const tries = [{ ...slide }, ...(slide.photo ? [{ ...slide, photo: null, hasVisual: s.kind === 'item' && slideHasVisual({ ...slide, photo: null }) }] : [])];
       let done = false;
       for (const [k, sl] of [...tries.map((t) => [FIT_FLOOR, t]), [0.45, tries.at(-1)]].entries()) {
-        const html = page({ theme: pack.theme, size, slide: sl[1], parts: buildSlide(pack.theme, sl[1]), photo: full ? uri.get(i) : tease ? uri.get(slides.length - 1) : null, blur: tease, split, bg: bgFor(i) });
+        const html = page({ theme: pack.theme, size, slide: sl[1], parts: buildSlide(pack.theme, sl[1]), photo: full ? uri.get(i) : tease ? uri.get(slides.length - 1) : null, photoPos: full ? focus.get(i) : null, blur: tease, split, splitPos: split ? [focus.get('ca'), focus.get('cb')] : null, bg: bgFor(i) });
         try {
           await renderHtml(html, { size, file, floor: sl[0] });
           if (slide.photo && !sl[1].photo) (dropped[size] ??= new Set()).add(i);
