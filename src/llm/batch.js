@@ -1,6 +1,7 @@
 import { nowIso } from '../core/clock.js';
 import { j } from '../db/index.js';
 import { claudeCost, release, settle } from '../budget/ledger.js';
+import { recordCall } from '../budget/anthropic.js';
 import { ClaudeError, requestParams, readMessage } from './claude.js';
 
 // Drafting through the Message Batches API, at half price.
@@ -127,6 +128,9 @@ export function makeBatcher(ctx, { api, pollMs = [20_000, 30_000, 60_000], log =
 
   return {
     kind: 'claude',
+    // The paid API, at the batch rate: every request it carries is checked against the monthly cap and recorded in
+    // the spend file (askJson). Without it the runner's daily drafts, which all go through here, were never counted.
+    backend: 'api',
     batch: true,
     fallsBack: () => false,
     owned,
@@ -180,7 +184,9 @@ export async function recoverBatches(ctx, { api, skip = new Set() } = {}) {
       const m = meta[r.custom_id];
       if (!m || seen.has(r.custom_id)) continue;
       seen.add(r.custom_id);
-      account(ctx.db, m, readResult(r, m));
+      const res = readResult(r, m);
+      account(ctx.db, m, res);
+      if (res.billed && res.usage) recordCall({ model: res.model || m.model, usage: res.usage, usd: res.usd, job: m.tag, batch: true, log: ctx.log });
     }
     for (const [id, m] of Object.entries(meta)) if (!seen.has(id)) release(ctx.db, m.reservation);
     ctx.db.update('batches', row.id, { status: 'recorded', ended_at: row.ended_at || nowIso(), recorded_at: nowIso(), counts_json: b.counts || null });

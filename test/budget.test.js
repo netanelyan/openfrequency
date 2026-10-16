@@ -12,6 +12,7 @@ import { BudgetError, ceilingUsd, claudeCost, globalCap, MODEL_RATES, monthReser
 import { planMonth, savePlan } from '../src/budget/plan.js';
 import { tick } from '../src/autonomy/runner.js';
 import { makeBatcher, recoverBatches } from '../src/llm/batch.js';
+import { initState, spendStatus } from '../src/budget/anthropic.js';
 import { recordedClient } from '../src/llm/recorded.js';
 import { promptTokenBound } from '../src/llm/claude.js';
 import { budgetBanner } from '../src/web/ui.js';
@@ -170,6 +171,7 @@ test('the day is drafted in batches: one batch per round for every post at once,
   const { home, cleanup } = tempHome();
   try {
     keepOnly(path.join(home, 'packs', 'demo'), ['basil-containers']);
+    initState();
     const ctx = contextFor(home);
     const pack = ctx.pack('demo');
     const sizes = [];
@@ -186,6 +188,10 @@ test('the day is drafted in batches: one batch per round for every post at once,
     assert.ok(Math.abs(outline.usd - claudeCost(JSON.parse(outline.usage_json), outline.model) / 2) < 1e-12, 'at half price');
     assert.equal(monthReserved(ctx.db).usd, 0);
     assert.ok(ctx.db.all("SELECT status FROM batches").every((b) => b.status === 'recorded'));
+    // And every one of them in the spend file the cap is checked against: the batch path once went past it uncounted.
+    const file = spendStatus();
+    assert.equal(file.calls, 12);
+    assert.ok(Math.abs(file.usd - rows.reduce((t, r) => t + r.usd, 0)) < 1e-4, 'the file holds what the ledger holds');
   } finally {
     cleanup();
   }
@@ -194,6 +200,7 @@ test('the day is drafted in batches: one batch per round for every post at once,
 test('a batch a restart left behind is still recorded, and its money is never lost track of', async () => {
   const { home, cleanup } = tempHome();
   try {
+    initState();
     const ctx = contextFor(home);
     const pack = ctx.pack('demo');
     const api = fakeBatchApi(pack);
@@ -207,6 +214,7 @@ test('a batch a restart left behind is still recorded, and its money is never lo
     assert.equal(monthReserved(ctx.db).usd, 0, 'the hold is released');
     const row = ctx.db.get("SELECT * FROM spend WHERE tag = 'outline'");
     assert.ok(row && row.batch === 1 && row.usd > 0 && row.usd <= 0.5, 'and what the batch really cost is recorded');
+    assert.ok(Math.abs(spendStatus().usd - row.usd) < 1e-6, 'in the spend file too');
     assert.deepEqual(await recoverBatches(ctx, { api }), [], 'once');
   } finally {
     cleanup();

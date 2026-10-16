@@ -1060,3 +1060,13 @@ engine can act on, and what changed:
   them. A source read in the last six hours is not read again, but a bank its owner
   has just edited is: the rewritten bank went unread while the posts it was
   written for were being made.
+
+- **The batch path answers to the $20 cap (2026-10-16, a fault found on the server).**
+  The runner drafts each day's posts through the Message Batches API, and the
+  batcher's client never said it was the paid API: `askJson` neither checked its
+  calls against the monthly cap nor recorded them in the spend file. The first
+  post drafted on the server cost $0.15 that the database's ledger held and the
+  spend file did not. The batcher now is the paid API (at the batch rate), a batch
+  a restart left behind is recorded in the spend file too, and the runner raises
+  the month in the spend file to the ledger's total on every tick, never lowering
+  it (`npm run budget -- reconcile` does it by hand).

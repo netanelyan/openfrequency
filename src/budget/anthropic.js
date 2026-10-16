@@ -205,6 +205,35 @@ export function recordCall({ model, usage = null, usd, job = null, batch = false
   });
 }
 
+/** What the database's ledger recorded for one UTC month: real API calls only (the CLI's rows cost nothing, recorded ones are estimates). */
+export function ledgerUsd(db, month = utcMonth()) {
+  return db.get("SELECT COALESCE(SUM(usd), 0) AS usd FROM spend WHERE api = 'claude' AND estimated = 0 AND substr(at, 1, 7) = ?", month)?.usd || 0;
+}
+
+/**
+ * Raise a month in the spend file to what the database's ledger recorded, never lower it: a path that settled its
+ * calls in the database but not in the file (the batch path did, until 2026-10-16) is counted against the cap all the
+ * same. Returns { month, from, to } when it raised the month, null otherwise.
+ */
+export function reconcileState({ month = utcMonth(), ledgerUsd: owed = 0, env = process.env } = {}) {
+  const file = statePath(env);
+  return withFileLock(file, () => {
+    const state = readState(env);
+    const m = (state.months[month] ??= { usd: 0, calls: 0, warned: false });
+    const want = Math.round(Math.max(0, Number(owed) || 0) * 1e6) / 1e6;
+    if (want <= m.usd) return null;
+    const from = m.usd;
+    m.usd = want;
+    const { warn } = limits(env);
+    if (!m.warned && m.usd >= warn) {
+      m.warned = true;
+      loud(`Anthropic spend in ${month} is ${m.usd.toFixed(2)}, past the ${warn} warning level`);
+    }
+    writeState(state, env);
+    return { month, from, to: want };
+  });
+}
+
 /** This month's spend from the file, with the limits: what `npm run budget` prints. Throws when the file cannot be read. */
 export function spendStatus({ t = now(), env = process.env } = {}) {
   const state = readState(env);

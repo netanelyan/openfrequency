@@ -9,6 +9,7 @@ import { publishPost } from '../publish/index.js';
 import { REWRITE_AT } from '../voice/review.js';
 import { collectMetrics, learn } from '../metrics/collect.js';
 import { canRun, liftBudgetPauses, pauseAccount } from './rails.js';
+import { ledgerUsd, reconcileState, utcMonth } from '../budget/anthropic.js';
 import { runTrends, youtubeConfigured } from '../trends/index.js';
 import { perDayFor, planMonth, savePlan } from '../budget/plan.js';
 import { makeBatcher, recoverBatches } from '../llm/batch.js';
@@ -164,6 +165,15 @@ export async function tick(ctx, { t = now() } = {}) {
   const { db } = ctx;
   const today = israelDate(t);
   const cfg = settings(db);
+  // The spend file is never below the database's ledger: whatever settled a call there without the file is counted.
+  if (ctx.llm?.backend === 'api' || ctx.batchApi) {
+    try {
+      const raised = reconcileState({ month: utcMonth(t), ledgerUsd: ledgerUsd(db, utcMonth(t)) });
+      if (raised) ctx.log?.(`budget: ${raised.month} raised from ${raised.from.toFixed(4)} to ${raised.to.toFixed(4)}, the ledger's total`);
+    } catch {
+      /* a missing or unreadable spend file blocks every call by itself */
+    }
+  }
   const plan = planMonth(db, ctx.packs, { t });
   const report = { at: new Date(t).toISOString(), generated: [], published: [], expired: [], approved: [], errors: [], budget: plan.level, lifted: liftBudgetPauses(db, t, plan) };
 

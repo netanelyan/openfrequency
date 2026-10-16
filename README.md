@@ -47,7 +47,7 @@ Nothing in it is real, and the Results page says so.
 | `npm run user:add -- <name>` | adds a website user (asks for the password) |
 | `npm run backup` | a consistent copy of the database into `$OF_HOME/data/backups` |
 | `npm run check:public` | fails if anything committed looks private (also a pre-commit hook) |
-| `npm run budget [-- init]` | this month's Anthropic API spend, the cap, the warning level and the jobs that cost most; `init` creates the spend file once |
+| `npm run budget [-- init | reconcile]` | this month's Anthropic API spend, the cap, the warning level and the jobs that cost most; `init` creates the spend file once; `reconcile` raises the month to what the database's ledger recorded (the runner does it every tick) |
 | `npm run zernio:check [-- --pack <id> --send-private --confirm]` | checks the Zernio key and every pack's TikTok account id, and what Zernio will bill; with the flags, sends one private (SELF_ONLY) test post and reports whether the AI flag and the analytics work |
 | `npm run instagram:token -- --pack <id> --short <token>` | turns a short-lived Meta token into the pack's lasting one (see [Instagram](#instagram)) |
 | `npm run instagram:check [-- --pack <id> --publish --confirm]` | checks each Instagram pack's token, account, token expiry, quota and insights; publishes only with the flags |

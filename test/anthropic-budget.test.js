@@ -191,3 +191,34 @@ test('the Anthropic SDK is imported in one file only: every call goes through th
   const importing = files.filter((f) => /@anthropic-ai\/sdk/.test(readFileSync(f, 'utf8'))).map((f) => path.relative(ROOT, f).replace(/\\/g, '/'));
   assert.deepEqual(importing, ['src/llm/claude.js']);
 });
+
+test('the batch path answers to the cap: its client is the paid API, and a month never reads below the ledger', async () => {
+  const { makeBatcher } = await import('../src/llm/batch.js');
+  const { ledgerUsd, reconcileState } = await import('../src/budget/anthropic.js');
+  const { cleanup } = home();
+  try {
+    const ctx = ctxWith(null);
+    // The runner's daily drafts all go through the batcher: it must be checked and recorded like any API call.
+    const batcher = makeBatcher(ctx, { api: { create: async () => ({}), retrieve: async () => ({}), results: async function* () {} } });
+    assert.equal(batcher.backend, 'api');
+    assert.equal(batcher.batch, true);
+    // A batched answer is recorded in the spend file, at the batch rate.
+    const usage = { input_tokens: 1_000_000, output_tokens: 0 };
+    const llm = { ...apiClient(usage), batch: true, async json(r) { return { data: { ok: true }, usage, model: r.model, estimated: false, batch: true, settled: true }; } };
+    await askJson({ ...ctxWith(llm) }, req());
+    const s = spendStatus({ env: env() });
+    assert.equal(s.calls, 1);
+    assert.ok(Math.abs(s.usd - claudeCost(usage, 'claude-sonnet-5-5', { batch: true })) < 1e-6);
+    // What the database settled without the file is raised into it; a file already above the ledger is left alone.
+    const month = new Date().toISOString().slice(0, 7);
+    const before = readState(env()).months[month].usd;
+    assert.equal(reconcileState({ month, ledgerUsd: before - 0.5, env: env() }), null);
+    assert.equal(readState(env()).months[month].usd, before);
+    const r = reconcileState({ month, ledgerUsd: before + 2, env: env() });
+    assert.deepEqual([r.from, r.to], [before, Math.round((before + 2) * 1e6) / 1e6]);
+    assert.equal(readState(env()).months[month].usd, r.to);
+    assert.equal(typeof ledgerUsd(ctx.db, month), 'number');
+  } finally {
+    cleanup();
+  }
+});
