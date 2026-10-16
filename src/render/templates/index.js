@@ -26,7 +26,7 @@ body.v-b::before{background-image:linear-gradient(rgba(var(--ink-rgb),.06) 1.5px
 .tag i{width:14px;height:14px;border-radius:50%;background:var(--accent2);box-shadow:0 0 0 6px rgba(var(--accent2-rgb),.2)}
 .count{font:700 30px var(--text);padding:10px 24px;border-radius:999px;background:rgba(var(--ink-rgb),.08);color:var(--ink);display:flex;align-items:center;gap:12px}
 .count::before{content:'';width:12px;height:12px;border-radius:50%;background:var(--accent2)}
-.mid{flex:1;display:flex;flex-direction:column;justify-content:center;gap:36px;min-height:0}
+.mid{flex:1;display:flex;flex-direction:column;justify-content:safe center;gap:36px;min-height:0}
 .hook{font:700 108px/1.04 var(--display);letter-spacing:-1.5px;max-height:620px;text-wrap:balance}
 .s-instagram .hook{font-size:94px;max-height:470px}
 .hook em{font-style:normal;color:var(--accent)}
@@ -77,7 +77,7 @@ body.v-b::after{border-radius:0;width:520px;height:1100px;left:-260px;top:calc(5
 .frame{z-index:2}
 .kick{display:flex;align-items:center;gap:18px;font:700 34px var(--text);color:var(--accent);letter-spacing:1px}
 .kick .icon{width:44px;height:44px;color:var(--accent)}
-.mid{flex:1;display:flex;flex-direction:column;justify-content:center;gap:30px;min-height:0}
+.mid{flex:1;display:flex;flex-direction:column;justify-content:safe center;gap:30px;min-height:0}
 .hook{font:700 178px/0.9 var(--display);color:var(--ink);max-height:760px;letter-spacing:-1px;text-wrap:balance}
 .s-instagram .hook{font-size:150px;max-height:560px}
 .bar{width:220px;height:18px;background:var(--accent);transform:skewX(-24deg);margin-inline-start:8px}
@@ -124,7 +124,7 @@ const ledger = {
 body{background:repeating-linear-gradient(to bottom,transparent 0 67px,rgba(var(--ink-rgb),.075) 67px 68px),var(--bg)}
 body::before{content:'';position:absolute;top:0;bottom:0;right:132px;border-right:3px solid rgba(var(--accent2-rgb),.35)}
 .s-instagram::before{right:70px}
-.mid{flex:1;display:flex;flex-direction:column;justify-content:center;gap:34px;min-height:0}
+.mid{flex:1;display:flex;flex-direction:column;justify-content:safe center;gap:34px;min-height:0}
 .stamp{align-self:flex-start;display:flex;align-items:center;gap:14px;padding:14px 26px;border:3px solid var(--accent);border-radius:14px;color:var(--accent);font:700 30px var(--text);transform:rotate(-2deg)}
 .stamp .icon{width:38px;height:38px}
 .hook{font:900 116px/1.04 var(--display);color:var(--ink);max-height:640px;text-wrap:balance}
@@ -179,7 +179,7 @@ body.v-b::before{border-radius:50%;background:transparent;border:5px solid rgba(
 .frame{z-index:1}
 .band{display:flex;justify-content:space-between;align-items:center;padding-bottom:22px;border-bottom:4px solid var(--ink);font:400 32px var(--text)}
 .band .icon{width:44px;height:44px;color:var(--accent2)}
-.mid{flex:1;display:flex;flex-direction:column;justify-content:center;gap:34px;min-height:0}
+.mid{flex:1;display:flex;flex-direction:column;justify-content:safe center;gap:34px;min-height:0}
 .hook{font:400 118px/1.08 var(--display);color:var(--ink);max-height:660px;text-wrap:balance}
 .s-instagram .hook{font-size:100px;max-height:520px}
 .sub{font:400 44px/1.42 var(--text);color:var(--muted);max-height:200px}
@@ -212,7 +212,7 @@ const poster = {
   css: () => `
 body{background:linear-gradient(162deg,var(--accent) 0 34%,var(--bg) 34%)}
 body.v-b{background:linear-gradient(18deg,var(--bg) 0 62%,var(--accent) 62%)}
-.mid{flex:1;display:flex;flex-direction:column;justify-content:center;gap:30px;min-height:0}
+.mid{flex:1;display:flex;flex-direction:column;justify-content:safe center;gap:30px;min-height:0}
 .who{align-self:flex-start;font:400 34px var(--display);color:var(--on-accent)}
 .hook{font:400 124px/1.02 var(--display);color:var(--ink);max-height:660px;text-wrap:balance}
 .s-instagram .hook{font-size:104px;max-height:500px}
@@ -248,7 +248,7 @@ body.v-b::before{background-image:radial-gradient(rgba(var(--ink-rgb),.10) 2px,t
 .head .h::before{content:'';width:16px;height:16px;border-radius:4px;background:var(--accent)}
 .head .n{font:700 30px var(--display);direction:ltr;unicode-bidi:isolate;color:var(--ink)}
 .head .n em{font-style:normal;color:var(--muted)}
-.mid{flex:1;display:flex;flex-direction:column;justify-content:center;gap:32px;min-height:0}
+.mid{flex:1;display:flex;flex-direction:column;justify-content:safe center;gap:32px;min-height:0}
 .hook{font:700 112px/1.04 var(--display);letter-spacing:-1px;max-height:640px;text-wrap:balance}
 .s-instagram .hook{font-size:96px;max-height:480px}
 .sub{font:400 44px/1.4 var(--text);color:var(--muted);max-height:190px}
@@ -307,7 +307,7 @@ body::before{content:'';position:absolute;inset:0;background-image:${GRAIN};opac
 .hand{display:inline-flex;align-items:center;gap:14px;font:700 30px var(--text);letter-spacing:.5px}
 .hand::before{content:'';width:20px;height:44px;background:var(--accent);transform:skewX(-14deg)}
 .cnt{font:400 56px/1 var(--display);direction:ltr;unicode-bidi:isolate;color:var(--accent)}
-.mid{flex:1;display:flex;flex-direction:column;justify-content:center;gap:30px;min-height:0}
+.mid{flex:1;display:flex;flex-direction:column;justify-content:safe center;gap:30px;min-height:0}
 /* A content slide starts at the same height every time, so its label and progress bar do not jump from slide to slide. */
 body:not(.k-cover) .mid{justify-content:flex-start;padding-top:7%}
 .s-tiktok:not(.k-cover) .mid{padding-top:10%}
@@ -359,7 +359,7 @@ export function buildSlide(theme, slide) {
   const css = `${t.css(theme)}\n${ROLE_CSS}`;
   if (drawsRole(slide)) {
     const parts = slide.kind === 'cover' ? coverInner(slide, { photo: Boolean(slide.hasPhoto) }) : roleInner(slide);
-    const deep = slide.role === 'layer' ? { bodyClass: 'layer', bodyStyle: `--deep:${(slide.n - 1) / Math.max(1, slide.of - 1)}` } : {};
+    const deep = slide.role === 'layer' ? { bodyClass: 'layer', bodyStyle: `--deep:${(slide.n - 1) / Math.max(1, slide.of - 1)}` } : slide.role === 'reveal' ? { bodyClass: 'reveal' } : {};
     return { css, html: t.frame(slide, parts), ...deep };
   }
   return { css, html: t.html(slide) };

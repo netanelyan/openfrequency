@@ -127,6 +127,11 @@ body.layer .frame{z-index:2}
 .s-instagram .cta{font-size:34px;padding:18px 26px;margin-top:22px}
 .payoff .rtitle{color:var(--accent)}
 body.has-photo .rtag,body.has-photo .vs{background:rgba(0,0,0,.35)}
+body.has-photo .rtag.solid{background:var(--accent);color:var(--on-accent);text-shadow:none}
+/* A guess-who's answer on its photograph: the face high and clear, the words under it. */
+body.reveal .photo{object-position:50% 12%}
+body.has-photo.reveal .mid{justify-content:flex-end}
+body.has-photo.reveal .vis{display:none}
 `;
 
 const tag = (text, cls = '') => `<div class="rtag ${cls}">${he(text)}</div>`;

@@ -932,8 +932,8 @@ export async function findPhotos(ctx, { pack, format, draft, outline, postId }) 
   // The post's topic goes with every photograph's check: the cover line alone did not tell the check that a post about
   // Manchester City's 2017-18 season should not show Guardiola in a Bayern Munich tracksuit.
   const about = outline.topic ? ` (the post is about: ${outline.topic})` : '';
-  // A head-to-head's cover never shows one face under two names: a photograph of a third player went out labelled as
-  // one of the two. Its cover is type and the scene behind it.
+  // A head-to-head's cover never shows a face it has not checked as one of the two sides: a photograph of a third
+  // player went out labelled as one of them. Each half is searched and checked as its own side.
   if (pack.theme.options?.coverPhoto && kind === 'head-to-head' && outline.imageQuery && outline.imageQueryB) {
     // The two sides' photographs, each on its own half of the cover under its name.
     for (const [key, query, side] of [['ca', outline.imageQuery, draft.subject?.a], ['cb', outline.imageQueryB, draft.subject?.b]]) {
@@ -941,14 +941,27 @@ export async function findPhotos(ctx, { pack, format, draft, outline, postId }) 
       if (img) out.set(key, img);
     }
     if (!(out.has('ca') && out.has('cb'))) {
+      // One side's portrait, checked as that side, fills the cover by itself: every reader passed over the drawn
+      // two-colour cover that took the place of the faces (a retired striker's free photographs are all from his
+      // television years, which the era check refuses).
+      const one = out.get('ca') || out.get('cb');
       out.delete('ca');
       out.delete('cb');
+      if (one) {
+        out.set(0, one);
+        step(ctx.db, postId, 'image', 'ok', { slide: 0, query: one.query, side: true });
+      }
     }
   }
   if (pack.theme.options?.coverPhoto && photoOn && outline.imageQuery && kind !== 'head-to-head') {
     const idx = photoOn === 'last' ? last : 0;
     const s = draft.slides[idx];
-    wants.push({ idx, query: outline.imageQuery, claim: idx === 0 ? `${draft.hook} ${draft.sub || ''}${about}` : `${s.title} ${s.body}${about}` });
+    // A guess-who's answer is a face, blurred on the cover and shown at the reveal: checked against the reveal's fight,
+    // every free portrait of McGregor (a press conference, a suit) was refused and the post had no cover.
+    const claim = kind === 'guess-who' && draft.subject?.answer
+      ? `a portrait of ${draft.subject.answer}, the answer of a guess-who: the reveal shows their face${about}`
+      : idx === 0 ? `${draft.hook} ${draft.sub || ''}${about}` : `${s.title} ${s.body}${about}`;
+    wants.push({ idx, query: outline.imageQuery, claim });
   }
   // A clue's photograph would give the answer away; a meme is the account's own design.
   if (photoOn && kind !== 'meme') {
@@ -985,6 +998,13 @@ export async function findPhotos(ctx, { pack, format, draft, outline, postId }) 
       step(ctx.db, postId, 'image', 'ok', { slide: 0, moved: portrait[0], query: portrait[1].query });
     }
   }
+  // One photograph is shown once: the cover's picture of Torres came back for slide 1's query and every reader saw the
+  // same shot twice in a row, the second time small.
+  const shown = new Set();
+  for (const [i, img] of [...out.entries()].sort(([a], [b]) => (typeof a === 'number' ? a : -1) - (typeof b === 'number' ? b : -1))) {
+    if (shown.has(img.id) && typeof i === 'number' && i > 0) out.delete(i);
+    else shown.add(img.id);
+  }
   // An account that puts every slide on a photograph (theme.options.backgroundPhoto) and found none it can blur
   // behind the text (a guess-who's answer never can) takes one of its scene's (theme.backgroundQueries), the post's
   // own subject first: a stable pick per post, so two posts in a row rarely share one.
@@ -1000,7 +1020,8 @@ export async function findPhotos(ctx, { pack, format, draft, outline, postId }) 
     for (const query of [...new Set(queries)].slice(0, 4)) {
       // Checked like a slide's photograph, against the scene it stands for: a basketball arena came back for "football
       // stadium night" and sat behind a football post.
-      const claim = `the blurred background of a post about ${outline.topic || pack.meta.displayName}: it must show ${query}, the sport or the setting of the post, never another sport`;
+      // A person in it reads as a stranger behind someone else's story: the scene is a place or a thing.
+      const claim = `the blurred background of a post about ${outline.topic || pack.meta.displayName}: it must show ${query}, the sport or the setting of the post, never another sport, with no person as the main subject or standing out (an empty arena, a pitch, a cage, gloves, a desk)`;
       const img = await findImage(ctx, { pack, query, postId, claim }).catch((e) => (ctx.log?.(`background: ${e.message}`), null));
       if (img) {
         out.set('bg', img);

@@ -32,7 +32,7 @@ export const KINDS = {
     segments: [['beat', 3, 5], ['payoff', 1, 1]],
     photo: 'cover',
     cta: 'send',
-    prompt: `story: a true story in slides. The cover is a hook that teases the twist without giving it away, and never promises what the story does not deliver. 3 to 5 "beat" slides build it up in order, one moment each, with the names, dates and numbers from the facts. The last slide, "payoff", is the twist or the result the hook promised. No earlier slide gives the payoff away.`,
+    prompt: `story: a true story in slides. The cover is a hook that teases the twist without giving it away, and never promises what the story does not deliver. 3 to 5 "beat" slides build it up in order, one moment each, with the names, dates and numbers from the facts. The last slide, "payoff", is the twist or the result the hook promised. No earlier slide gives the payoff away. The moment the story turns on is told on a slide in full: who did it, when and how (the goal, its scorer and its minute; the knockout and the blow): the reader swiped for it. A story every fan already knows (a famous final, a famous comeback) leads its cover with the detail from the documents that fans do not know, never with the result they have seen a hundred times.`,
   },
   'what-happened': {
     group: 'entertaining',
@@ -42,7 +42,7 @@ export const KINDS = {
     photo: 'cover',
     cta: 'comment',
     subject: ['a'],
-    prompt: `what-happened: "what happened to X", one person, team or company (subject.a). "then" slides: who they were at their peak, with numbers. "turn" slides: the fall or the turn, documented facts only. "now": where they are by the latest dated fact in the documents, with its date. Only documented facts about people: never guess at reasons, health, money or private life the documents do not state.`,
+    prompt: `what-happened: "what happened to X", one person, team or company (subject.a). "then" slides: who they were at their peak, with numbers. "turn" slides: the fall or the turn, documented facts only, named as what happened (the defeat and who inflicted it, the injury, the transfer, the ban, with its date), never a vague "a drop in form" when the documents name the event. The cover's question is answered on a slide with the numbers of the change, before and after (goals a season, wins and losses, the months out): a list of trophies is not an answer, and a reader who swiped to the end for it and found none failed the post. "now": where they are by the latest dated fact in the documents, with its date. Only documented facts about people: never guess at reasons, health, money or private life the documents do not state.`,
   },
   'on-this-day': {
     group: 'entertaining',
@@ -52,7 +52,7 @@ export const KINDS = {
     photo: 'cover',
     cta: 'send',
     subject: ['date'],
-    prompt: `on-this-day: one wild moment from this date in an earlier year. subject.date is the day it happened, as the cover shows it ("6 באוקטובר 2001"); the day and the year must be in a quote. "context" slides: what was at stake before. "moment" slides: what happened, beat by beat. "after": what it led to.`,
+    prompt: `on-this-day: one wild moment from this date in an earlier year. subject.date is the day it happened, as the cover shows it ("6 באוקטובר 2001"); the day and the year must be in a quote. "context" slides: what was at stake before. "moment" slides: what happened, beat by beat, with who did it and the minute or the round. "after": what it led to.`,
   },
   'guess-who': {
     group: 'entertaining',
@@ -61,7 +61,7 @@ export const KINDS = {
     photo: 'last',
     cta: 'comment',
     subject: ['answer'],
-    prompt: `guess-who: the cover asks them to guess a famous person (or club, or company) from clues. 3 "clue" slides (4 at most), from hard to easy, each one sourced fact that never names the answer, and never names anything that gives it away at once. The "reveal" slide is last: its title is the answer (subject.answer) and its body one sourced line. The answer appears nowhere before the reveal: not on the cover, not in a clue, not in the captions or the keywords. The cover asks the question and gives no clue of its own (no year, title or deed that points to the answer): the clues are the slides'. The answer is someone the account's audience knows by name: a guess nobody can get is no game. The first two clues are ones only a real fan could place: no nationality, no club, no shirt number in them; the giveaway comes last. The captions never repeat the clues. Never number a clue yourself ("רמז 1"): the design draws the badges.`,
+    prompt: `guess-who: the cover asks them to guess a famous person (or club, or company) from clues. 3 "clue" slides (4 at most), from hard to easy, each one sourced fact that never names the answer, and never names anything that gives it away at once. The "reveal" slide is last: its title is the answer (subject.answer) and its body one sourced line. The answer appears nowhere before the reveal: not on the cover, not in a clue, not in the captions or the keywords. The cover asks the question and gives no clue of its own (no year, title or deed that points to the answer): the clues are the slides'. The answer is someone the account's audience knows by name: a guess nobody can get is no game. The first two clues are ones only a real fan could place: no nationality, no club, no shirt number in them; the giveaway comes last. The captions never repeat the clues, and never hold a detail that points to the answer (a club, a debut, a title count, a year). The reveal's line confirms the answer with what the clues pointed to, never a new claim the clues did not prepare. Never number a clue yourself ("רמז 1"): the design draws the badges.`,
   },
   'head-to-head': {
     group: 'number',
@@ -79,7 +79,7 @@ export const KINDS = {
     segments: [['ranks', 0, 1], ['rank', 5, 5]],
     photo: 'cover',
     cta: 'comment',
-    prompt: `ranking: a top 5, or a top 10. Famous names only. Every place is decided by a number in the quotes (goals, titles, wins, money), and the order follows that number. Five "rank" slides go from 5th place to 1st: number 1 is the last slide, and the cover never names it (nor the whole list): it teases the countdown. For a top 10, one "ranks" slide comes first and holds places 10 to 6 as exactly five short lines in its body, one per line, in order, each with its number. Never write a place number yourself ("מקום 3", "#1"): the design draws them. A rank slide's title is the name; its body the number that ranks it and one short line, and its graphic shows that number big, number 1's included. One measure for every place (a team's score in one match, never beside a player's season): the cover or the first slide says what is counted.`,
+    prompt: `ranking: a top 5, or a top 10. Famous names only. Every place is decided by a number in the quotes (goals, titles, wins, money), and the order follows that number. Five "rank" slides go from 5th place to 1st: number 1 is the last slide, and the cover never names it (nor the whole list): it teases the countdown. For a top 10, one "ranks" slide comes first and holds places 10 to 6 as exactly five short lines in its body, one per line, in order, each with its number. Never write a place number yourself ("מקום 3", "#1"): the design draws them. A rank slide's title is the name; its body the number that ranks it and one short line, and its graphic shows that number big, number 1's included. One measure for every place (a team's score in one match, never beside a player's season): the cover or the first slide says what is counted, and says it honestly (five world-record transfers in turn are not "the five most expensive transfers" when others cost more). Every rank slide's big number is the ranked measure itself (the fee, the goals), never another figure (a span of years).`,
   },
   iceberg: {
     group: 'entertaining',
@@ -87,7 +87,7 @@ export const KINDS = {
     segments: [['layer', 4, 6]],
     photo: 'cover',
     cta: 'save',
-    prompt: `iceberg: from what everyone knows down to what almost nobody knows. 4 to 6 "layer" slides, top to bottom. A layer is one slide: a short title, and 1 to 3 facts as short lines in its body, one per line. The top layer is the famous facts, the bottom layer the most obscure ones the documents hold. The design draws the depth.`,
+    prompt: `iceberg: from what everyone knows down to what almost nobody knows. 4 to 6 "layer" slides, top to bottom. A layer is one slide: a short title, and 1 to 3 facts as short lines in its body, one per line. The top layer is the famous facts, the bottom layer the most obscure ones the documents hold. The design draws the depth. The cover's lines tease the strangest fact from the bottom layer, never what everyone knows ("X, this everyone knows" is not a reason to stop).`,
   },
   'hot-take': {
     group: 'entertaining',
@@ -244,19 +244,24 @@ export function kindProblems(format, post) {
   if (name === 'ranking') {
     const ranks = content.find((s) => s.role === 'ranks');
     if (ranks && linesOfBody(ranks.body).length !== 5) out.push('the "ranks" slide holds places 10 to 6: exactly five lines in its body');
-    content.forEach((s, i) => {
-      if (/(?:^|\s)(?:#\s?\d|מקום\s+(?:ה|ראשון|שני|\d))/.test(`${s.title} ${s.body}`)) out.push(`slide ${i + 1}: no place numbers in the text, the design draws them`);
-      if (s.role === 'rank' && !/\d/.test(`${s.title} ${s.body} ${JSON.stringify(s.visual || '')}`)) out.push(`slide ${i + 1}: a rank slide states the number that ranks it (a total, a count), number 1's included`);
-    });
     // The order follows the number: a win streak of 14 went out at number 1 above one of 16. The number that ranks a
     // slide is its graphic's value, or its first number that is not a year; it must rise (or fall) from 5th to 1st.
     const rankNum = (s) => {
       const v = s.visual?.items?.[0]?.value;
       // The body before the title: a title can be a name with a number in it ("UFC 229").
-      const from = v != null ? [String(v)] : [...numbersIn(String(s.body || ''), { hebrew: true }), ...numbersIn(String(s.title || ''), { hebrew: true })];
+      // A graphic's value can be words around its number ("כ-10 ימים").
+      const from = [...(v != null ? numbersIn(String(v), { hebrew: true }) : []), ...numbersIn(String(s.body || ''), { hebrew: true }), ...numbersIn(String(s.title || ''), { hebrew: true })];
       const n = from.map((x) => Number(String(x).replace(/,/g, ''))).find((x) => Number.isFinite(x) && !(x >= 1900 && x <= 2100));
       return n ?? null;
     };
+    // A year is not the number that ranks a place: number 1 of the World Cup's scorers went out with "2022 and 2026"
+    // and no goal count, under four places that showed theirs.
+    const drawn = content.some((s) => s.role === 'rank' && s.visual?.items?.[0]?.value != null);
+    content.forEach((s, i) => {
+      if (/(?:^|\s)(?:#\s?\d|מקום\s+(?:ה|ראשון|שני|\d))/.test(`${s.title} ${s.body}`)) out.push(`slide ${i + 1}: no place numbers in the text, the design draws them`);
+      if (s.role === 'rank' && rankNum(s) == null) out.push(`slide ${i + 1}: a rank slide states the number that ranks it (a total, a count, not a year), number 1's included`);
+      else if (s.role === 'rank' && drawn && s.visual?.items?.[0]?.value == null) out.push(`slide ${i + 1}: the other places show their number as a graphic: this one shows its own the same way`);
+    });
     const nums = content.filter((s) => s.role === 'rank').map(rankNum);
     if (nums.length >= 3 && nums.every((n) => n != null)) {
       const up = nums.every((n, k) => k === 0 || n >= nums[k - 1]);

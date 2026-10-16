@@ -258,4 +258,13 @@ test("a ranking's places follow the number that ranks them", () => {
   assert.match(kindProblems(fmt('ranking'), post([13, 14, 15, 16, 14])).join(' '), /does not follow its number/);
   assert.doesNotMatch(kindProblems(fmt('ranking'), post([13, 14, 15, 16, 16])).join(' '), /does not follow/);
   assert.doesNotMatch(kindProblems(fmt('ranking'), post([20, 15, 12, 9, 7])).join(' '), /does not follow/, 'a fastest-first ranking falls');
+  // A year is not the number that ranks a place, and a place drawn without the graphic the others have is missing it.
+  const p = post([13, 14, 15, 16, 17]);
+  p.slides[4].body = 'היחיד שעשה את זה פעמיים, ב-2022 וב-2026.';
+  assert.match(kindProblems(fmt('ranking'), p).join(' '), /slide 5: a rank slide states the number/);
+  const drawn = post([13, 14, 15, 16, 17]);
+  drawn.slides.slice(0, 4).forEach((s, i) => (s.visual = { type: 'stat', items: [{ label: 'שערים', value: `כ-${13 + i} שערים` }] }));
+  assert.match(kindProblems(fmt('ranking'), drawn).join(' '), /slide 5: the other places show their number as a graphic/);
+  drawn.slides[4].visual = { type: 'stat', items: [{ label: 'שערים', value: '17' }] };
+  assert.doesNotMatch(kindProblems(fmt('ranking'), drawn).join(' '), /slide \d: /);
 });

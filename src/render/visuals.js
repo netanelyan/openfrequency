@@ -39,7 +39,7 @@ const KINDS = {
   pricing: { items: [2, 4], about: 'price cards: label = the plan, value = its price with unit and period ("$20 לחודש"), sub = what it includes in a few words' },
   mock: {
     items: [2, 5],
-    about: 'a mock screen the account draws (never a real product\'s screenshot or logo): style = chat (label = who speaks, "אתם" or the tool, value = the line), terminal (label = the command, value = what it prints) or browser (title = the page, label and value = its fields)',
+    about: 'a mock screen the account draws (never a real product\'s screenshot or logo): style = chat (label = who speaks, "אתם" or the tool, value = the line), terminal (label = a real command exactly as it is typed, value = what it prints, both in English letters: never a step described in words or a setting such as "CNAME" after the prompt sign; the Hebrew explanation goes in the text of the slide) or browser (title = the page, label and value = its fields)',
   },
 };
 
@@ -122,6 +122,14 @@ export function visualProblems(v, allowed, where) {
   if (v.type === 'compare' && v.items.some((it) => ![it.value, it.value2].every((x) => /[\p{L}\p{N}]/u.test(x)))) out.push(`${where}: every compare row needs both values, never a dash: drop a row one side does not have`);
   if ((v.type === 'bars' || v.type === 'funnel' || v.type === 'stat') && v.items.some((it) => numberOf(it.value) == null)) out.push(`${where}: every ${v.type} value needs a number`);
   if (v.type === 'mock' && !['chat', 'terminal', 'browser'].includes(v.style)) out.push(`${where}: a mock visual's style is chat, terminal or browser`);
+  // A terminal holds what a terminal prints: Hebrew in it came out scrambled in a left-to-right screen, and "$ CNAME" or
+  // "$ preview URL" after the prompt sign read as broken commands to every reader who knew none.
+  if (v.type === 'mock' && v.style === 'terminal') {
+    for (const it of v.items || []) {
+      if (/[֐-׿]/.test(`${it.label || ''} ${it.value || ''}`)) out.push(`${where}: a terminal holds a command and what it prints, in English letters: "${it.label}" / "${it.value}" (the Hebrew explanation goes in the slide's text)`);
+      else if (it.label && !/^(?:[a-z][\w.+-]*|\.\/\S+|[A-Z_][A-Z0-9_]*=\S*)(?:\s|$)/.test(String(it.label).trim())) out.push(`${where}: "${it.label}" is not a command a reader can type: a terminal line is a real command as it is typed`);
+    }
+  }
   return out;
 }
 
@@ -369,9 +377,10 @@ export const VISUAL_CSS = `
 .art-split .vs-names{position:absolute;inset:0;display:flex;justify-content:space-between;align-items:center;padding:0 6%;font:700 44px/1 var(--headline)}
 .art-split .vs-names b{max-width:44%;color:var(--on-accent)}
 .art-split .vs-names .b{color:var(--on-accent2)}
-.portrait{flex:none;position:relative;border-radius:var(--radius);overflow:hidden;height:520px;box-shadow:0 26px 60px rgba(0,0,0,.35)}
-.s-instagram .portrait{height:380px}
-.portrait img{width:100%;height:100%;object-fit:cover;object-position:50% 25%;display:block}
+/* The photograph gives way first: a slide with a long text pushed a fixed-height card up over the page counter. */
+.portrait{flex:0 1 520px;min-height:260px;position:relative;border-radius:var(--radius);overflow:hidden;box-shadow:0 26px 60px rgba(0,0,0,.35)}
+.s-instagram .portrait{flex-basis:380px;min-height:200px}
+.portrait img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 25%;display:block}
 .avatar{flex:none;width:180px;height:180px;border-radius:50%;overflow:hidden;border:6px solid var(--accent);box-shadow:0 16px 40px rgba(0,0,0,.35)}
 .s-instagram .avatar{width:140px;height:140px}
 .avatar img{width:100%;height:100%;object-fit:cover;object-position:50% 20%;display:block}
@@ -388,8 +397,8 @@ body.has-vis.s-instagram .rbody,body.has-vis.s-instagram .body{font-size:34px;ma
 body.has-vis .fit:not(.vis){flex-shrink:0}
 body.has-vis .vis{max-height:600px}
 body.has-vis.s-instagram .vis{max-height:420px}
-body.has-vis .portrait{height:400px}
-body.has-vis.s-instagram .portrait{height:280px}
+body.has-vis .portrait{flex-basis:400px}
+body.has-vis.s-instagram .portrait{flex-basis:280px}
 /* A role's own big element shares the slide with a graphic: a place number, an answer, a myth, two values. */
 body.has-vis .rank{font-size:170px}
 body.has-vis.s-instagram .rank{font-size:120px}

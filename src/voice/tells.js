@@ -53,6 +53,9 @@ const LONG_DASH = /[—–]/;
 const ARTEFACTS = /\*\*|^\s*[#*]\s|\{[a-z_]+\}|\[[^\]]*\]\(|<\/?[a-z]+>/im;
 // A link: a scheme, "www.", or a domain with a path. A company named for its domain
 // ("monday.com", "Wix.com") is a name, not a link, and neither platform makes it one.
+// One word in two scripts: "חבib", "greco-רומית". A Hebrew prefix before a Latin name is the way it is written
+// ("ב-Vercel", "ה-API"); a Latin word with a Hebrew one glued on after it is a translation left half done.
+const MIXED_SCRIPT = /[א-ת][A-Za-z]|[A-Za-z][א-ת]|[A-Za-z]{2,}-[א-ת]{3,}/;
 const URL_LIKE = /https?:\/\/|www\.|[\p{L}\p{N}-]+\.(?:com|co\.il|org|net|io|ai|gov\.il)\/\S/iu;
 
 // The comma inside one score written the way fans read it ("ישראל 9, טייוואן 0"):
@@ -136,6 +139,8 @@ export function tellsIn(text, { kind = 'slideBody', extra = [], pack = null } = 
   if (formal) add('register', `the formal imperative "${formal[1]}": say it the spoken way, "ת${formal[1]}"`);
   if (/\.\.\.|…/.test(raw)) add('structure', 'trails off with an ellipsis');
   if (ARTEFACTS.test(raw)) add('artefact', 'markdown or a template placeholder left in the text');
+  const mixed = raw.split(/\s+/).find((w) => MIXED_SCRIPT.test(w));
+  if (mixed) add('language', `"${mixed}" mixes Hebrew and Latin letters in one word: write it in Hebrew`);
   if (URL_LIKE.test(raw)) add('url', 'a web address (a link in a post is a demotion and is never tappable)');
   const emoji = (raw.match(EMOJI) || []).length;
   if (emoji > lim.emoji) add('register', `${emoji} emoji, ${lim.emoji} at most`);

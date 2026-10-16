@@ -24,6 +24,10 @@ test('stock connectives, formal words, filler, exclamation marks and long dashes
   assert.ok(t('תשקו עכשיו!').includes('register'));
   assert.ok(t('השקיה — פעם בשבוע').includes('structure'));
   assert.ok(t('ככה זה עובד...').includes('structure'));
+  // One word in two scripts is a translation left half done; a Hebrew prefix before a Latin name is how it is written.
+  assert.ok(t('חבib ניצח בסיבוב הרביעי').includes('language'));
+  assert.ok(t('הוא בא מהקרב greco-רומית').includes('language'));
+  assert.ok(!t('הרצנו את זה ב-Vercel עם ה-API של Claude').includes('language'));
   assert.ok(t('פרטים ב-www.example.com').includes('url'));
   assert.ok(t('הכול ב-example.com/sale עכשיו').includes('url'));
   // A company named for its domain is a name, not a link.

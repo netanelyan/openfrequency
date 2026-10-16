@@ -960,3 +960,83 @@ engine can act on, and what changed:
   readable by it alone: Caddy would have answered 403 and every publish failed. The
   deploy test wrote its sample file as root and never saw it. Now that one folder and
   its slides are 755 and 644; the rest of the private folder stays the service's own.
+- **The engine keeps the Anthropic cap itself (2026-10-16).** The owner chose not to
+  create a workspace: the key lives in the Default Workspace, which the console cannot
+  put a spend limit on, so the engine's own ledger is the only cap. A personal key that
+  is not scoped to one workspace still names one on every request
+  (`ANTHROPIC_WORKSPACE_ID`); the Default Workspace's ID is enough.
+- **What the fourth launch set's blind review found, fixed in the engine (2026-10-16):**
+  - *A photograph of an athlete away from their sport does not illustrate their sport.*
+    A 2021 conference-stage photograph of a goalkeeper stood for a 1999 final, and a
+    corridor press scrum for a title fight: the image check now refuses a picture of an
+    athlete on a stage, in a studio, in a press scrum, at a fan event or at a ceremony
+    for a slide about what they did in their sport. A picture in kit, at training, on
+    the touchline or with a trophy still fits.
+  - *A head-to-head with only one side's photograph shows that face.* When one side's
+    free photographs are all refused (a retired striker's are from his television
+    years), the cover used to fall back to the drawn two-colour art, and every reader
+    passed over it. The side that passed its own check now fills the cover.
+  - *Only a post about one subject repeats its cover's face behind the other slides.*
+    A ranking's number one stood behind the slide about number two. A ranking, a
+    head-to-head and a guess-who take the scene instead.
+  - *The scene behind the slides has no one in it.* A fight's crowd and two strangers
+    sparring read as people the post was about: the background is checked for a place
+    or a thing, and the scenes are an empty cage, a pitch, a stadium, a desk.
+  - *The payoff is on a slide.* A story tells the moment it turns on with who, when and
+    how; a "what happened" names the defeat, the injury or the transfer; a famous story
+    leads with what fans do not know. A comeback without its two goals and a fall
+    without its knockout both failed every reader.
+  - *A ranking says honestly what it counts*, and every place's big number is that
+    measure; *an iceberg's cover teases its strangest fact*, never "X, this everyone
+    knows"; *a guess-who's captions hold no detail that points to the answer.*
+  - *A translated claim keeps what each word belongs to.* "The first manager of an
+    English team" came out as "the first English manager" of a Scotsman, and the check
+    in code (numbers and names) could not see it: the rule is now in both prompts that
+    write claims.
+  - *A guess-who's answer is under the face, not on it*, and its label is readable on
+    the photograph.
+
+- **What the fourth set's second round showed (2026-10-16).** Three more faults, fixed
+  in the engine before the second blind review:
+  - *A guess-who's answer and a head-to-head's two sides are checked as portraits.* The
+    rule that refuses an athlete away from the sport was checking the answer's
+    photograph against the reveal's fight, and refused every free portrait of two
+    champions (a press conference, a suit): both posts were blocked with no face for
+    the cover. It also refused a featherweight champion's UFC media-day photograph for
+    his half of a head-to-head cover, and three fight previews went out faceless. A
+    portrait is about the face, and a media day, a press conference, a weigh-in or a
+    suit fits it; a slide about a fight still needs the sport.
+  - *One word in two scripts is a tell.* "חבib" and "greco-רומית" are a translation
+    left half done; the check refuses a word that runs Hebrew and Latin letters
+    together, or glues a Hebrew word after a Latin one ("ב-Vercel" stays as written).
+  - *Every place in a ranking states its number, and a year is not one.* Number one of
+    the World Cup's scorers went out with "2022 and 2026" and no goal count, under four
+    places that showed theirs as a graphic; a place now needs a number that is not a
+    year, and drawn the same way as the others.
+
+- **What the fourth set's second blind review found, fixed in the engine
+  (2026-10-16).** 3 of 20 posts passed (2 of 6, 1 of 7 and 0 of 7 on the three accounts).
+  The faults that repeated:
+  - *The best material went to the caption.* The prompt asked the caption for
+    "something the slides do not say", and the model put the post's twist there:
+    Cavani's later words, David Luiz signing the same day, Fontaine's 13 goals.
+    Every reader called it a broken promise. The best fact is now on a slide, and the
+    caption promises nothing the slides do not show.
+  - *A slide's photograph pushed its text over the page counter.* The card had a fixed
+    height and the column was centred, so a long slide spilled upward. The card now
+    gives way first, and a column never spills above its top.
+  - *A terminal shows a real command.* "$ CNAME" and "$ preview URL" read as broken
+    commands, and Hebrew notes came out scrambled in a left-to-right screen: the check
+    refuses Hebrew in a terminal and a line that is not a command.
+  - *A cover's face is someone the cover names.* A scorers' ranking showed its number
+    three as a coach, an iceberg an old man nobody could name: the outline is told the
+    cover line names whoever the cover shows.
+  - *A past date is not a cover's headline* except on a post about that day: "7 May
+    2026" above a myth post read as old news in October.
+  - *One photograph is shown once.* The cover's picture of Torres came back for the
+    first slide.
+  - *A "what happened" answers with numbers*: the change, before and after, not a list
+    of trophies.
+  - *A fight's media day, press conference and weigh-in belong to the sport*, and a
+    portrait asked for its face takes any clear picture: three fight previews had gone
+    out with no fighter on the cover.

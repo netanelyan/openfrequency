@@ -344,7 +344,10 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
   // one found for the post's scene ('bg'). Never a guess-who's answer, whose face would show through the blur.
   // The post's own subject (the cover's photograph, never a guess-who's answer) and its scene; a slide's portrait of
   // someone else stays on that slide.
-  const pool = opts.backgroundPhoto ? [...(uri.has(0) && kindNow !== 'guess-who' ? [uri.get(0)] : []), ...(uri.has('bg') ? [uri.get('bg')] : [])] : [];
+  // Only a post about one subject puts its cover's face behind the other slides: a ranking's number one sat behind
+  // the slide about number two, and one side of a head-to-head behind the other's.
+  const oneSubject = !['guess-who', 'ranking', 'head-to-head', 'list'].includes(kindNow);
+  const pool = opts.backgroundPhoto ? [...(uri.has(0) && oneSubject ? [uri.get(0)] : []), ...(uri.has('bg') ? [uri.get('bg')] : [])] : [];
   const bgFor = (i) => (opts.backgroundPhoto ? (typeof i === 'number' && uri.has(i) && !(kindNow === 'guess-who' && i === slides.length - 1) ? uri.get(i) : pool.length ? pool[i % pool.length] : null) : null);
   const items = slides.filter((s) => s.kind === 'item').length;
   const places = slidePlaces(slides);

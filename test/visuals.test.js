@@ -32,6 +32,10 @@ test('a visual is checked for its type, its size and its fields', () => {
   assert.match(visualProblems(v('record', [['A', 'ניצחונות רבים']]), all, 's')[0], /wins-losses/);
   assert.match(visualProblems(v('bars', [['A', 'הרבה'], ['B', '3']]), all, 's')[0], /needs a number/);
   assert.match(visualProblems(v('mock', [['a', 'b'], ['c', 'd']], { style: 'video' }), all, 's')[0], /chat, terminal or browser/);
+  // A terminal shows a real command and what it prints: no Hebrew in a left-to-right screen, no setting after the prompt.
+  assert.match(visualProblems(v('mock', [['npm i -g vercel', 'מתקין את ה-CLI'], ['vercel', 'done']], { style: 'terminal' }), all, 's')[0], /in English letters/);
+  assert.match(visualProblems(v('mock', [['vercel', 'Ready'], ['CNAME', 'cname.vercel-dns.com']], { style: 'terminal' }), all, 's')[0], /not a command a reader can type/);
+  assert.deepEqual(visualProblems(v('mock', [['npx -y add-mcp https://mcp.vercel.com', 'Added'], ['OPENAI_API_KEY=sk-... npm run dev', 'Ready on http://localhost:3000']], { style: 'terminal' }), all, 's'), []);
   // A pack draws only its own types.
   assert.match(visualProblems(v('pitch', [['A', 'GK'], ['B', 'CB'], ['C', 'ST']]), ['timeline', 'bars'], 's')[0], /timeline, bars/);
   for (const [type, s] of Object.entries(SAMPLE_VISUALS)) assert.deepEqual(visualProblems(normVisual(s.visual), all, type), [], type);
