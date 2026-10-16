@@ -197,7 +197,7 @@ can ask for a licensed photograph of them: it is used only if its own title,
 description or categories name the subject, it passes the image screen, and a vision
 check says it fits the slide; otherwise the slide keeps its graphic. The cover shows a
 photograph, the graphic the model chose for it, or the art of its kind. An account's
-mark (`brand/logo.png` in the pack) is drawn small on the first and last slides.
+mark (`brand/logo.png` in the pack) is drawn small on the last slide, never on the cover: the platform already shows whose post it is.
 
 Every post: 5 to 8 slides, one idea a slide, the payoff on the last slide with the
 call to action drawn on it, keywords in Hebrew and English on the last slide above

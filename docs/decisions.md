@@ -1040,3 +1040,14 @@ engine can act on, and what changed:
   - *A fight's media day, press conference and weigh-in belong to the sport*, and a
     portrait asked for its face takes any clear picture: three fight previews had gone
     out with no fighter on the cover.
+
+- **No mark on the cover; person against person, both faces or another matchup
+  (2026-10-16, the owner's call).** The account's logo is drawn on the last slide
+  only: on the cover, TikTok's and Instagram's own page already shows whose post it
+  is, and a logo there reads as an advert. A head-to-head whose outline names two
+  people is drawn as two players are on the sports account, side by side: the
+  engine looks for both photographs right after the outline, before a word of the
+  post is written, and a matchup whose two sides cannot both be shown gives way to
+  the next topic. The fallbacks it replaces (one face filling the cover, or the
+  drawn two-colour art) were passed over by every reader. An account that draws
+  head-to-heads of people needs `coverPhoto` on in its theme.

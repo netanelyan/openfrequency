@@ -411,5 +411,4 @@ body.has-vis.s-instagram .vs .val:not(.m):not(.l):not(.xl){font-size:70px}
 body.has-vis .clue-n b{width:90px;height:90px;font-size:52px}
 .brand{position:absolute;z-index:5;width:96px;height:96px;object-fit:contain;left:var(--pl);bottom:calc(var(--pb) - 120px)}
 .s-tiktok .brand{top:calc(var(--pt) - 120px);bottom:auto}
-.k-cover .brand{top:calc(var(--pt) - 10px);bottom:auto}
 `;

@@ -145,7 +145,7 @@ test('every graphic fits a TikTok and an Instagram slide, in every template, rig
   }
 });
 
-test("the account's mark is drawn on the first and the last slide when the pack has one", async () => {
+test("the account's mark is drawn where the slide asks for it (the last slide, never the cover)", async () => {
   const { home, cleanup } = tempHome();
   try {
     const brand = path.join(home, 'packs', 'demo', 'brand');

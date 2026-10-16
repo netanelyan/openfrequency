@@ -17,7 +17,7 @@ below; the private report has their names.
 |---|---|
 | No API calls while developing | Done. `OF_ENV=dev` (the default) sends every call to the Claude Code CLI: headless, JSON, one turn, no tools, a fresh session each time, the same model per task as production, one call at a time across processes. The API is refused without `--allow-api`, and each refusal is logged. Usage limits are waited out, never answered by the API. Tested with a mock CLI: success, bad JSON (one retry with the error, then a failure), a usage limit, a missing CLI, a timeout (`test/llm.test.js`) |
 | One account retargeted to Israelis building AI products | Done, in the private folder: config, sources, a topic bank, docs |
-| Display names and bios | Done, in each pack; the logo is drawn small on the first and last slide as soon as its PNG is in `brand/` |
+| Display names and bios | Done, in each pack; the logo is drawn small on the last slide (never the cover) as soon as its PNG is in `brand/` |
 | No text-only posts | Done: graphics the engine draws from each slide's own facts (`src/render/visuals.js`), photographs matched to their slide by name and by a vision check, at least half the slides with a visual and the cover always, every license logged and credited in the caption, every template tested right to left with mixed text and numbers at both sizes |
 | Deeper sources | Done: a research step reads the articles the outline names and keeps a post only with three sourced details; the review checks every detail against its source (`src/sources/research.js`) |
 | The flagged facts, two sources each | Done: four fixed, one confirmed (private report) |

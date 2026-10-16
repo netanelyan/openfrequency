@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { contentRange, kindProblems, KINDS, ranksOf, shapeProblems, structureNumbers } from '../src/formats/kinds.js';
-import { buildPost, candidatesOf, gateDraft, hashtagsFor, keepItems, loadPost, mentionsDay, sourceLabel, textsOf } from '../src/pipeline/build.js';
+import { buildPost, candidatesOf, gateDraft, hashtagsFor, keepItems, loadPost, mentionsDay, needsSides, sourceLabel, textsOf } from '../src/pipeline/build.js';
+import { outlineUser } from '../src/pipeline/prompts.js';
 import { reviewUser } from '../src/voice/review.js';
 import { tokenOf } from '../src/verify/claims.js';
 import { closeBrowser, renderPost, slidePlaces } from '../src/render/render.js';
@@ -267,4 +268,16 @@ test("a ranking's places follow the number that ranks them", () => {
   assert.match(kindProblems(fmt('ranking'), drawn).join(' '), /slide 5: the other places show their number as a graphic/);
   drawn.slides[4].visual = { type: 'stat', items: [{ label: 'שערים', value: '17' }] };
   assert.doesNotMatch(kindProblems(fmt('ranking'), drawn).join(' '), /slide \d: /);
+});
+
+test('a head-to-head of two people needs both faces, and a matchup refused for one is not offered again', () => {
+  const pack = (coverPhoto, providers = ['commons']) => ({ theme: { options: { coverPhoto } }, meta: { imagery: { providers } } });
+  const outline = { imageQuery: 'Erling Haaland', imageQueryB: 'Kylian Mbappé' };
+  assert.equal(needsSides(pack(true), fmt('head-to-head'), outline), true);
+  assert.equal(needsSides(pack(false), fmt('head-to-head'), outline), false, 'an account without cover photographs draws its own art');
+  assert.equal(needsSides(pack(true, []), fmt('head-to-head'), outline), false);
+  assert.equal(needsSides(pack(true), fmt('head-to-head'), { imageQuery: 'Vercel', imageQueryB: '' }), false, 'two products, no faces to show');
+  assert.equal(needsSides(pack(true), fmt('ranking'), outline), false);
+  const user = outlineUser(fmt('head-to-head'), [{ ref: 'D1', title: 't', url: 'u', text: 'x' }], { faceless: ['וולקנובסקי / אבלויב'] });
+  assert.ok(user.includes('no licensed photograph of one side') && user.includes('וולקנובסקי / אבלויב'));
 });

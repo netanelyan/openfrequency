@@ -379,7 +379,9 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
         keywords: extra.keywords || [],
         cta: extra.cta && !end ? { kind: post.ctaKind || 'save', text: extra.cta } : null,
         coverVisual: extra.coverVisual || null,
-        brand: brand && (s.kind === 'cover' || (!end && i === slides.length - 1)) ? brand : null,
+        // The mark goes on the last slide only: on the cover the platform's own page already shows whose post it is,
+        // and a logo there reads as an advert (the owner's call).
+        brand: brand && !end && i === slides.length - 1 && s.kind !== 'cover' ? brand : null,
       };
       // The cover's photograph, and a guess-who's reveal, fill the slide; a content slide's sits in a frame.
       const full = uri.has(i) && (s.kind === 'cover' || (i === slides.length - 1 && s.role === 'reveal')) && pack.theme.options?.coverPhoto !== false;

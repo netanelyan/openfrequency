@@ -648,6 +648,13 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     const recent = db
       .all("SELECT topic FROM posts WHERE account_id = ? AND topic IS NOT NULL AND status NOT IN ('blocked') ORDER BY created_at DESC LIMIT 12", pack.id)
       .map((r) => r.topic);
+    // A head-to-head refused for a missing face, this week or a moment ago, is not offered again: a card's main event
+    // with one unphotographed fighter took all three attempts of a launch post, while the card's other fights had both.
+    const faceless = db
+      .all("SELECT s.detail_json FROM steps s JOIN posts p ON p.id = s.post_id WHERE p.account_id = ? AND s.step = 'outline' AND s.status = 'skipped' AND s.detail_json LIKE '%no licensed photograph of both sides%' AND s.at > ?", pack.id, new Date(now() - 7 * DAY).toISOString())
+      .map((r) => j(r.detail_json, {}))
+      .map((d) => d.who || (/(([^)]+))$/.exec(d.why || '') || [])[1])
+      .filter(Boolean);
     tries: for (const f of formatsToTry) {
       // On this day: only documents that mention this day of the year.
       const pool = poolFor(f, candidates, postDay, { maxAgeDays: pack.meta.research?.maxAgeDays || null });
@@ -660,7 +667,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
         const p = outlinePrompt(pack, { ttl });
         try {
           const res = await askJson(pctx, {
-            task: 'outline', role: 'draft', system: p.system, user: outlineUser(f, refs, { avoid: subject ? [] : recent, day: postDay, subject: subject?.text, maxAgeDays: pack.meta.research?.maxAgeDays || null }), schema: p.schema, effort: EFFORT.outline, maxTokens: MAX_TOKENS.outline,
+            task: 'outline', role: 'draft', system: p.system, user: outlineUser(f, refs, { avoid: subject ? [] : recent, faceless: [...new Set(faceless)], day: postDay, subject: subject?.text, maxAgeDays: pack.meta.research?.maxAgeDays || null }), schema: p.schema, effort: EFFORT.outline, maxTokens: MAX_TOKENS.outline,
             meta: { recordingsDir: pack.recordingsDir, docKey: c.key, format: f.base || f.id, attempt: 0 },
           });
           tried++;
@@ -669,6 +676,21 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
             continue;
           }
           step(db, postId, 'outline', 'ok', { format: f.id, documents: c.docs.map((d) => d.id), url: c.docs[0].url, topic: res.data.topic, items: res.data.items.length, facts: res.data.facts.length, research: res.data.research || [] }, res.usd);
+          // A head-to-head of two people is two faces side by side, or it is another matchup: a cover of drawn boxes, or
+          // of one fighter alone, was passed over by every reader, and the owner asked for person against person on
+          // every account. Checked here, before a word of the post is written.
+          if (needsSides(pack, f, res.data) && !(pctx.mode === 'recorded' && !pctx.imagesLive)) {
+            const sides = await sidePhotos(pctx, { pack, outline: res.data, postId });
+            if (!sides) {
+              const who = [res.data.subject?.a || res.data.imageQuery, res.data.subject?.b || res.data.imageQueryB].join(' / ');
+              step(db, postId, 'outline', 'skipped', { format: f.id, topic: res.data.topic, who, why: `no licensed photograph of both sides (${who})` });
+              faceless.push(who);
+              lastWhy = `אין תמונה מורשית של שני הצדדים (${who})`;
+              lastKind = 'no_photo';
+              continue;
+            }
+            res.data.sides = sides;
+          }
           // ---- research: more about this topic, and the details a fan would want, before any slide
           const det = await gatherDetails(pctx, { pack, format: f, outline: res.data, cand: { ...c, refs }, ttl });
           if (det.ran) step(db, postId, 'details', det.short ? 'failed' : 'ok', { topic: res.data.topic, documents: det.docs.map((d) => d.url), found: det.found, verified: det.verified, need: det.need, refused: det.facts.filter((x) => !x.verified).map((x) => ({ key: x.key, error: x.error })) }, det.usd);
@@ -912,6 +934,27 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
   }
 }
 
+/** A head-to-head whose outline names two people (or places) to photograph, on an account whose covers carry photographs. */
+export function needsSides(pack, format, outline) {
+  return Boolean(pack.theme.options?.coverPhoto && (pack.meta.imagery?.providers || []).length && kindName(format) === 'head-to-head' && outline?.imageQuery && outline?.imageQueryB);
+}
+
+/**
+ * A head-to-head's two faces, each searched and checked as its own side: { ca, cb }, or null when either has no
+ * licensed photograph that passes. A photograph of a third player once went out labelled as one of the two.
+ */
+export async function sidePhotos(ctx, { pack, outline, postId }) {
+  const about = outline.topic ? ` (the post is about: ${outline.topic})` : '';
+  const out = {};
+  for (const [key, query, side] of [['ca', outline.imageQuery, outline.subject?.a], ['cb', outline.imageQueryB, outline.subject?.b]]) {
+    const img = await findImage(ctx, { pack, query, postId, claim: `a portrait of ${side || query} for one half of the cover of a head-to-head${about}` }).catch((e) => (ctx.log?.(`image: ${e.message}`), null));
+    step(ctx.db, postId, 'image', img ? 'ok' : 'skipped', img ? { slide: key, query, provider: img.provider, license: img.license, author: img.author, source: img.source_url, safety: img.safety } : { slide: key, query });
+    if (!img) return null;
+    out[key] = img;
+  }
+  return out;
+}
+
 /**
  * The photographs of one post: the cover's (or a guess-who's reveal) from the
  * outline's query where the kind and the theme put one, and a content slide's
@@ -934,23 +977,12 @@ export async function findPhotos(ctx, { pack, format, draft, outline, postId }) 
   const about = outline.topic ? ` (the post is about: ${outline.topic})` : '';
   // A head-to-head's cover never shows a face it has not checked as one of the two sides: a photograph of a third
   // player went out labelled as one of them. Each half is searched and checked as its own side.
-  if (pack.theme.options?.coverPhoto && kind === 'head-to-head' && outline.imageQuery && outline.imageQueryB) {
-    // The two sides' photographs, each on its own half of the cover under its name.
-    for (const [key, query, side] of [['ca', outline.imageQuery, draft.subject?.a], ['cb', outline.imageQueryB, draft.subject?.b]]) {
-      const img = await findImage(ctx, { pack, query, postId, claim: `a portrait of ${side || query} for one half of the cover of a head-to-head${about}` }).catch((e) => (ctx.log?.(`image: ${e.message}`), null));
-      if (img) out.set(key, img);
-    }
-    if (!(out.has('ca') && out.has('cb'))) {
-      // One side's portrait, checked as that side, fills the cover by itself: every reader passed over the drawn
-      // two-colour cover that took the place of the faces (a retired striker's free photographs are all from his
-      // television years, which the era check refuses).
-      const one = out.get('ca') || out.get('cb');
-      out.delete('ca');
-      out.delete('cb');
-      if (one) {
-        out.set(0, one);
-        step(ctx.db, postId, 'image', 'ok', { slide: 0, query: one.query, side: true });
-      }
+  if (needsSides(pack, format, outline)) {
+    // The two sides' photographs, each on its own half of the cover under its name: both or neither.
+    const sides = outline.sides || (await sidePhotos(ctx, { pack, outline, postId }));
+    if (sides) {
+      out.set('ca', sides.ca);
+      out.set('cb', sides.cb);
     }
   }
   if (pack.theme.options?.coverPhoto && photoOn && outline.imageQuery && kind !== 'head-to-head') {

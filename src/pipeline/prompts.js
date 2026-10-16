@@ -323,7 +323,7 @@ function formatHead(format, n = null) {
  * their content. `day` (on-this-day): the date the post goes out on; `subject`:
  * a subject the post must be about (a fight week's main event).
  */
-export function outlineUser(format, docs, { avoid = [], maxChars = 7000, day = null, subject = null, maxAgeDays = null } = {}) {
+export function outlineUser(format, docs, { avoid = [], faceless = [], maxChars = 7000, day = null, subject = null, maxAgeDays = null } = {}) {
   const per = docs.length > 1 ? Math.max(2500, Math.floor(maxChars / docs.length)) : maxChars;
   return [
     `${formatHead(format)}${format.trend ? ` ${format.about}` : ''}`,
@@ -336,6 +336,7 @@ export function outlineUser(format, docs, { avoid = [], maxChars = 7000, day = n
       : '',
     ...docs.map((d) => `<document id="${d.ref}" source="${d.sourceName}" url="${d.url}">\n${d.title ? `# ${d.title}\n` : ''}${focusText(d.text, { maxChars: per, numbersFirst: groupOf(format) === 'number' })}\n</document>`),
     avoid.length ? `Topics this account posted recently (do not repeat them): ${avoid.join(' · ')}` : '',
+    faceless.length ? `Matchups with no licensed photograph of one side (choose two others, from the same card or the same documents): ${faceless.join(' · ')}` : '',
   ]
     .filter(Boolean)
     .join('\n\n');
