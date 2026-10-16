@@ -32,6 +32,15 @@ export const usd = (n, d = 2) => `<span class="num ltr">$${(Number(n) || 0).toFi
 export const k = (n) => (n == null ? '–' : n >= 10_000 ? `${Math.round(n / 1000)}K` : n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(n));
 export const pct = (x) => (x == null ? '–' : `${Math.round(x * 100)}%`);
 
+/** The mark's dots, viewBox 0 0 100 100: the full meter (1-2-4-6-4-2-1) where it is large, five columns (1-3-5-3-1) small. */
+export function markDots(full = false) {
+  const cols = full ? [1, 2, 4, 6, 4, 2, 1] : [1, 3, 5, 3, 1];
+  const [dx, dy, r] = full ? [10, 9.5, 3.4] : [13, 12.5, 5];
+  const x0 = 50 - ((cols.length - 1) / 2) * dx;
+  return cols.flatMap((n, c) => Array.from({ length: n }, (_, k) => `<circle cx="${x0 + c * dx}" cy="${(50 + (k - (n - 1) / 2) * dy).toFixed(2)}" r="${r}"/>`)).join('');
+}
+export const mark = (full = false) => `<span class="mark" aria-hidden="true"><svg viewBox="0 0 100 100">${markDots(full)}</svg></span>`;
+
 export const icon = (name, cls = 'i') => `<svg class="${cls}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
 
 const SPRITE = `<svg class="sr" width="0" height="0" aria-hidden="true"><defs>
@@ -55,17 +64,20 @@ const SPRITE = `<svg class="sr" width="0" height="0" aria-hidden="true"><defs>
 <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
 <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></symbol>
 <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.9 5.5L19.5 10l-5.6 1.6L12 17l-1.9-5.4L4.5 10l5.6-1.5z"/></symbol>
+<symbol id="i-text" viewBox="0 0 24 24"><path d="M4 6h16M4 11h16M4 16h10"/></symbol>
 <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M4 14h4l2 3h4l2-3h4"/></symbol>
 </defs></svg>`;
 
+// Five sections, the same on a phone (the tab bar) and on a desk (the top bar): no More tab. A new account starts
+// from Accounts, and signing out lives in Settings.
 export const NAV = [
   ['/', 'היום', 'today', 'today'],
   ['/accounts', 'חשבונות', 'accounts', 'accounts'],
   ['/results', 'תוצאות', 'results', 'results'],
   ['/sources', 'מקורות', 'sources', 'sources'],
-  ['/new', 'חשבון חדש', 'new', 'plus'],
   ['/settings', 'הגדרות', 'settings', 'settings'],
 ];
+const SECTION_OF = { new: 'accounts', more: 'settings' };
 
 /**
  * The budget, said on every page when it matters: 80% of the month's cap spent,
@@ -88,40 +100,40 @@ export function budgetBanner(b) {
   return out.join('');
 }
 
-/** The page around a body. ctx: { title, active, csrf, spend: { usd, cap }, budget, waiting, theme, user } */
+/** The page around a body. ctx: { title, active, csrf, spend: { usd, cap }, budget, waiting, user } */
 export function layout(ctx, body) {
-  const nav = NAV.map(([href, label, key]) => `<a href="${href}"${key === ctx.active ? ' aria-current="page"' : ''}>${label}</a>`).join('');
-  const tabs = [NAV[0], NAV[1], NAV[2], NAV[3], ['/more', 'עוד', 'more', 'more']]
-    .map(
-      ([href, label, key, ic]) =>
-        `<a href="${href}"${key === ctx.active || (key === 'more' && ['new', 'settings', 'more'].includes(ctx.active)) ? ' aria-current="page"' : ''}>${icon(ic)}<span>${label}</span>${key === 'today' && ctx.waiting ? `<b class="badge num">${ctx.waiting}</b>` : ''}</a>`
-    )
-    .join('');
+  const section = SECTION_OF[ctx.active] || ctx.active;
+  const badge = (key) => (key === 'today' && ctx.waiting ? `<b class="badge num" aria-label="${ctx.waiting} מחכים לך">${ctx.waiting}</b>` : '');
+  const nav = NAV.map(([href, label, key]) => `<a href="${href}"${key === section ? ' aria-current="page"' : ''}>${label}${badge(key)}</a>`).join('');
+  const tabs = NAV.map(([href, label, key, ic]) => `<a href="${href}"${key === section ? ' aria-current="page"' : ''}>${icon(ic)}<span>${label}</span>${badge(key)}</a>`).join('');
   const s = ctx.spend || { usd: 0, cap: 0 };
-  const theme = ctx.theme === 'dark' || ctx.theme === 'light' ? ` data-theme="${ctx.theme}"` : '';
+  const cap = Number(s.cap) || 0;
+  const spent = Number(s.usd) || 0;
+  // The appearance follows the system setting: the site has no switch of its own.
   return `<!doctype html>
-<html lang="he" dir="rtl"${theme}>
+<html lang="he" dir="rtl">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#f4f1ea" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0f1114" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f2f3f5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b0c0e" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-title" content="תדר">
 <title>${esc(ctx.title)} · תדר</title>
 <link rel="preload" href="/static/fonts/Assistant.ttf" as="font" type="font/ttf" crossorigin>
 <link rel="stylesheet" href="/static/style.css?v=${ctx.v || 1}">
 <link rel="stylesheet" href="/static/accounts.css?v=${ctx.v || 1}">
 <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/icon-180.png">
+<link rel="manifest" href="/static/manifest.webmanifest">
 </head>
 <body>
 ${SPRITE}
 <header class="top"><div class="wrap">
-  <a class="brand" href="/" aria-label="תדר, לדף הבית"><span class="mark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12c2.5-6 4.5-6 7 0s4.5 6 7 0 4-6 6 0"/></svg></span><span><b>תדר</b><small>open frequency</small></span></a>
+  <a class="brand" href="/" aria-label="תדר, להיום">${mark()}<b>תדר</b></a>
   <nav class="nav" aria-label="ראשי">${nav}</nav>
   <div class="tools">
-    <a class="spend" href="/settings#budget" title="ההוצאה החודשית מתוך התקציב הכללי"><span>החודש</span><b class="num ltr">$${(Number(s.usd) || 0).toFixed(2)} / $${Number(s.cap) || 0}</b><meter min="0" max="${Number(s.cap) || 1}" low="${(Number(s.cap) || 1) * 0.7}" high="${(Number(s.cap) || 1) * 0.9}" optimum="0" value="${Math.min(Number(s.usd) || 0, Number(s.cap) || 1)}"></meter></a>
-    <form method="post" action="/theme" data-ajax="theme"><input type="hidden" name="_csrf" value="${esc(ctx.csrf)}"><button class="iconbtn" type="submit" aria-label="מצב כהה או בהיר">${icon('moon')}</button></form>
-    <form method="post" action="/logout"><input type="hidden" name="_csrf" value="${esc(ctx.csrf)}"><button class="iconbtn" type="submit" aria-label="יציאה">${icon('logout')}</button></form>
+    <a class="spend" href="/settings#budget" title="ההוצאה החודשית מתוך התקציב"><span>החודש</span><b class="num ltr">$${spent.toFixed(2)} / $${cap}</b><meter min="0" max="${cap || 1}" low="${(cap || 1) * 0.7}" high="${(cap || 1) * 0.9}" optimum="0" value="${Math.min(spent, cap || 1)}"></meter></a>
   </div>
 </div></header>
 <main class="wrap" id="main">

@@ -110,6 +110,13 @@
     slides.forEach((s) => io.observe(s));
   });
 
+  // A link to a folded panel on the same page (Edit, to #edit) opens it.
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest('a[href^="#"]');
+    const target = a && a.getAttribute('href').length > 1 ? document.querySelector(a.getAttribute('href')) : null;
+    if (target?.tagName === 'DETAILS') target.open = true;
+  });
+
   // Tapping a slide opens its facts.
   document.addEventListener('click', (e) => {
     const a = e.target.closest('.strip a[href^="#s-"]');

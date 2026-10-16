@@ -1,4 +1,4 @@
-import { accDot, csrfField, dayHe, esc, icon, k, layout, MODE_HE, postButton, shortDate, stamp, statusChip, timeHe, usd, weekdayNarrow } from './ui.js';
+import { accDot, csrfField, dayHe, esc, icon, k, layout, markDots, MODE_HE, postButton, shortDate, stamp, statusChip, timeHe, usd, weekdayNarrow } from './ui.js';
 import { PAUSE_REASONS } from '../autonomy/rails.js';
 import { KINDS, MIX } from '../formats/kinds.js';
 
@@ -31,12 +31,6 @@ const AUDIT_HE = {
 
 const media = (post, platform, i) => `/media/${encodeURIComponent(post.id)}/${platform}/${i}?v=${encodeURIComponent(String(post.updated_at || '').replace(/D/g, '').slice(-10))}`;
 const formatName = (pack, id) => pack?.formats.formats.find((f) => f.id === id)?.name || id;
-
-function botChip(score, reviewer) {
-  if (score == null) return '';
-  const cls = score <= 2 ? 'ok' : score <= 3 ? '' : 'warn';
-  return `<span class="chip ${cls}" title="ציון של בודק ${reviewer === 'claude' ? 'Claude' : 'אופליין'}: 0 אדם, 10 בוט">${icon('spark')}נשמע כמו בוט: <span class="num ltr">${score}/10</span></span>`;
-}
 
 function strip(post, platform = 'tiktok') {
   const files = post.media?.[platform] || [];
@@ -77,17 +71,33 @@ function captionBlock(post) {
   return `<p class="caption"><span class="chip ghost">טיקטוק</span> ${esc(post.caption)} ${tags}</p><p class="caption"><span class="chip ghost">אינסטגרם</span> ${esc(post.caption_ig).replace(/\n/g, '<br>')}</p>`;
 }
 
-/** One post as a card, with its decision buttons. */
+/** What the checks found, in one quiet line: the facts and their sources, the bot score, an AI image. */
+function trustLine(post) {
+  const items = post.slides.filter((s) => s.kind === 'item');
+  const used = post.facts.filter((f) => items.some((s) => s.factKeys.includes(f.key)));
+  const unverified = used.filter((f) => !f.verified).length;
+  const bits = [];
+  if (used.length) bits.push(unverified ? `<span class="badc">${icon('x')}${unverified} עובדות לא אומתו</span>` : `<span class="good">${icon('shield')}${used.length === 1 ? 'עובדה אחת, עם מקור' : `${used.length} עובדות, כל אחת עם מקור`}</span>`);
+  if (post.review_score != null) bits.push(`<span class="${post.review_score >= 4 ? 'warnc' : ''}" title="ציון של בודק ${post.checks?.reviewer === 'claude' ? 'Claude' : 'אופליין'}: 0 אדם, 10 בוט">${icon('spark')}נשמע כמו בוט <span class="num ltr">${post.review_score}/10</span></span>`);
+  if (post.ai_label) bits.push(`<span class="warnc">${icon('alert')}תמונת AI: תסומן</span>`);
+  return bits.length ? `<div class="trust">${bits.join('')}</div>` : '';
+}
+
+/** The captions, folded: they go out with the post, so they are one tap away, not in the way of the decision. */
+function captionDetails(post) {
+  return `<details class="facts"><summary>${icon('text')}הכיתוב<span class="chev">${icon('chev')}</span></summary>${captionBlock(post)}</details>`;
+}
+
+/** One post as a card, decision first: when and what, the headline, the slides, what the checks found, the buttons. */
 export function postCard(ctx, post, pack) {
   const when = post.slot_at ? timeHe(post.slot_at) : 'בלי שעה';
   const decide = post.status === 'queued';
   return `<article class="card acc acc-${esc(post.account_id)} post" id="post-${esc(post.id)}" data-post>
-<div class="meta"><span class="when num">${esc(when)}</span><span class="chip">${esc(formatName(pack, post.format_id))}</span>${statusChip(post.status)}${botChip(post.review_score, post.checks?.reviewer)}${post.ai_label ? '<span class="chip warn">תמונת AI: תסומן</span>' : ''}<span class="end muted small num">${usd(post.cost_usd, 3)}${post.cost_estimated ? ' הערכה' : ''}</span></div>
+<div class="meta"><span class="when num">${esc(when)}</span><span class="fmt">${esc(formatName(pack, post.format_id))}</span><span class="end">${statusChip(post.status)}</span></div>
 <h3 class="hook">${esc(post.hook)}</h3>
-${post.sub ? `<p class="caption">${esc(post.sub)}</p>` : ''}
+${post.sub ? `<p class="subline">${esc(post.sub)}</p>` : ''}
 ${strip(post)}
-${captionBlock(post)}
-${factsBlock(post)}
+${trustLine(post)}
 <div class="actions">
 ${decide ? postButton(ctx, `/post/${post.id}/approve`, `${icon('check')}אשר`, { cls: 'btn primary', ajax: 'remove' }) : ''}
 <a class="btn" href="/post/${esc(post.id)}#edit">${icon('edit')}ערוך</a>
@@ -95,9 +105,11 @@ ${decide ? `<button class="btn ghost" type="button" data-toggle="#reject-${esc(p
 ${post.status === 'approved' ? postButton(ctx, `/post/${post.id}/unapprove`, 'בטל אישור', { cls: 'btn ghost', ajax: 'reload' }) : ''}
 </div>
 ${decide ? `<form class="rejectbox" id="reject-${esc(post.id)}" method="post" action="/post/${esc(post.id)}/reject" data-ajax="remove">${csrfField(ctx)}
-<label class="f">למה?<select name="reason">${REJECT_REASONS.map((r) => `<option>${esc(r)}</option>`).join('')}<option value="">אחר</option></select></label>
+<label class="f">למה לדחות?<select name="reason">${REJECT_REASONS.map((r) => `<option>${esc(r)}</option>`).join('')}<option value="">אחר</option></select></label>
 <input type="text" name="note" placeholder="הערה (לא חובה), עוזרת לכתיבה הבאה" maxlength="300">
 <button class="btn danger" type="submit">דחה את הפוסט</button></form>` : ''}
+${captionDetails(post)}
+${factsBlock(post)}
 </article>`;
 }
 
@@ -120,15 +132,27 @@ export function todayPage(ctx, d) {
   for (const im of d.attention?.images || []) {
     banners.push(`<div class="banner warn">${icon('alert')}<div><b>תמונה מחכה לעין של אדם לפני פרסום</b><p>${esc(im.hook || im.id)}${im.screen?.why ? ` · ${esc(im.screen.why)}` : ''}</p></div><a class="btn sm" href="/post/${esc(im.id)}">לבדיקה</a></div>`);
   }
+  // The day in the mark's own language: one dot per post, its shape its state (see .pulse in the stylesheet).
+  const dotsOf = (g) => {
+    const dots = [...g.waiting.map(() => 'w'), ...g.scheduled.map(() => 's'), ...g.published.map(() => 'p'), ...g.blocked.map(() => 'b')];
+    return dots.length ? `<span class="pulse" aria-hidden="true">${dots.map((c) => `<i class="${c}"></i>`).join('')}</span>` : '<span class="none">שקט</span>';
+  };
+  const said = (g) => [g.waiting.length && `${g.waiting.length} מחכים`, g.scheduled.length && `${g.scheduled.length} מתוזמנים`, g.published.length && `${g.published.length} פורסמו`, g.blocked.length && `${g.blocked.length} נחסמו`].filter(Boolean).join(', ') || 'אין פוסטים היום';
+  const day = `<section class="day" aria-label="היום במבט אחד">
+<div class="lead"><b class="${all.length ? '' : 'zero'}">${all.length}</b><span>${all.length === 1 ? 'פוסט אחד מחכה לך' : all.length ? 'פוסטים מחכים לך' : 'אין מה לאשר כרגע'}</span></div>
+<p class="rest">${sched.length} מתוזמנים · ${pub.length} פורסמו היום · ${blocked.length} נחסמו בבדיקות</p>
+<div class="lines">${d.groups.map((g) => `<a href="#g-${esc(g.pack.id)}">${accDot(g.pack.id)}<span class="nm">${esc(g.pack.meta.displayName)}</span><span class="end">${dotsOf(g)}<span class="sr">${esc(said(g))}</span></span></a>`).join('')}</div>
+<div class="legend" aria-hidden="true"><span><span class="pulse"><i class="w"></i></span>מחכה לך</span><span><span class="pulse"><i class="s"></i></span>מתוזמן</span><span><span class="pulse"><i class="p"></i></span>פורסם</span><span><span class="pulse"><i class="b"></i></span>נחסם</span></div>
+</section>`;
   const body = `<div class="head"><h1>היום</h1><span class="sub">${esc(dayHe(Date.now()))}</span></div>
 ${banners.join('')}
-<div class="stats"><div class="stat${all.length ? ' hot' : ''}"><b>${all.length}</b><span>מחכים לך</span></div><div class="stat"><b>${sched.length}</b><span>מאושרים, מתוזמנים</span></div><div class="stat"><b>${pub.length}</b><span>פורסמו היום</span></div><div class="stat"><b>${blocked.length}</b><span>נחסמו בבדיקות</span></div></div>
+${day}
 ${d.groups
   .map((g) => {
     const mode = MODE_HE[g.acc?.mode || 'approve'];
     const posts = [...g.waiting, ...g.scheduled];
-    return `<section class="group" aria-labelledby="g-${esc(g.pack.id)}"><header>${accDot(g.pack.id)}<h2 id="g-${esc(g.pack.id)}">${esc(g.pack.meta.displayName)}</h2><span class="handle ltr">@${esc(g.pack.meta.handle)}</span><span class="end">${g.plan?.cut ? `<span class="chip warn" title="התקציב קצר החודש">${g.plan.perDay} ביום</span> ` : ''}<span class="chip ghost">${esc(mode[0])}</span></span></header>
-${posts.length ? `<div class="posts">${posts.map((p) => postCard(ctx, p, g.pack)).join('')}</div>` : `<div class="empty">${icon('inbox')}<b>אין כאן מה לאשר</b>${g.acc?.status === 'paused' ? 'החשבון מושהה.' : 'הפוסטים של היום ייווצרו בשעת הייצור, או שכבר טופלו.'}</div>`}
+    return `<section class="group" id="g-${esc(g.pack.id)}" aria-labelledby="gh-${esc(g.pack.id)}"><header>${accDot(g.pack.id)}<h2 id="gh-${esc(g.pack.id)}">${esc(g.pack.meta.displayName)}</h2><span class="handle ltr">@${esc(g.pack.meta.handle)}</span><span class="end">${g.waiting.length ? `<span class="chip sig">${g.waiting.length} מחכים</span>` : ''}${g.plan?.cut ? `<span class="chip warn" title="התקציב קצר החודש">${g.plan.perDay} ביום</span>` : ''}<span class="chip ghost" title="${esc(mode[1])}">${esc(mode[0])}</span></span></header>
+${posts.length ? `<div class="posts">${posts.map((p) => postCard(ctx, p, g.pack)).join('')}</div>` : `<div class="empty">${icon('inbox')}<b>אין כאן מה לאשר</b>${g.acc?.status === 'paused' ? 'החשבון מושהה.' : 'הפוסטים הבאים ייכתבו בשעת הייצור היומית.'}</div>`}
 ${g.blocked.length ? `<details class="facts"><summary>${icon('shield')}נחסמו היום בבדיקות <span class="chip bad">${g.blocked.length}</span><span class="chev">${icon('chev')}</span></summary><ul class="factlist">${g.blocked.map((b) => `<li><a href="/post/${esc(b.id)}"><b>${esc(b.hook || b.topic || 'בלי כותרת')}</b></a><div class="muted small">${esc(b.reason)}</div></li>`).join('')}</ul></details>` : ''}
 ${g.published.length ? `<details class="facts"><summary>${icon('check')}פורסמו היום <span class="chip ok">${g.published.length}</span><span class="chev">${icon('chev')}</span></summary><ul class="factlist">${g.published.map((b) => `<li><a href="/post/${esc(b.id)}">${esc(b.hook)}</a> <span class="muted small num">${esc(timeHe(b.published_at))}</span></li>`).join('')}</ul></details>` : ''}
 </section>`;
@@ -199,13 +223,15 @@ ${post.status !== 'taken_down' ? `<details><summary class="muted">${icon('alert'
 ${post.reason ? `<div class="banner ${post.status === 'blocked' || post.status === 'failed' ? 'bad' : 'info'}">${icon('alert')}<div><b>${esc(post.reason)}</b></div></div>` : ''}
 <div class="cols">
 <div>
-<section class="card acc acc-${esc(post.account_id)}"><div class="meta"><span class="chip">${accDot(post.account_id)} ${esc(pack?.meta.displayName || post.account_id)}</span><span class="chip">${esc(formatName(pack, post.format_id))}</span>${post.slot_at ? `<span class="chip">${icon('clock')}${esc(stamp(post.slot_at))}</span>` : ''}</div>
-<h3 class="hook pt10">טיקטוק <span class="muted small">9:16</span></h3>${strip(post, 'tiktok')}
-${post.media?.instagram ? `<h3 class="hook">אינסטגרם <span class="muted small">4:5</span></h3>${strip(post, 'instagram')}` : ''}
-${captionBlock(post)}
-${post.status === 'queued' ? `<div class="actions">${postButton(ctx, `/post/${post.id}/approve`, `${icon('check')}אשר`, { cls: 'btn primary' })}${postButton(ctx, `/post/${post.id}/reject`, `${icon('x')}דחה`, { cls: 'btn ghost', fields: { reason: 'נדחה מדף הפוסט' } })}</div>` : ''}
-${post.status === 'approved' ? `<div class="actions">${postButton(ctx, `/post/${post.id}/publish-now`, 'פרסם עכשיו', { cls: 'btn primary', confirm: 'בטוח? לפרסם עכשיו' })}${postButton(ctx, `/post/${post.id}/unapprove`, 'בטל אישור', { cls: 'btn ghost' })}</div>` : ''}
+<section class="card acc acc-${esc(post.account_id)} post"><div class="meta"><span class="chip">${accDot(post.account_id)} ${esc(pack?.meta.displayName || post.account_id)}</span><span class="chip">${esc(formatName(pack, post.format_id))}</span>${post.slot_at ? `<span class="chip">${icon('clock')}${esc(stamp(post.slot_at))}</span>` : ''}</div>
+${post.sub ? `<p class="subline">${esc(post.sub)}</p>` : ''}
+<h3 class="lbl">טיקטוק <span>9:16</span></h3>${strip(post, 'tiktok')}
+${post.media?.instagram ? `<h3 class="lbl">אינסטגרם <span>4:5</span></h3>${strip(post, 'instagram')}` : ''}
+${trustLine(post)}
+<div class="capwrap">${captionBlock(post)}</div>
 </section>
+${post.status === 'queued' ? `<div class="actionbar">${postButton(ctx, `/post/${post.id}/approve`, `${icon('check')}אשר`, { cls: 'btn primary' })}<a class="btn" href="#edit">${icon('edit')}ערוך</a>${postButton(ctx, `/post/${post.id}/reject`, `${icon('x')}דחה`, { cls: 'btn ghost', fields: { reason: 'נדחה מדף הפוסט' } })}</div>` : ''}
+${post.status === 'approved' ? `<div class="actionbar">${postButton(ctx, `/post/${post.id}/publish-now`, 'פרסם עכשיו', { cls: 'btn primary', confirm: 'בטוח? לפרסם עכשיו' })}${postButton(ctx, `/post/${post.id}/unapprove`, 'בטל אישור', { cls: 'btn ghost' })}</div>` : ''}
 ${['queued', 'approved', 'sample'].includes(post.status) ? edit : ''}
 </div>
 <div>
@@ -380,6 +406,7 @@ ${budgetPanel(ctx, d)}
 <dt>מתג פרסום חי</dt><dd>${d.liveSwitch ? '<span class="chip ok">PUBLISH_MODE=live</span>' : '<span class="chip ghost">כבוי: הכל יבש</span>'}</dd>
 ${d.publishers.map((p) => `<dt>${esc(p.name)}</dt><dd>${p.platforms.map((x) => `${PLATFORM_HE[x.platform] || x.platform}: ${publisherHe(x)}`).join(' · ')}</dd>`).join('')}</dl></section>
 ${d.instagram.length ? `<section class="panel"><header><h2>אינסטגרם ישירות (Meta Graph API)</h2></header><ul class="factlist">${d.instagram.map((x) => `<li>${accDot(x.id)} <b>${esc(x.name)}</b> ${x.configured ? '<span class="chip ok">מחובר</span>' : `<span class="chip ghost">חסר ${!x.userId ? 'instagram.userId ב-pack.json' : `<code class="ltr">${esc(x.tokenEnv)}</code>`}</span>`} <span class="muted small">${x.auth === 'instagram' ? 'Instagram Login' : 'Facebook Login (עמוד פייסבוק)'}${x.daysLeft != null ? ` · האסימון בתוקף עוד ${x.daysLeft} ימים` : ''}</span></li>`).join('')}</ul><p class="muted small">בדיקה מלאה של האסימון, החשבון ונתוני ה-insights: <code class="ltr">npm run instagram:check</code></p></section>` : ''}
+<section class="panel"><header><h2>החשבון שלך</h2></header><p class="muted m0">שם המשתמש: <b>${esc(ctx.user?.name || '')}</b></p><div class="actions p0 mt12">${postButton(ctx, '/logout', `${icon('logout')}יציאה`, { cls: 'btn danger' })}</div></section>
 <section class="panel"><header><h2>משתמשים</h2></header><ul class="factlist">${d.users.map((u) => `<li><b>${esc(u.name)}</b> <span class="chip ghost">${esc(ROLE_HE[u.role] || u.role)}</span> <span class="muted small">${u.last_login_at ? `נכנס ${esc(stamp(u.last_login_at))}` : ''}</span></li>`).join('')}</ul><p class="muted small">משתמש נוסף: <code class="ltr">npm run user:add -- name</code></p></section>
 <section class="panel"><header><h2>יומן פעולות</h2></header><ol class="trace">${d.audit.map((a) => `<li class="ok"><b>${esc(AUDIT_HE[a.action] || a.action)}</b> <span class="muted small">${esc(a.actor)} · ${esc(stamp(a.at))}${a.account_id ? ` · ${esc(a.account_id)}` : ''}</span></li>`).join('')}</ol></section>
 </div></div>`;
@@ -387,19 +414,21 @@ ${d.instagram.length ? `<section class="panel"><header><h2>אינסטגרם יש
 }
 
 export function morePage(ctx) {
-  const body = `<div class="head"><h1>עוד</h1></div><div class="accounts">
-<a class="card acct plain" href="/new"><div class="title">${icon('plus')}<h2>חשבון חדש</h2></div><p class="muted m0">ממקור ועד חמישה פוסטים לדוגמה</p></a>
-<a class="card acct plain" href="/settings"><div class="title">${icon('settings')}<h2>הגדרות</h2></div><p class="muted m0">כיבוי כללי, תקציב, מפתחות, משתמשים</p></a></div>`;
+  const row = (href, ic, t, sub) => `<a href="${href}"><span class="ico">${icon(ic)}</span><span class="t"><b>${t}</b><small>${sub}</small></span><span class="go">${icon('chev')}</span></a>`;
+  const body = `<div class="head"><h1>עוד</h1></div><nav class="list" aria-label="עוד">
+${row('/new', 'plus', 'חשבון חדש', 'ממקור ועד חמישה פוסטים לדוגמה')}
+${row('/settings', 'settings', 'הגדרות', 'כיבוי כללי, תקציב, מפתחות, משתמשים')}
+<form method="post" action="/logout">${csrfField(ctx)}<button class="danger" type="submit"><span class="ico">${icon('logout')}</span><span class="t"><b>יציאה</b></span></button></form></nav>`;
   return layout({ ...ctx, title: 'עוד', active: 'more' }, body);
 }
 
-export function loginPage({ error = null, theme = null } = {}) {
-  return `<!doctype html><html lang="he" dir="rtl"${theme ? ` data-theme="${esc(theme)}"` : ''}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>כניסה · תדר</title><link rel="stylesheet" href="/static/style.css"><link rel="icon" href="/static/icon.svg" type="image/svg+xml"></head>
+export function loginPage({ error = null } = {}) {
+  return `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="color-scheme" content="light dark"><meta name="theme-color" content="#f2f3f5" media="(prefers-color-scheme: light)"><meta name="theme-color" content="#0b0c0e" media="(prefers-color-scheme: dark)"><title>כניסה · תדר</title><link rel="stylesheet" href="/static/style.css"><link rel="icon" href="/static/icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/static/icon-180.png"><link rel="manifest" href="/static/manifest.webmanifest"></head>
 <body class="login"><form class="card" method="post" action="/login">
-<a class="brand" href="/login"><span class="mark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12c2.5-6 4.5-6 7 0s4.5 6 7 0 4-6 6 0"/></svg></span><span><b>תדר</b><small>open frequency</small></span></a>
-<p>שולחן האישורים. כל פוסט, כל עובדה, כל מקור.</p>
+<div class="hero"><span class="mark" aria-hidden="true"><svg viewBox="0 0 100 100">${markDots(true)}</svg></span><b>תדר</b></div>
+<p>שולחן האישורים: כל פוסט, כל עובדה, כל מקור.</p>
 ${error ? `<div class="err" role="alert">${esc(error)}</div>` : ''}
-<label class="f">שם משתמש<input type="text" name="user" autocomplete="username" required dir="ltr"></label>
+<label class="f">שם משתמש<input type="text" name="user" autocomplete="username" autocapitalize="off" spellcheck="false" required dir="ltr"></label>
 <label class="f">סיסמה<input type="password" name="password" autocomplete="current-password" required dir="ltr"></label>
 <button class="btn primary" type="submit">כניסה</button></form></body></html>`;
 }

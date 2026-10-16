@@ -121,6 +121,8 @@ export function createHandler(ctx, { port, env = process.env, limiter = createLi
         if (p === '/static/style.css') return send(req, res, 200, readFileSync(path.join(STATIC, 'style.css')), 'text/css; charset=utf-8', { 'cache-control': 'public, max-age=3600' });
         if (p === '/static/app.js') return send(req, res, 200, readFileSync(path.join(STATIC, 'app.js')), 'text/javascript; charset=utf-8', { 'cache-control': 'public, max-age=3600' });
         if (p === '/static/icon.svg') return send(req, res, 200, readFileSync(path.join(STATIC, 'icon.svg')), 'image/svg+xml', { 'cache-control': 'public, max-age=86400' });
+        if (p === '/static/icon-180.png' || p === '/static/icon-512.png') return send(req, res, 200, readFileSync(path.join(STATIC, path.basename(p))), 'image/png', { 'cache-control': 'public, max-age=86400' });
+        if (p === '/static/manifest.webmanifest') return send(req, res, 200, readFileSync(path.join(STATIC, 'manifest.webmanifest')), 'application/manifest+json; charset=utf-8', { 'cache-control': 'public, max-age=86400' });
         if (p === '/static/fonts/Assistant.ttf') return send(req, res, 200, readFileSync(path.join(assetsDir, 'fonts', 'Assistant.ttf')), 'font/ttf', { 'cache-control': 'public, max-age=31536000, immutable' });
         if (p === '/healthz') return send(req, res, 200, 'ok', 'text/plain; charset=utf-8');
       }

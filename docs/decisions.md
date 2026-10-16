@@ -1095,3 +1095,20 @@ engine can act on, and what changed:
   which cut a judoka's face out of a wide picture where she stood to one side: the
   screen now reports where the main face is, and the cover's halves, like a cover
   photograph, are aimed at it.
+
+- **The desk redesigned: a level meter in dots, cobalt for approving, red only for
+  what cannot be undone (2026-10-16, the owner's call on the mark).** The mark is a
+  level meter in dots (one peak: the moment a post goes out), chosen by the owner
+  from eight directions; the lighter five-column version stands in where it is
+  small (the tab, the bar). The same dots tell each account's day on Today: a ring
+  waits for you, a ring with a centre is scheduled, a disc went out, a square was
+  stopped, so colour is never the only difference. The approve button was the
+  orange of the brand, a shade from the red of reject and of the kill switch: it is
+  now cobalt, and red means only what cannot be undone. Surfaces are neutral, so
+  each account's slides carry the colour. A post card leads with its decision
+  (headline, slides, what the checks found in one line, the buttons), with the
+  captions and facts folded below; a post's own page keeps its buttons in a bar in
+  thumb reach. The site follows the system's light or dark setting and has no
+  switch of its own; signing out moved to Settings; the five sections are the same
+  on a phone and a desk, with no More tab. Measured: every text colour 4.75:1 or
+  more on its surface, light and dark; nothing scrolls sideways at 320 pixels.
