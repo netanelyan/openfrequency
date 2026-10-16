@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 // npm run zernio:check                       validate the key and every pack's TikTok account id
-// npm run zernio:check -- --pack <id> --send-private --confirm
+// npm run zernio:check -- --pack <id> --send-private --confirm [--ai-flag]
 //                                            and send ONE post to that pack's TikTok account,
-//                                            privately (SELF_ONLY), with the AI flag set
+//                                            privately (SELF_ONLY), as the runner would send it
+//                                            (the AI flag only when the post carries one;
+//                                            --ai-flag sets it anyway, to test the flag itself)
 //
 // Without --send-private it only reads: the key, the connected accounts, which
 // pack points at which, and what Zernio will bill for them. With it, it sends the
@@ -83,7 +85,7 @@ function newestPost() {
   for (const file of [path.join(dataDir(), 'openfrequency.db'), path.join(dataDir(), `dry-${pack.id}.db`)]) {
     if (!existsSync(file)) continue;
     const db = file.endsWith('openfrequency.db') ? openDb() : new Db(file);
-    const row = db.get("SELECT id, hook, caption, media_json FROM posts WHERE account_id = ? AND media_json IS NOT NULL ORDER BY created_at DESC LIMIT 1", pack.id);
+    const row = db.get("SELECT id, hook, caption, media_json, ai_label FROM posts WHERE account_id = ? AND media_json IS NOT NULL ORDER BY created_at DESC LIMIT 1", pack.id);
     const media = j(row?.media_json, {});
     if (row && media.tiktok?.length >= 2 && media.tiktok.every((f) => existsSync(f))) return { ...row, files: media.tiktok };
   }
@@ -94,13 +96,16 @@ if (!post) (say(false, `no rendered post for ${pack.id}: run npm run dry -- --pa
 const token = `zernio-check-${randomBytes(6).toString('hex')}`;
 const dir = ensureDir(path.join(dataDir(), 'public', token));
 const urls = post.files.map((f) => (copyFileSync(f, path.join(dir, path.basename(f))), `${base}/${token}/${path.basename(f)}`));
-say(null, `sending "${post.hook}" (${urls.length} slides) to TikTok, SELF_ONLY, with video_made_with_ai set directly`);
+// As the runner would send it: the AI flag only on a post that carries a realistic AI image (TikTok refuses the flag on
+// a business account's photo post, so the engine sends those as drafts), unless --ai-flag asks to test the flag itself.
+const aiLabel = flag('ai-flag') || Boolean(post.ai_label);
+say(null, `sending "${post.hook}" (${urls.length} slides) to TikTok, SELF_ONLY, ${aiLabel ? 'with video_made_with_ai set directly' : 'without the AI flag (the post has no AI image)'}`);
 
 let res;
 try {
-  res = await publishZernio({ platform: 'tiktok', accountId, caption: `${post.caption}\n\nבדיקה פרטית`, imageUrls: urls, privacy: 'SELF_ONLY', aiLabel: true, title: post.hook, aiAsDraft: false });
+  res = await publishZernio({ platform: 'tiktok', accountId, caption: `${post.caption}\n\nבדיקה פרטית`, imageUrls: urls, privacy: 'SELF_ONLY', aiLabel, title: post.hook, aiAsDraft: false });
   say(true, `accepted: Zernio post ${res.zernioId}, TikTok status "${res.status}"${res.url ? `, ${res.url}` : ''}`);
-  say(true, 'the AI flag was accepted on a photo post (no draft needed)');
+  if (aiLabel) say(true, 'the AI flag was accepted on a photo post (no draft needed)');
 } catch (e) {
   const aiRefused = e instanceof ZernioError && /ai|made_with|label|disclos/i.test(e.message);
   say(false, `refused at ${e.step || 'create'}: ${e.message}`);
