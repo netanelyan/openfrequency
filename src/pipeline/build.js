@@ -940,9 +940,13 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
   }
 }
 
-/** A head-to-head whose outline names two people (or places) to photograph, on an account whose covers carry photographs. */
+/**
+ * A head-to-head on an account whose covers carry photographs: its two sides are two faces, both found, or it is
+ * another matchup. An outline that left one side's photograph unnamed once slipped past the check and went out with
+ * the drawn cover the owner had ruled out.
+ */
 export function needsSides(pack, format, outline) {
-  return Boolean(pack.theme.options?.coverPhoto && (pack.meta.imagery?.providers || []).length && kindName(format) === 'head-to-head' && outline?.imageQuery && outline?.imageQueryB);
+  return Boolean(outline && pack.theme.options?.coverPhoto && (pack.meta.imagery?.providers || []).length && kindName(format) === 'head-to-head');
 }
 
 /**
