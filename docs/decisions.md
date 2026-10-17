@@ -1126,3 +1126,19 @@ engine can act on, and what changed:
   a source the pack's file no longer lists was still read every day from the
   database, because syncing only added and updated: it is now marked removed
   (a source the owner added on the website stays).
+
+- **A TikTok post's sound comes from the trending library chart, not TikTok's
+  pick (2026-10-17, the owner's call).** With `auto_add_music`, TikTok put sounds
+  on one account's photo posts that nobody listens to. Through the API a business
+  account can attach only a Commercial Music Library track; Zernio lists the 100
+  trending ones for a country, ranked. That is royalty-free library music, not
+  the viral songs: those can be added only by hand in the TikTok app, and the
+  owner chose automatic over sending every post there as a draft. Each post takes
+  the best-ranked track on the chart with a clip of 15 seconds or more that the
+  account has not used on its last five posts, from the top ten. The chart is
+  read through one new door rule (a GET of Zernio's `tiktok/commercial-music`)
+  and kept for six hours. When it cannot be read, TikTok picks as before; a draft
+  (an AI image) keeps TikTok's pick too, since TikTok ignores a track on a draft.
+  In `pack.json`, `zernio.soundCountry` names the chart (`IL` by default) and
+  `zernio.sound: "auto"` goes back to TikTok's pick. `zernio:check` shows each
+  pack's next sound and sends its private test post with it.

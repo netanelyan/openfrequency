@@ -4,6 +4,7 @@ import path from 'node:path';
 import { now, nowIso } from '../core/clock.js';
 import { dataDir, ensureDir, outDir } from '../core/paths.js';
 import { audit, settings, step } from '../core/store.js';
+import { j } from '../db/index.js';
 import { restAt } from '../schedule/shabbat.js';
 import { israelDate } from '../schedule/israel.js';
 import { verifyFact } from '../verify/claims.js';
@@ -11,7 +12,7 @@ import { formatOfPost, gateDraft, loadPost, postDraft } from '../pipeline/build.
 import { exportPost } from '../pipeline/export.js';
 import { imageCredit, waitingImages } from '../images/index.js';
 import { canRun, pauseAccount, publishErrorStreak } from '../autonomy/rails.js';
-import { isStrike, postBody, publishZernio, zernioConfigured } from './zernio.js';
+import { isStrike, postBody, publishZernio, trendingSound, zernioConfigured } from './zernio.js';
 import { instagramConfigured, isRefusal, isThrottle, isTokenProblem, publishInstagram } from './instagram.js';
 
 // Publishing one approved post, through the rails, to each of its pack's
@@ -98,6 +99,23 @@ function publicUrls(post, platform) {
   });
 }
 
+/** Sound ids on the account's last few TikTok posts: the next post takes another. */
+const RECENT_SOUNDS = 5;
+
+/**
+ * A trending Commercial Music Library track for the pack's next TikTok post, or
+ * null for TikTok's own pick. `zernio.sound: "auto"` in pack.json keeps TikTok's
+ * pick; `zernio.soundCountry` names the chart (Israel's by default).
+ */
+async function soundFor(db, pack, accountId) {
+  if (pack.meta.zernio?.sound === 'auto' || !accountId) return null;
+  const recent = db
+    .all("SELECT publish_json FROM posts WHERE account_id = ? AND status = 'published' ORDER BY published_at DESC LIMIT ?", pack.id, RECENT_SOUNDS)
+    .map((r) => j(r.publish_json, {}).tiktok?.sound?.id)
+    .filter(Boolean);
+  return trendingSound(accountId, { countryCode: pack.meta.zernio?.soundCountry || 'IL', recent });
+}
+
 export async function publishPost(ctx, postId, { t = now() } = {}) {
   const { db } = ctx;
   const post = loadPost(db, postId);
@@ -136,14 +154,16 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
     vias[platform] = via;
     try {
       if (via === 'zernio') {
+        const accountId = pack.meta.zernio?.accounts?.[platform];
         results[platform] = await publishZernio({
           platform,
-          accountId: pack.meta.zernio?.accounts?.[platform],
+          accountId,
           caption: captionFor(platform),
           imageUrls: publicUrls(post, platform),
           privacy: pack.meta.zernio?.tiktokPrivacy || 'SELF_ONLY',
           aiLabel: Boolean(post.ai_label),
           title: post.hook,
+          sound: platform === 'tiktok' ? await soundFor(db, pack, accountId) : null,
         });
       } else if (via === 'instagram') {
         results[platform] = await publishInstagram(db, pack, { caption: captionFor(platform), imageUrls: publicUrls(post, platform), aiLabel: Boolean(post.ai_label), priorCreationId: results[platform]?.creationId || null });

@@ -68,6 +68,7 @@ export const WRITE_RULES = [
 export const READ_RULES = [
   { host: 'www.googleapis.com', path: /^\/youtube\/v3\/(search|videos)$/, why: 'YouTube Data API: Shorts and their public counts, read only' },
   { host: 'zernio.com', path: /^\/api\/v1\/(posts\/[A-Za-z0-9_-]+|accounts|analytics)$/, why: 'Zernio: our own posts, accounts and analytics' },
+  { host: 'zernio.com', path: /^\/api\/v1\/accounts\/[A-Za-z0-9_-]+\/tiktok\/commercial-music$/, why: "Zernio: TikTok's trending Commercial Music Library chart, for a post's sound" },
   { host: 'i.ytimg.com', why: 'YouTube thumbnails' },
   // A token reads only what it was granted: our own account, our own media.
   { host: 'graph.facebook.com', path: new RegExp(`^${V}\\/(\\d+|\\d+\\/(insights|content_publishing_limit|media)|me|me\\/accounts|debug_token|oauth\\/access_token)$`), why: 'Instagram (Facebook Login): our account, our media and their insights, the quota, our token' },

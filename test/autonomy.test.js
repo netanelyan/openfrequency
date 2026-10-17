@@ -7,7 +7,7 @@ import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
 import { buildPost } from '../src/pipeline/build.js';
 import { publishPost, PublishRefused } from '../src/publish/index.js';
-import { postBody, AI_CAPTION_LINE } from '../src/publish/zernio.js';
+import { postBody, pickSound, AI_CAPTION_LINE } from '../src/publish/zernio.js';
 import { tick } from '../src/autonomy/runner.js';
 import { publishErrorStreak, pauseAccount, liftBudgetPauses } from '../src/autonomy/rails.js';
 import { collectMetrics } from '../src/metrics/collect.js';
@@ -165,6 +165,27 @@ test('AI disclosure: a realistic AI image sets TikTok\'s flag and adds a caption
   assert.ok(ig.content.endsWith(AI_CAPTION_LINE));
   const plain = postBody({ platform: 'tiktok', accountId: 'x', caption: 'c', imageUrls: ['a', 'b'], aiLabel: false });
   assert.equal(plain.tiktokSettings.video_made_with_ai, undefined);
+});
+
+test("sound: a trending library track replaces TikTok's pick, never twice in a row, and a draft keeps TikTok's pick", () => {
+  const chart = [
+    { id: 'c1', rank: 1, clipSec: 36 },
+    { id: 'c2', rank: 2, clipSec: 1 },
+    { id: 'c3', rank: 3, clipSec: 60 },
+  ];
+  assert.equal(pickSound(chart).id, 'c1', 'the best-ranked track');
+  assert.equal(pickSound(chart, ['c1']).id, 'c3', 'not one the account used lately, and not a clip too short to carry the slides');
+  assert.equal(pickSound(chart, ['c1', 'c3']).id, 'c1', 'every top track used lately: the best one again');
+  assert.equal(pickSound([]), null);
+  const tt = postBody({ platform: 'tiktok', accountId: 'x', caption: 'c', imageUrls: ['a', 'b'], sound: { id: 'c1' } });
+  assert.deepEqual(tt.tiktokSettings.musicSoundInfo, { musicSoundId: 'c1' });
+  assert.equal(tt.tiktokSettings.auto_add_music, false);
+  const none = postBody({ platform: 'tiktok', accountId: 'x', caption: 'c', imageUrls: ['a', 'b'] });
+  assert.equal(none.tiktokSettings.auto_add_music, true);
+  assert.equal(none.tiktokSettings.musicSoundInfo, undefined);
+  const draft = postBody({ platform: 'tiktok', accountId: 'x', caption: 'c', imageUrls: ['a', 'b'], aiLabel: true, sound: { id: 'c1' } });
+  assert.equal(draft.tiktokSettings.musicSoundInfo, undefined, 'TikTok ignores a track on a draft');
+  assert.equal(draft.tiktokSettings.auto_add_music, true);
 });
 
 test('metrics: only what the API gave is stored, TikTok has no saves, scores count at 72 hours', async () => {

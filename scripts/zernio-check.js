@@ -21,7 +21,7 @@ import { loadEnv, isSet } from '../src/core/env.js';
 import { dataDir, ensureDir } from '../src/core/paths.js';
 import { loadAll } from '../src/packs/load.js';
 import { openDb, Db, j } from '../src/db/index.js';
-import { publishZernio, zernioAccounts, zernioAnalytics, ZernioError } from '../src/publish/zernio.js';
+import { pickSound, publishZernio, soundChart, zernioAccounts, zernioAnalytics, ZernioError } from '../src/publish/zernio.js';
 import { wantedPublisher } from '../src/publish/index.js';
 
 loadEnv();
@@ -61,6 +61,16 @@ for (const pack of packs) {
     else if (a.platform !== platform) (bad++, say(false, `${pack.id}: ${id} is a ${a.platform} account, not ${platform}`));
     else if (!a.active) (bad++, say(false, `${pack.id}: ${platform} @${a.username} needs reconnecting in Zernio`));
     else say(true, `${pack.id}: ${platform} → @${a.username} (${id})`);
+    if (platform === 'tiktok' && a && pack.meta.zernio?.sound !== 'auto') {
+      const country = pack.meta.zernio?.soundCountry || 'IL';
+      try {
+        const t = pickSound(await soundChart(id, country));
+        if (t) say(true, `${pack.id}: the next post's sound, from the ${country} chart: #${t.rank} "${t.name}" by ${t.artist}`);
+        else say(null, `${pack.id}: the ${country} chart has no usable track: TikTok will pick the sound`);
+      } catch (e) {
+        say(null, `${pack.id}: the trending music chart could not be read (${e.message}): TikTok will pick the sound`);
+      }
+    }
   }
   if ((pack.meta.zernio?.tiktokPrivacy || 'SELF_ONLY') !== 'SELF_ONLY') say(null, `${pack.id}: tiktokPrivacy is ${pack.meta.zernio.tiktokPrivacy}: posts from the runner will be public`);
 }
@@ -101,15 +111,27 @@ const urls = post.files.map((f) => (copyFileSync(f, path.join(dir, path.basename
 const aiLabel = flag('ai-flag') || Boolean(post.ai_label);
 say(null, `sending "${post.hook}" (${urls.length} slides) to TikTok, SELF_ONLY, ${aiLabel ? 'with video_made_with_ai set directly' : 'without the AI flag (the post has no AI image)'}`);
 
+let sound = null;
+if (pack.meta.zernio?.sound !== 'auto') {
+  try {
+    sound = pickSound(await soundChart(accountId, pack.meta.zernio?.soundCountry || 'IL'));
+  } catch (e) {
+    say(null, `the trending music chart could not be read (${e.message})`);
+  }
+}
+say(null, sound ? `with the sound #${sound.rank} "${sound.name}" by ${sound.artist}` : 'with TikTok picking the sound');
+
 let res;
 try {
-  res = await publishZernio({ platform: 'tiktok', accountId, caption: `${post.caption}\n\nבדיקה פרטית`, imageUrls: urls, privacy: 'SELF_ONLY', aiLabel, title: post.hook, aiAsDraft: false });
+  res = await publishZernio({ platform: 'tiktok', accountId, caption: `${post.caption}\n\nבדיקה פרטית`, imageUrls: urls, privacy: 'SELF_ONLY', aiLabel, title: post.hook, aiAsDraft: false, sound });
   say(true, `accepted: Zernio post ${res.zernioId}, TikTok status "${res.status}"${res.url ? `, ${res.url}` : ''}`);
+  if (sound) say(true, 'TikTok took the Commercial Music Library track');
   if (aiLabel) say(true, 'the AI flag was accepted on a photo post (no draft needed)');
 } catch (e) {
   const aiRefused = e instanceof ZernioError && /ai|made_with|label|disclos/i.test(e.message);
   say(false, `refused at ${e.step || 'create'}: ${e.message}`);
   if (aiRefused) say(null, 'the refusal names the AI flag: keep posts with an AI image as drafts (the engine does this by default)');
+  if (sound && /music|sound|audio|song|clip/i.test(e.message)) say(null, 'the refusal names the sound: set "sound": "auto" under zernio in pack.json to let TikTok pick');
   process.exit(1);
 }
 

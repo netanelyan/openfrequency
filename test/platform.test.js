@@ -124,6 +124,7 @@ test('the door allows what the engine needs and nothing else', () => {
     ['POST', 'https://zernio.com/api/v1/posts'],
     ['GET', 'https://zernio.com/api/v1/posts/abc123'],
     ['GET', 'https://zernio.com/api/v1/analytics'],
+    ['GET', 'https://zernio.com/api/v1/accounts/abc123/tiktok/commercial-music?countryCode=IL'],
     ['GET', 'https://www.googleapis.com/youtube/v3/search'],
     ['GET', 'https://www.example.org/feed.xml'],
     ['GET', 'https://commons.wikimedia.org/w/api.php'],
