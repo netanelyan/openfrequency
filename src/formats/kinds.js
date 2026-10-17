@@ -252,7 +252,13 @@ export function kindProblems(format, post) {
       // A graphic's value can be words around its number ("כ-10 ימים").
       const from = [...(v != null ? numbersIn(String(v), { hebrew: true }) : []), ...numbersIn(String(s.body || ''), { hebrew: true }), ...numbersIn(String(s.title || ''), { hebrew: true })];
       const n = from.map((x) => Number(String(x).replace(/,/g, ''))).find((x) => Number.isFinite(x) && !(x >= 1900 && x <= 2100));
-      return n ?? null;
+      if (n == null) return null;
+      // "650 מיליון" and "6.5 מיליארד" are ranked as amounts, not as 650 and 6.5.
+      const text = [v, s.body, s.title].filter((x) => x != null).join(' ');
+      const plain = text.replace(/(\d),(?=\d{3})/g, '$1');
+      const unit = new RegExp(`(?<![\\d.])${String(n).replace('.', '\\.')}\\s*(טריליון|מיליארד|מיליון|אלף|trillion|billion|million|thousand|[TBMK](?![a-z]))`, 'i').exec(plain)?.[1]?.toLowerCase();
+      const SCALE = { טריליון: 1e12, trillion: 1e12, t: 1e12, מיליארד: 1e9, billion: 1e9, b: 1e9, מיליון: 1e6, million: 1e6, m: 1e6, אלף: 1e3, thousand: 1e3, k: 1e3 };
+      return n * (SCALE[unit] || 1);
     };
     // A year is not the number that ranks a place: number 1 of the World Cup's scorers went out with "2022 and 2026"
     // and no goal count, under four places that showed theirs.

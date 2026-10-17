@@ -281,3 +281,12 @@ test('a head-to-head of two people needs both faces, and a matchup refused for o
   const user = outlineUser(fmt('head-to-head'), [{ ref: 'D1', title: 't', url: 'u', text: 'x' }], { faceless: ['וולקנובסקי / אבלויב'] });
   assert.ok(user.includes('no licensed photograph of one side') && user.includes('וולקנובסקי / אבלויב'));
 });
+
+test('a ranking of amounts in millions and billions is ordered by the amount, not by the bare number', () => {
+  const rank = (body) => ({ role: 'rank', title: 'x', body, visual: null });
+  const post = (bodies) => ({ hook: 'h', sub: '', slides: bodies.map(rank) });
+  const ok = post(['450 מיליון דולר.', '650 מיליון דולר.', '6.5 מיליארד דולר.', '14.8 מיליארד דולר.', '32 מיליארד דולר.']);
+  assert.ok(!kindProblems({ kind: 'ranking' }, ok).some((m) => /order/.test(m)), 'five deals that rise from 450 million to 32 billion');
+  const wrong = post(['6.5 מיליארד', '650 מיליון', '14.8 מיליארד', '1,200 מיליון', '32 מיליארד']);
+  assert.ok(kindProblems({ kind: 'ranking' }, wrong).some((m) => /order/.test(m)), '1,200 million is less than 14.8 billion');
+});
