@@ -298,7 +298,8 @@ export function joinCaption(caption, question) {
   // A caption that already ends on a question takes no second one: two in a row read as a
   // bot (a blind review caught "the same question twice"), even when the words differ.
   if (!q || (c && flat(c).endsWith(flat(q))) || /\?\s*$/.test(c)) return c;
-  return [c, q].filter(Boolean).join(' ');
+  // A short caption may end without a full stop; the question still starts a sentence of its own.
+  return [c && !/[.!?:"')]$/.test(c) ? `${c}.` : c, q].filter(Boolean).join(' ');
 }
 
 /**

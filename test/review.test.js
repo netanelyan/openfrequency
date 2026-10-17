@@ -117,4 +117,6 @@ test('a generic closing question is dropped in code, and a question already in t
   assert.equal(joinCaption('הבזיליקום אוהב שמש.', 'ידעתם את זה?'), 'הבזיליקום אוהב שמש.');
   assert.equal(joinCaption('הבזיליקום אוהב שמש. כבר ניסיתם?', 'כבר ניסיתם?'), 'הבזיליקום אוהב שמש. כבר ניסיתם?');
   assert.equal(joinCaption('הבזיליקום אוהב שמש.', 'איזה צמח הכי קשה לכם לשמור בחיים?'), 'הבזיליקום אוהב שמש. איזה צמח הכי קשה לכם לשמור בחיים?');
+  // A caption with no full stop of its own does not run into the question.
+  assert.equal(joinCaption('Air Canada ניסתה להתנער ממנו', 'הייתם סומכים על צ׳טבוט?'), 'Air Canada ניסתה להתנער ממנו. הייתם סומכים על צ׳טבוט?');
 });
