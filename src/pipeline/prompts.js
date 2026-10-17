@@ -171,6 +171,10 @@ function formatLine(f) {
 export function packBlock(pack, { ttl = '5m' } = {}) {
   const banned = [...CONNECTIVES, ...FORMAL, ...FILLER].map((t) => t.p).concat(pack.rules.bannedPhrases || []);
   const legacy = (pack.formats.formats || []).every((f) => kindName(f) === 'list');
+  // An account that asked for short captions gets a tease, not a summary.
+  const capLong = limitsFor('captionLong', pack);
+  const capShort = limitsFor('captionShort', pack);
+  const shortCaps = capLong.maxChars < LIMITS.captionLong.maxChars;
   return {
     cache: ttl,
     text: `You plan and write Hebrew social slideshow posts for one account, from source documents.
@@ -202,7 +206,7 @@ EVERY POST:
 - Talk like a friend, in spoken Hebrew: the spoken imperative (תעקבו, תשמרו, תשלחו, תכתבו, תנחשו), never the formal one (עקבו, שמרו, שלחו, כתבו, נחשו), and the everyday word over the formal one (פאונד, not ליברה).
 - A claim of "the only", "the first", "never" or "every" keeps every condition its fact has: "the only player to win all six" shortened to three of them is false. Keep the whole list, or drop the "only".
 - Name what the post is about (the product, the person, the club, the fight) on the cover or the first slide: a post that never says whose story it is reads as a riddle nobody asked for.
-- caption: the TikTok caption, 200 to 600 characters: what the post is about in the words people search for, and a line on why it matters. The post's best fact, quote or twist is on a slide, never only in the caption, and the caption promises nothing the slides do not show ("what Cavani said years later" with no slide that says it reads as a broken promise). captionShort: the Instagram caption, 60 to 200 characters (the design puts the cover line before it). Neither has hashtags, links or a question.
+- caption: the TikTok caption, ${shortCaps ? `${capLong.minChars} to ${capLong.maxChars} characters: short and catchy, one or two lines that make them open the post (a tease or the stakes, never a summary of it), with the names people search for` : '200 to 600 characters: what the post is about in the words people search for, and a line on why it matters'}. The post's best fact, quote or twist is on a slide, never only in the caption, and the caption promises nothing the slides do not show ("what Cavani said years later" with no slide that says it reads as a broken promise). captionShort: the Instagram caption, ${capShort.maxChars < LIMITS.captionShort.maxChars ? `up to ${capShort.maxChars} characters, one catchy line` : '60 to 200 characters'} (the design puts the cover line before it). Neither has hashtags, links or a question.
 
 VISUALS: a post is pictures as much as words, never a deck of text cards. At least half of the slides carry a visual: the cover always has one, and the request says how many content slides need one. A content slide's "visual" is data the design draws as a graphic; its numbers are claims like the slide's own, held to the facts the slide cites. A head-to-head "stat" slide's two values are already its visual (give it type "none"). The graphics this account draws:
 ${visualsPrompt(pack)}
@@ -352,6 +356,7 @@ export const visualsNeeded = (n) => Math.max(0, Math.ceil((n + 1) / 2) - 1);
 export function slidesUser({ format, n, outline, facts, edits = [], problems = [], lastDraft = null, hook = null, cta = null, day = null, pack = null }) {
   const legacy = kindName(format) === 'list';
   const body = limitsFor('slideBody', pack);
+  const sub = limitsFor('sub', pack);
   const end = pack?.meta?.endSlide?.title;
   return [
     `${formatHead(format, n)}`,
@@ -360,6 +365,7 @@ export function slidesUser({ format, n, outline, facts, edits = [], problems = [
     format.trend ? `Cover lines that fit this post: ${format.hooks.join(' / ')}` : '',
     end && !legacy ? 'The design adds a closing slide that asks them to follow the account: no slide asks to save, send, follow or comment.' : cta && !legacy ? `The design ends the last slide with this call to action, so the slides do not say it: "${cta.text}"` : '',
     body.maxChars < LIMITS.slideBody.maxChars ? `TEXT: this account keeps slides short. A slide's body is at most ${body.maxChars} characters and ${body.sentences} sentences: one point, the words a fan would say, no number the point does not need.` : '',
+    sub.maxChars < LIMITS.sub.maxChars ? `SUB: the line under the cover is at most ${sub.maxChars} characters, one punchy line that makes them swipe (the stakes or a tease, never an explanation of the topic), or "".` : '',
     !legacy ? `VISUALS: at least ${visualsNeeded(n)} of the ${n} content slides carry a visual (a stat slide's two values count).` : '',
     `TOPIC: ${outline.topic}`,
     !legacy && outline.subject ? `SUBJECT: ${Object.entries(outline.subject).filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`).join(', ') || '(none)'}` : '',

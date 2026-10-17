@@ -1112,3 +1112,17 @@ engine can act on, and what changed:
   switch of its own; signing out moved to Settings; the five sections are the same
   on a phone and a desk, with no More tab. Measured: every text colour 4.75:1 or
   more on its surface, light and dark; nothing scrolls sideways at 320 pixels.
+
+- **An account can ask for short, catchy text; a topic can name its format; a
+  source taken out of a pack is no longer read (2026-10-17).** An owner read a post
+  whose line under the cover explained the whole topic in two long sentences, and
+  asked for descriptions that are "short and catchy, not long and informative".
+  The line under the cover is now its own kind of text with its own limits, and an
+  account can lower the minimum of TikTok's caption (200 characters, for its
+  search) and the maximum of both captions in `writing`, as it could already
+  shorten a slide; the prompt then asks for a tease, not a summary. The engine's
+  own defaults are unchanged. A topic in the bank can name one format of its kind
+  (`format`), so a story about a new tool is not drafted as a disaster story. And
+  a source the pack's file no longer lists was still read every day from the
+  database, because syncing only added and updated: it is now marked removed
+  (a source the owner added on the website stays).

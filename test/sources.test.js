@@ -113,3 +113,15 @@ test("a long article can keep its lead and a section far below it, as a fighter'
   assert.ok(out.includes('Ten successful title defenses') && out.includes('Mixed martial arts'));
   assert.ok(!out.includes('xxxx') && !out.includes('References'));
 });
+
+test("a source taken out of the pack's file is no longer read; one the owner added on the website stays", async () => {
+  const { syncAccounts } = await import('../src/packs/load.js');
+  const db = new Db(':memory:');
+  const src = (id) => ({ id, type: 'web', url: `https://www.example.com/${id}`, name: id, why: 'w', approvedAt: '2026-10-17' });
+  const pk = (ids) => ({ id: 'acct', meta: { displayName: 'a', handle: 'a' }, sources: { sources: ids.map(src) } });
+  syncAccounts(db, [pk(['kept', 'dropped'])]);
+  db.insert('sources', { account_id: 'acct', key: 'mine', type: 'web', url: 'https://www.example.com/m', name: 'm', status: 'approved', origin: 'manual', created_at: 'x' });
+  syncAccounts(db, [pk(['kept'])]);
+  const status = Object.fromEntries(db.all('SELECT key, status FROM sources').map((r) => [r.key, r.status]));
+  assert.deepEqual(status, { kept: 'approved', dropped: 'removed', mine: 'approved' });
+});

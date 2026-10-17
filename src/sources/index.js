@@ -331,7 +331,8 @@ export async function bankDocs(src, api) {
   const slug = (s) => createHash('sha256').update(String(s)).digest('hex').slice(0, 10);
   const docs = [];
   for (const t of (Array.isArray(topics) ? topics : topics.topics || []).slice(0, api.max || 200)) {
-    const group = `bank:${t.kind}:${slug(t.topic)}`;
+    // A topic names the kind of post it is for, or one format of that kind ("format": a crazy-tool story, not any story).
+    const group = `bank:${t.format || t.kind}:${slug(t.topic)}`;
     const seen = new Set();
     for (const u of t.urls || []) {
       const hn = /news\.ycombinator\.com\/item\?id=(\d+)|story_(\d+)/.exec(u);

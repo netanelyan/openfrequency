@@ -96,9 +96,12 @@ export const LIMITS = {
   cover: { maxChars: 70, minWords: 3, maxWords: 11, emoji: 1, sentences: 3 },
   slideTitle: { maxChars: 60, emoji: 1, sentences: 2 },
   slideBody: { maxChars: 230, emoji: 1, sentences: 3 },
+  // The line under the cover line: a slide body's limits, unless the account keeps it shorter.
+  sub: { maxChars: 230, emoji: 1, sentences: 3 },
   caption: { maxChars: 320, emoji: 2, sentences: 4 },
   // A post with two captions: TikTok's long one (its search reads it) and Instagram's short one.
-  captionLong: { maxChars: 900, emoji: 2, sentences: 8 },
+  // An account that wants short, catchy captions asks for a lower minimum.
+  captionLong: { minChars: 200, maxChars: 900, emoji: 2, sentences: 8 },
   captionShort: { maxChars: 260, emoji: 2, sentences: 3 },
   // A body of short lines (places 10 to 6, an iceberg's layer): each line is one item, not a run-on.
   slideLines: { maxChars: 260, emoji: 1, sentences: 6 },
@@ -106,7 +109,8 @@ export const LIMITS = {
 
 /**
  * The limits for one kind of text in one pack: the engine's, tightened by the pack's own (pack.json
- * "writing": { "slideBody": { "maxChars": 150, "sentences": 2 } }). A pack can ask for less, never more.
+ * "writing": { "slideBody": { "maxChars": 150, "sentences": 2 } }). A pack can ask for less, never more:
+ * a shorter text, fewer sentences, a lower minimum for TikTok's caption.
  */
 export function limitsFor(kind, pack = null) {
   const base = LIMITS[kind] || LIMITS.slideBody;
@@ -118,14 +122,14 @@ export function limitsFor(kind, pack = null) {
 
 /**
  * Every tell in one text, as { code, msg }. Empty means it reads like a person.
- * kind: 'cover' | 'slideTitle' | 'slideBody' | 'slideLines' | 'caption' | 'captionLong' | 'captionShort'
+ * kind: 'cover' | 'sub' | 'slideTitle' | 'slideBody' | 'slideLines' | 'caption' | 'captionLong' | 'captionShort'
  * extra: the pack's own banned phrases (rules.json bannedPhrases)
  */
 export function tellsIn(text, { kind = 'slideBody', extra = [], pack = null } = {}) {
   const out = [];
   const add = (code, msg) => out.push({ code, msg });
   const raw = String(text || '').trim();
-  if (!raw) return kind === 'slideBody' || kind === 'slideLines' ? [] : [{ code: 'empty', msg: 'empty' }];
+  if (!raw) return kind === 'slideBody' || kind === 'slideLines' || kind === 'sub' ? [] : [{ code: 'empty', msg: 'empty' }];
   const norm = normHe(raw);
   const lim = limitsFor(kind, pack);
 

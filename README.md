@@ -136,7 +136,7 @@ A pack is a folder:
 
 | File | Holds |
 |---|---|
-| `pack.json` | id, display name, handle, the profile's bio, platforms, the publisher per platform, Zernio profile and account ids, the Instagram account (`instagram.userId`, `auth`, `tokenEnv`), schedule (windows, slots, posts per day), autonomy mode, its weight in the budget (`budget.share`), compliance checks, topics; `imagery` (`providers`: commons, pexels, unsplash, pack; `safety`: standard or strict); `events` and `schedule.fightWeek` for an account that follows fight cards; `endSlide` (`{ title, body }`, `{handle}` for the handle): a closing slide asking to follow, drawn after every post in place of a call to action on the last slide; `writing` (`slideBody`, `slideTitle`, `slideLines`, `cover`: `maxChars`, `sentences`, `maxWords`): shorter limits than the engine's, never longer |
+| `pack.json` | id, display name, handle, the profile's bio, platforms, the publisher per platform, Zernio profile and account ids, the Instagram account (`instagram.userId`, `auth`, `tokenEnv`), schedule (windows, slots, posts per day), autonomy mode, its weight in the budget (`budget.share`), compliance checks, topics; `imagery` (`providers`: commons, pexels, unsplash, pack; `safety`: standard or strict); `events` and `schedule.fightWeek` for an account that follows fight cards; `endSlide` (`{ title, body }`, `{handle}` for the handle): a closing slide asking to follow, drawn after every post in place of a call to action on the last slide; `writing` (`slideBody`, `slideTitle`, `slideLines`, `cover`, `sub` (the line under the cover), `captionLong` (TikTok's), `captionShort` (Instagram's): `maxChars`, `sentences`, `maxWords`, `minChars`): shorter limits than the engine's, never longer (a lower `captionLong.minChars` asks for short, catchy captions) |
 | `voice.md` | who is talking, to whom, how it sounds; `## שורות טובות` and `## שורות רעות` with examples |
 | `theme.json` | a template and variant from the engine's library, colours, fonts; `options`: `handleTag` (false: no handle on the slides), `sourceLine` (false: no source line on the slides; every fact keeps its source in the post's record, and a photograph's credit stays in the caption), `backgroundPhoto` (true: every slide on a photograph, blurred and veiled in the theme's ground colour, `backgroundVeil` 0.5 to 0.95), `coverPhoto`; `backgroundQueries`: the scenes searched when a post has no photograph of its own |
 | `sources.json` | approved sources only: type (`rss`, `web`, `api`), url, name, why it is trusted, when approved |
@@ -447,7 +447,7 @@ Hacker News through its API where the pack has it), and one call pulls out the
 details a fan would want. Each is verified against its stored document; a topic with
 fewer than `research.minDetails` (3) is left for the next one, and the slides must use
 three of them. A pack's `topics.json` with a source of `api.kind: "bank"` is a topic
-bank: chosen topics, each with the kind of post it suits and the pages that document
+bank: chosen topics, each with the kind of post it suits (or one `format` of that kind) and the pages that document
 it, drafted from exactly those pages. A source is read again after six hours, or for
 another day.
 

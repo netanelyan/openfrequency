@@ -27,6 +27,10 @@ test('a topic from the bank goes only to a format of its kind', () => {
   const all = [cand('bank:story:aa', 'topic-bank', 1), cand('bank:meme:bb', 'topic-bank', 2), cand('x', 'articles', 3)];
   assert.deepEqual(poolFor({ kind: 'story' }, all, '2026-10-14').map((c) => c.key), ['bank:story:aa', 'x']);
   assert.deepEqual(poolFor({ kind: 'meme', sources: ['topic-bank'] }, all, '2026-10-14').map((c) => c.key), ['bank:meme:bb']);
+  // A topic for one format of a kind goes to that format only.
+  const tool = [cand('bank:crazy-tool:cc', 'topic-bank', 4), ...all];
+  assert.deepEqual(poolFor({ id: 'crazy-tool', kind: 'story' }, tool, '2026-10-14').map((c) => c.key), ['bank:crazy-tool:cc', 'bank:story:aa', 'x']);
+  assert.deepEqual(poolFor({ id: 'wild-story', kind: 'story' }, tool, '2026-10-14').map((c) => c.key), ['bank:story:aa', 'x']);
 });
 
 test('HTML inside a JSON field is read as the words it shows', () => {

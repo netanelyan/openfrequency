@@ -157,8 +157,8 @@ export function validatePack(pack) {
   if (meta.bio !== undefined && [...String(meta.bio)].length > 80) p.push('pack.json: bio is over 80 characters, the limit on TikTok');
   if (meta.endSlide !== undefined && !(isObj(meta.endSlide) && String(meta.endSlide.title || '').trim() && [...String(meta.endSlide.title)].length <= 60 && [...String(meta.endSlide.body || '')].length <= 120)) p.push('pack.json: endSlide needs a title (up to 60 characters) and may have a body (up to 120)');
   for (const [k, v] of Object.entries(meta.writing || {})) {
-    if (!['cover', 'slideTitle', 'slideBody', 'slideLines'].includes(k) || !isObj(v)) p.push(`pack.json: writing.${k} is not a text the pack can limit (cover, slideTitle, slideBody, slideLines)`);
-    else for (const [m, n] of Object.entries(v)) if (!['maxChars', 'sentences', 'maxWords'].includes(m) || !(Number.isInteger(n) && n > 0)) p.push(`pack.json: writing.${k}.${m} must be maxChars, sentences or maxWords, a whole number`);
+    if (!['cover', 'sub', 'slideTitle', 'slideBody', 'slideLines', 'captionLong', 'captionShort'].includes(k) || !isObj(v)) p.push(`pack.json: writing.${k} is not a text the pack can limit (cover, sub, slideTitle, slideBody, slideLines, captionLong, captionShort)`);
+    else for (const [m, n] of Object.entries(v)) if (!['maxChars', 'sentences', 'maxWords', 'minChars'].includes(m) || !(Number.isInteger(n) && n > 0)) p.push(`pack.json: writing.${k}.${m} must be maxChars, sentences, maxWords or minChars, a whole number`);
   }
   if ([...String(meta.displayName || '')].length > 30) p.push('pack.json: displayName is over 30 characters, the limit on Instagram and TikTok');
   if (!Array.isArray(formats.caption?.questions) || !formats.caption.questions.length) p.push('formats.json: caption.questions must list at least one question');

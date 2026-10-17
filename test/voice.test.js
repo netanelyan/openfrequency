@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readPack } from '../src/packs/load.js';
 import { limitsFor, tellsIn } from '../src/voice/tells.js';
+import { packBlock, slidesUser } from '../src/pipeline/prompts.js';
 import { experienceIn, fakeProofIn, badgeNextTo } from '../src/voice/honesty.js';
 import { heuristicReview, REWRITE_AT } from '../src/voice/review.js';
 import { blockedQuery, checkRules } from '../src/rules/check.js';
@@ -131,4 +132,20 @@ test("an account can ask for shorter slides than the engine allows, never longer
   const long = 'משפט ראשון קצר. משפט שני קצר. משפט שלישי קצר.';
   assert.ok(tellsIn(long, { kind: 'slideBody', pack }).some((t) => /3 sentences|sentences/.test(t.msg)), 'three sentences where the account allows two');
   assert.ok(!tellsIn(long, { kind: 'slideBody' }).some((t) => /sentences/.test(t.msg)), 'the engine alone allows three');
+});
+
+test('an account can ask for a short line under the cover and short, catchy captions', () => {
+  const pack = { meta: { writing: { sub: { maxChars: 60, sentences: 1 }, captionLong: { minChars: 60, maxChars: 220 }, captionShort: { maxChars: 150 } } }, rules: {}, voice: '', formats: { formats: [{ id: 'x', kind: 'story', name: 'x', about: 'a', weight: 1, hooks: [{ id: 'h', pattern: 'p', examples: [] }], ctas: [] }] } };
+  assert.deepEqual([limitsFor('sub', pack).maxChars, limitsFor('captionLong', pack).minChars, limitsFor('captionShort', pack).maxChars], [60, 60, 150]);
+  assert.equal(limitsFor('captionLong').minChars, 200, "the engine's own minimum is TikTok's long caption");
+  assert.equal(limitsFor('captionLong', { meta: { writing: { captionLong: { minChars: 400 } } } }).minChars, 200, 'a pack cannot raise the minimum');
+  const sub = 'מפתח API בתוך הקוד זה הדבר הראשון ש-GitHub מחפשת. הנה מה שעושים עם זה, מההתחלה ועד הסוף.';
+  assert.ok(tellsIn(sub, { kind: 'sub', pack }).some((t) => t.code === 'length'), 'a long explanation under the cover is refused');
+  assert.ok(!tellsIn(sub, { kind: 'sub' }).some((t) => t.code === 'length'), 'the engine alone allows it');
+  const system = packBlock(pack).text;
+  assert.match(system, /60 to 220 characters: short and catchy/);
+  assert.match(system, /up to 150 characters, one catchy line/);
+  assert.match(packBlock({ ...pack, meta: {} }).text, /200 to 600 characters/);
+  const user = slidesUser({ format: { kind: 'story', name: 's' }, n: 4, outline: { topic: 't', items: [] }, facts: [], pack });
+  assert.match(user, /SUB: the line under the cover is at most 60 characters/);
 });

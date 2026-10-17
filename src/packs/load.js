@@ -88,7 +88,8 @@ export function resolvePackDir(id, { dir = packsDir() } = {}) {
 /**
  * Make the database agree with the packs: one account row per pack, and the
  * pack's sources as approved sources (a source the owner removed on the website
- * stays removed; a source added there stays added).
+ * stays removed; a source added there stays added; a source the pack's file
+ * no longer lists is removed).
  */
 export function syncAccounts(db, packs) {
   const at = nowIso();
@@ -108,7 +109,13 @@ export function syncAccounts(db, packs) {
       } else {
         db.update('accounts', pk.id, { display_name: pk.meta.displayName, handle: pk.meta.handle, updated_at: at });
       }
-      for (const s of [...(pk.sources.sources || []), ...factSources(pk)]) {
+      const listed = [...(pk.sources.sources || []), ...factSources(pk)];
+      // A source the pack's file no longer lists is no longer read: it was taken out on purpose.
+      // One the owner added on the website (origin 'manual') is theirs, and stays.
+      for (const old of db.all("SELECT id, key FROM sources WHERE account_id = ? AND origin = 'pack' AND status = 'approved'", pk.id)) {
+        if (!listed.some((s) => s.id === old.key)) db.update('sources', old.id, { status: 'removed' });
+      }
+      for (const s of listed) {
         const have = db.get('SELECT id, status, origin FROM sources WHERE account_id = ? AND key = ?', pk.id, s.id);
         const fields = {
           type: s.type,

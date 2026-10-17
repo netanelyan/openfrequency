@@ -170,8 +170,8 @@ export function poolFor(format, candidates, day, { maxAgeDays = null } = {}) {
     const since = new Date(Date.parse(`${day}T00:00:00Z`) - maxAgeDays * DAY).toISOString();
     pool = pool.filter((c) => !c.docs.some((d) => d.published_at && String(d.published_at) < since));
   }
-  // A topic from the bank was chosen for one kind of post.
-  pool = pool.filter((c) => !String(c.key).startsWith('bank:') || String(c.key).split(':')[1] === kindName(format));
+  // A topic from the bank was chosen for one kind of post, or for one format.
+  pool = pool.filter((c) => !String(c.key).startsWith('bank:') || [kindName(format), format.id].includes(String(c.key).split(':')[1]));
   const want = format.sources || [];
   if (want.length) {
     const rank = (c) => Math.max(...c.docs.map((d) => want.indexOf(d.sourceKey)));
@@ -206,7 +206,7 @@ export function mentionsDay(text, day) {
 export function textsOf({ hook, sub, slides, caption, captionShort }) {
   const out = [
     { where: 'cover', kind: 'cover', text: hook },
-    { where: 'cover line 2', kind: 'slideBody', text: sub },
+    { where: 'cover line 2', kind: 'sub', text: sub },
   ];
   slides.forEach((s, i) => {
     if (s.kind !== 'item') return;
@@ -255,10 +255,13 @@ export function checkPost(ctx, pack, draft, facts, format = null) {
     for (const msg of shapeProblems(f, content.map((s) => s.role))) problems.push({ where: 'shape', code: 'shape', msg });
     for (const msg of kindProblems(f, { ...draft, slides: content })) problems.push({ where: 'shape', code: 'shape', msg });
     // TikTok's search reads the slides and a long caption; Instagram shows the start of a short one.
-    if (String(draft.caption || '').length < 200) problems.push({ where: 'caption', code: 'caption', msg: `the TikTok caption is ${String(draft.caption || '').length} characters: it needs 200 to 600` });
-    if (String(draft.caption || '').length > 900) problems.push({ where: 'caption', code: 'caption', msg: 'the TikTok caption is over 900 characters' });
+    const cap = limitsFor('captionLong', pack);
+    const capLen = String(draft.caption || '').length;
+    if (capLen < cap.minChars) problems.push({ where: 'caption', code: 'caption', msg: `the TikTok caption is ${capLen} characters: it needs ${cap.minChars} or more` });
+    if (capLen > cap.maxChars) problems.push({ where: 'caption', code: 'caption', msg: `the TikTok caption is over ${cap.maxChars} characters` });
+    const capShort = limitsFor('captionShort', pack).maxChars;
     if (!String(draft.captionShort || '').trim()) problems.push({ where: 'caption short', code: 'caption', msg: 'the Instagram caption (captionShort) is missing' });
-    else if (String(draft.captionShort).length > 260) problems.push({ where: 'caption short', code: 'caption', msg: 'the Instagram caption is over 260 characters: it is the short one' });
+    else if (String(draft.captionShort).length > capShort) problems.push({ where: 'caption short', code: 'caption', msg: `the Instagram caption is over ${capShort} characters: it is the short one` });
     const kw = draft.keywords || [];
     if (kw.length < 2 || !kw.some((k) => HEBREW.test(k)) || !kw.some((k) => LATIN.test(k))) problems.push({ where: 'keywords', code: 'keywords', msg: 'keywords need at least one in Hebrew and one in English letters' });
     for (const s of content) {
