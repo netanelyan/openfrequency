@@ -99,7 +99,7 @@ topic, and the attempt is kept with what stopped it.
 
 ## Kinds of post
 
-A pack's format is one of ten kinds (`src/formats/kinds.js`). The engine owns the
+A pack's format is one of eleven kinds (`src/formats/kinds.js`). The engine owns the
 shape, checks it in code and draws it; the pack brings the name, the angle (`about`),
 the cover patterns and the calls to action.
 
@@ -113,6 +113,7 @@ the cover patterns and the calls to action.
 | `hot-take` | entertaining | the opinion, labelled as one, then its sourced case |
 | `myth-fact` | entertaining | 2 or 3 pairs: the myth as people say it, the fact that answers it |
 | `meme` | entertaining | 3 to 5 jokes in the account's design, the real fact behind them last |
+| `do-dont` | entertaining | 4 to 6 rules from a guideline, each drawn as the same screen done wrong and done right |
 | `head-to-head` | number | two sides, 3 to 6 stats with both values, the verdict last |
 | `ranking` | number | a top 5 (or 10), number one last; the design draws the places |
 
@@ -124,8 +125,8 @@ can ask for short, catchy captions and a short line under the cover instead
 
 **Pictures.** The engine draws its graphics from data the model writes on a slide: a
 timeline, stat bars, a head-to-head card, one big number, a calendar page, a pitch
-with players, a fight record, a weight-class ladder, price cards, a mock screen and
-more; each theme names the ones that fit it. A slide about a person or a place can
+with players, a fight record, a weight-class ladder, price cards, a mock screen, the
+same screen drawn wrong and right, and more; each theme names the ones that fit it. A slide about a person or a place can
 ask for a licensed photograph: it is used only if its own description names the
 subject, it passes the image screen, and a vision check says it fits the slide, with
 the crop aimed at the face. Otherwise the slide keeps its graphic.

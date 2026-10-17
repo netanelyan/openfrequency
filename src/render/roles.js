@@ -119,6 +119,8 @@ body.layer .frame{z-index:2}
 .date{align-self:flex-start;display:flex;flex-direction:column;align-items:center;padding:22px 40px 26px;border-radius:var(--radius);background:var(--accent);color:var(--on-accent);gap:4px}
 .date b{font:700 96px/1 var(--display)}
 .date span{font:700 34px var(--text)}
+.rule-n{align-self:flex-start;font:700 92px/1 var(--display);color:var(--accent)}
+body.has-vis .rule-n{font-size:76px}
 .opinion{align-self:flex-start;font:700 32px var(--text);padding:10px 26px;border-radius:999px;background:var(--accent2);color:var(--on-accent2)}
 .kw{display:flex;flex-wrap:wrap;gap:6px 14px;font:500 21px var(--text);color:var(--muted);margin-top:18px;opacity:.6}
 .kw bdi{white-space:nowrap}
@@ -224,6 +226,8 @@ export function roleInner(s) {
     inner = `${tag(ROLE_LABEL.verdict, 'alt')}${title(s)}${body(s)}`;
   } else if (r === 'ask') {
     inner = `${/^\s*דעה/.test(String(s.title || '')) ? '' : '<div class="opinion">דעה</div>'}${title(s)}${body(s)}`;
+  } else if (r === 'rule') {
+    inner = `<div class="rule-n">${two(s.n)}</div>${title(s)}${body(s)}`;
   } else if (r === 'case') {
     inner = `${tag(`נימוק ${s.n}`)}${title(s)}${body(s)}`;
   } else if (['then', 'turn', 'now', 'context', 'moment', 'after'].includes(r)) {

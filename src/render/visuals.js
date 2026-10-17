@@ -1,11 +1,13 @@
 import { esc, he } from './html.js';
+import { bestInk } from './color.js';
 
 // The engine's own graphics: what a slide shows besides its words.
 //
 // A slide can carry one `visual`, written by the drafting model as data and drawn
 // here: a timeline, stat bars, a head-to-head card, a big number, a calendar page,
 // a pitch with the players in their places, kit colours, a fight record, the
-// weight-class ladder, a product's stack, a funnel, price cards, a mock screen.
+// weight-class ladder, a product's stack, a funnel, price cards, a mock screen,
+// the same screen drawn wrong and right (a do-dont).
 // Each pack names the types that fit it (theme.json "visuals"). A visual is data,
 // not a picture someone else made: nothing here is a logo, a crest, a screenshot
 // or another page's image, and every number in it is held to the slide's quotes
@@ -41,13 +43,28 @@ const KINDS = {
     items: [2, 5],
     about: 'a mock screen the account draws (never a real product\'s screenshot or logo): style = chat (label = who speaks, "אתם" or the tool, value = the line), terminal (label = a real command exactly as it is typed, value = what it prints, both in English letters: never a step described in words or a setting such as "CNAME" after the prompt sign; the Hebrew explanation goes in the text of the slide) or browser (title = the page, label and value = its fields)',
   },
+  dodont: {
+    items: [1, 6],
+    about: 'the same small made-up screen drawn twice side by side, wrong then right (the design labels them "לא" and "כן"): style = app (a phone screen: a form, a settings page), web (a landing page), chat (a chat with an AI tool) or code (a code editor); title = what the screen is in a few Hebrew words ("טופס הרשמה") or ""; a and b = the wrong and the right side\'s background as hex codes, or "" for the screen\'s own; each item is one element, top to bottom: label = field (sub = the field\'s label; value and value2 = what is written inside it, "" for empty), button, heading, text, nav (value and value2 = where the logo sits: start or center), me or ai (a chat line: me is the user), line (a line of code, in English letters, at most 40 characters); value = the element on the wrong side, value2 = on the right side, "" where it is missing on that side; a value may open with a hex colour for that element on that side ("#0047FF שליחה"). The sides differ only where the rule is. No digits the slide\'s quotes do not hold: a card number is "XXXX XXXX XXXX"',
+  },
+};
+
+/** What a do-dont screen is made of, and the colour a value may open with. */
+const DD_ELEMENTS = ['field', 'button', 'heading', 'text', 'nav', 'me', 'ai', 'line'];
+const DD_STYLES = ['app', 'web', 'chat', 'code'];
+const ddPart = (s) => {
+  const m = /^(#[0-9a-f]{6})\s*(.*)$/i.exec(String(s || '').trim());
+  return m ? { color: m[1], text: m[2].trim() } : { color: '', text: String(s || '').trim() };
 };
 
 export const VISUAL_TYPES = Object.keys(KINDS);
 export const DEFAULT_VISUALS = ['timeline', 'bars', 'compare', 'stat'];
 
-/** The visual types a pack may use: its theme's list, or the default four. */
-export const visualsOf = (pack) => (pack?.theme?.visuals?.length ? pack.theme.visuals.filter((t) => KINDS[t]) : DEFAULT_VISUALS);
+/** The visual types a pack may use: its theme's list, or the default four; a pack with a do-dont format draws its two screens. */
+export const visualsOf = (pack) => {
+  const own = pack?.theme?.visuals?.length ? pack.theme.visuals.filter((t) => KINDS[t]) : DEFAULT_VISUALS;
+  return (pack?.formats?.formats || []).some((f) => f.kind === 'do-dont') && !own.includes('dodont') ? [...own, 'dodont'] : own;
+};
 
 const POSITIONS = {
   GK: [50, 92], LB: [16, 74], LCB: [37, 78], CB: [50, 78], RCB: [63, 78], RB: [84, 74], LWB: [12, 62], RWB: [88, 62],
@@ -86,13 +103,15 @@ export function normVisual(v) {
   const t = (x) => String(x ?? '').trim();
   return {
     type, title: t(v.title), a: t(v.a), b: t(v.b), style: t(v.style).toLowerCase(),
-    items: (v.items || []).map((it) => ({ label: t(it.label), value: t(it.value), value2: t(it.value2), sub: t(it.sub) })).filter((it) => it.label || it.value),
+    items: (v.items || []).map((it) => ({ label: type === 'dodont' ? t(it.label).toLowerCase() : t(it.label), value: t(it.value), value2: t(it.value2), sub: t(it.sub) })).filter((it) => it.label || it.value),
   };
 }
 
 /** The text of a visual the fact gate reads: everything but a kit's colours and a pitch's position codes. */
 export function visualText(v) {
   if (!v || v.bad) return '';
+  // A do-dont's screens: their words, without the element names, the colours and the logo's place.
+  if (v.type === 'dodont') return [v.title, ...(v.items || []).flatMap((it) => [it.sub, ...(it.label === 'nav' ? [] : [ddPart(it.value).text, ddPart(it.value2).text])])].filter(Boolean).join(' ');
   const parts = [v.title, v.a, v.b];
   for (const it of v.items || []) {
     parts.push(it.label);
@@ -112,7 +131,7 @@ export function visualProblems(v, allowed, where) {
   v.items.forEach((it, i) => {
     // Room for a Hebrew stat name; the render's fit pass refuses what still does not fit.
     if ([...it.label].length > 44) out.push(`${where}: visual item ${i + 1}'s label is over 44 characters: shorten it`);
-    if ([...it.value].length > (v.type === 'mock' || v.type === 'timeline' ? 80 : 32)) out.push(`${where}: visual item ${i + 1}'s value is too long for a graphic: shorten it`);
+    if ([...it.value].length > (['mock', 'timeline', 'dodont'].includes(v.type) ? 80 : 32) || (v.type === 'dodont' && [...it.value2].length > 80)) out.push(`${where}: visual item ${i + 1}'s value is too long for a graphic: shorten it`);
     if ([...it.sub].length > 48) out.push(`${where}: visual item ${i + 1}'s sub is over 48 characters: shorten it`);
   });
   if (v.type === 'kit') v.items.forEach((it, i) => it.value.split(/[\s,]+/).filter(Boolean).every((c) => HEX.test(c)) || out.push(`${where}: kit item ${i + 1} needs its colours as hex codes ("#C8102E #FFFFFF")`));
@@ -129,6 +148,20 @@ export function visualProblems(v, allowed, where) {
       if (/[֐-׿]/.test(`${it.label || ''} ${it.value || ''}`)) out.push(`${where}: a terminal holds a command and what it prints, in English letters: "${it.label}" / "${it.value}" (the Hebrew explanation goes in the slide's text)`);
       else if (it.label && !/^(?:[a-z][\w.+-]*|\.\/\S+|[A-Z_][A-Z0-9_]*=\S*)(?:\s|$)/.test(String(it.label).trim())) out.push(`${where}: "${it.label}" is not a command a reader can type: a terminal line is a real command as it is typed`);
     }
+  }
+  if (v.type === 'dodont') {
+    if (!DD_STYLES.includes(v.style)) out.push(`${where}: a dodont's style is ${DD_STYLES.join(', ')}`);
+    for (const [side, c] of [['a', v.a], ['b', v.b]]) if (c && !HEX.test(c)) out.push(`${where}: a dodont's ${side} is a background colour as a hex code, or ""`);
+    v.items.forEach((it, i) => {
+      if (!DD_ELEMENTS.includes(it.label)) return out.push(`${where}: dodont item ${i + 1} is one of ${DD_ELEMENTS.join(', ')}, not "${it.label}"`);
+      const [x, y] = [ddPart(it.value), ddPart(it.value2)];
+      if (it.label === 'nav' && ![x.text, y.text].every((p) => ['start', 'center', ''].includes(p))) out.push(`${where}: a nav's values are where the logo sits: start or center`);
+      if (it.label === 'field' && !it.sub) out.push(`${where}: dodont item ${i + 1}: a field needs its label in sub`);
+      if (it.label === 'line' && /[֐-׿]/.test(`${x.text} ${y.text}`)) out.push(`${where}: a line of code is in English letters: "${x.text || y.text}"`);
+      if (it.label === 'line' && [x.text, y.text].some((t) => [...t].length > 40)) out.push(`${where}: a line of code is at most 40 characters: shorten it`);
+    });
+    // The same screen twice is no lesson: the two sides differ where the rule is.
+    if (v.items.every((it) => it.value === it.value2) && v.a === v.b) out.push(`${where}: the two sides of a dodont are the same: draw the wrong one and the right one`);
   }
   return out;
 }
@@ -201,7 +234,32 @@ const draw = {
     if (v.style === 'browser') return `<div class="v-web"><div class="bar"><i></i><i></i><i></i><span>${cell(v.title)}</span></div><div class="page">${v.items.map((it) => `<div class="field"><span>${cell(it.label)}</span><b>${cell(it.value)}</b></div>`).join('')}${v.b ? `<div class="btn">${cell(v.b)}</div>` : ''}</div></div>`;
     return `<div class="v-chat">${v.items.map((it, i) => `<div class="msg ${i % 2 ? 'them' : 'me'}"><span>${cell(it.label)}</span><p>${cell(it.value)}</p></div>`).join('')}</div>`;
   },
+  // The wrong screen first (on the right, where a Hebrew reader starts), the right one beside it.
+  dodont: (v) => {
+    const el = (it, raw) => {
+      const { color, text } = ddPart(raw);
+      const ink = color ? ` style="color:${color}"` : '';
+      if (it.label === 'field') return `<div class="fld"><span>${cell(it.sub)}</span><div class="in" dir="auto"${ink}>${text ? cell(text) : '&nbsp;'}</div></div>`;
+      if (!raw) return '';
+      if (it.label === 'nav') return `<div class="nav ${text === 'center' ? 'center' : 'start'}"><i></i><span></span><span></span><span></span></div>`;
+      if (it.label === 'button') return `<div class="btn"${color ? ` style="background:${color};color:${bestInk(color, '#ffffff', '#111111')}"` : ''}>${text ? cell(text) : '&nbsp;'}</div>`;
+      if (it.label === 'heading') return `<b class="hd" dir="auto"${ink}>${cell(text)}</b>`;
+      if (it.label === 'line') return `<code dir="ltr"${ink}>${esc(text)}</code>`;
+      if (it.label === 'me' || it.label === 'ai') return `<div class="msg ${it.label}" dir="auto">${cell(text)}</div>`;
+      return `<p class="tx" dir="auto"${ink}>${cell(text)}</p>`;
+    };
+    const side = (ok) => {
+      const bg = ok ? v.b : v.a;
+      const ground = HEX.test(bg) ? ` style="background:${bg};color:${bestInk(bg, '#ffffff', '#1b1f24')}"` : '';
+      const els = v.items.map((it) => el(it, ok ? it.value2 : it.value)).join('');
+      return `<div class="side ${ok ? 'yes' : 'no'}"><div class="scr"${ground}>${v.style === 'web' ? '<div class="bar"><i></i><i></i><i></i></div>' : ''}${els}</div><div class="dd-tag">${ok ? DD_YES : DD_NO}<span>${ok ? 'כן' : 'לא'}</span></div></div>`;
+    };
+    return `<div class="v-dd st-${esc(v.style)}">${side(false)}${side(true)}</div>`;
+  },
 };
+
+const DD_NO = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="currentColor"/><path d="M8 8l8 8M16 8l-8 8" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/></svg>';
+const DD_YES = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="currentColor"/><path d="M7 12.5l3.2 3.2L17 9" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 /** One visual, drawn. `title` is shown above the graphic when the slide does not already say it. */
 export function visualHtml(v, { showTitle = true } = {}) {
@@ -221,10 +279,11 @@ const SVG = {
   stamp: '<svg viewBox="0 0 200 120" aria-hidden="true"><rect x="10" y="14" width="180" height="92" rx="14" class="st"/><path d="M24 98 L176 22" class="x"/></svg>',
   arrow: '<svg viewBox="0 0 200 120" aria-hidden="true"><path d="M10 30 H120" class="ln"/><path d="M120 30 C160 30 160 90 120 90 H40" class="ln"/><path d="M52 76 L36 90 L52 104" class="ln"/></svg>',
   frames: '<svg viewBox="0 0 200 120" aria-hidden="true"><rect x="4" y="16" width="56" height="88" rx="8" class="f1"/><rect x="72" y="16" width="56" height="88" rx="8" class="f2"/><rect x="140" y="16" width="56" height="88" rx="8" class="f3"/></svg>',
+  dodont: '<svg viewBox="0 0 200 130" aria-hidden="true"><rect x="4" y="8" width="88" height="114" rx="12" class="dn"/><rect x="108" y="8" width="88" height="114" rx="12" class="dy"/><circle cx="48" cy="65" r="24" class="cn"/><path d="M38 55 L58 75 M58 55 L38 75" class="mk"/><circle cx="152" cy="65" r="24" class="cy"/><path d="M140 66 L149 75 L165 57" class="mk"/></svg>',
   face: '<svg viewBox="0 0 200 200" aria-hidden="true"><circle cx="100" cy="100" r="86" class="fc"/><circle cx="70" cy="84" r="10" class="ey"/><circle cx="130" cy="84" r="10" class="ey"/><path d="M58 122 Q100 160 142 122" class="mo"/></svg>',
 };
 
-const ART = { iceberg: 'iceberg', ranking: 'podium', 'guess-who': 'who', 'hot-take': 'flame', 'head-to-head': 'split', 'myth-fact': 'stamp', 'what-happened': 'arrow', story: 'frames', meme: 'face', list: 'frames' };
+const ART = { iceberg: 'iceberg', ranking: 'podium', 'guess-who': 'who', 'hot-take': 'flame', 'head-to-head': 'split', 'myth-fact': 'stamp', 'what-happened': 'arrow', story: 'frames', meme: 'face', 'do-dont': 'dodont', list: 'frames' };
 
 /**
  * The cover's visual when there is no photograph: the model's cover graphic, or
@@ -346,6 +405,38 @@ export const VISUAL_CSS = `
 .v-chat .msg p{font-size:.86em}
 .v-chat .me{align-self:flex-start;background:var(--accent);color:var(--on-accent);border-end-start-radius:.15em}
 .v-chat .them{align-self:flex-end;background:var(--surface);border:.06em solid rgba(var(--ink-rgb),.16);border-end-end-radius:.15em}
+.v-dd{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.6em;align-items:stretch}
+.s-tiktok .v-dd .scr{font-size:.66em}
+.v-dd .no{--dd:#E5484D}
+.v-dd .yes{--dd:#30A46C}
+.v-dd .side{display:flex;flex-direction:column;align-items:stretch;gap:.35em;min-width:0}
+.v-dd .scr{flex:1;display:flex;flex-direction:column;gap:.5em;min-height:6em;padding:.75em .7em;border-radius:.6em;overflow:hidden;background:#ffffff;color:#1b1f24;border:.16em solid var(--dd);box-shadow:0 .5em 1.2em rgba(0,0,0,.25);font:500 .62em/1.3 var(--text);overflow-wrap:anywhere}
+.v-dd .dd-tag{align-self:center;display:flex;align-items:center;gap:.3em;font:700 1em var(--headline);color:var(--dd)}
+.v-dd .dd-tag svg{width:1em;height:1em;flex:none}
+.v-dd .bar{display:flex;gap:.3em;margin:-.75em -.7em .1em;padding:.45em .7em;background:#e9ecef}
+.v-dd .bar i{width:.6em;height:.6em;border-radius:50%;background:#adb5bd}
+.v-dd .fld{display:flex;flex-direction:column;gap:.3em}
+.v-dd .fld span{font-weight:700;font-size:.92em}
+.v-dd .in{padding:.6em .65em;border-radius:.4em;background:#f1f3f5;border:.06em solid #dee2e6;color:#868e96}
+.v-dd .btn{padding:.6em;border-radius:.45em;background:#2f6bff;color:#ffffff;text-align:center;font-weight:700}
+.v-dd .hd{font:700 1.3em/1.2 var(--text)}
+.v-dd .tx{font-size:.95em}
+.v-dd .nav{display:flex;align-items:center;gap:.4em;margin:-.75em -.7em .1em;padding:.55em .7em;background:rgba(47,107,255,.16)}
+.v-dd .nav i{flex:none;width:1.6em;height:1.6em;border-radius:50%;background:#2f6bff}
+.v-dd .nav span{flex:1;height:.32em;border-radius:.16em;background:rgba(47,107,255,.55)}
+.v-dd .nav.center{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));justify-items:center;row-gap:.45em}
+.v-dd .nav.center i{grid-column:1/-1}
+.v-dd .nav.center span{width:100%}
+.v-dd .msg{max-width:92%;padding:.5em .65em;border-radius:.7em}
+.v-dd .msg.me{align-self:flex-start;background:#2f6bff;color:#ffffff;border-end-start-radius:.15em}
+.v-dd .msg.ai{align-self:flex-end;background:#f1f3f5;color:#1b1f24;border-end-end-radius:.15em}
+/* Code is read in long lines: its two screens stack, wrong above right, each the full width. */
+.v-dd.st-code{grid-template-columns:minmax(0,1fr);gap:.35em}
+.v-dd.st-code .side{flex-direction:row;align-items:center;gap:.5em}
+.v-dd.st-code .scr{min-height:0;padding:.55em .7em}
+.v-dd.st-code .dd-tag{flex:none;width:3em;justify-content:center}
+.v-dd.st-code .scr{background:#0d1117;color:#e6edf3}
+.v-dd code{display:block;text-align:left;font:500 .8em/1.45 ui-monospace,Consolas,'DejaVu Sans Mono',monospace;white-space:pre-wrap;overflow-wrap:break-word}
 .cover-vis{flex:none}
 .cover-vis .vis{font-size:44px}
 .s-tiktok .cover-vis .vis{font-size:54px}
@@ -373,6 +464,11 @@ export const VISUAL_CSS = `
 .art .f3{fill:var(--accent)}
 .art .fc{fill:var(--accent)}
 .art .ey{fill:var(--on-accent)}
+.art .dn{fill:rgba(229,72,77,.16);stroke:#E5484D;stroke-width:4}
+.art .dy{fill:rgba(48,164,108,.16);stroke:#30A46C;stroke-width:4}
+.art .cn{fill:#E5484D}
+.art .cy{fill:#30A46C}
+.art .mk{fill:none;stroke:#fff;stroke-width:7;stroke-linecap:round;stroke-linejoin:round}
 .art .mo{fill:none;stroke:var(--on-accent);stroke-width:9;stroke-linecap:round}
 .art-split .vs-names{position:absolute;inset:0;display:flex;justify-content:space-between;align-items:center;padding:0 6%;font:700 44px/1 var(--headline)}
 .art-split .vs-names b{max-width:44%;color:var(--on-accent)}

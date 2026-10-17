@@ -11,6 +11,8 @@ import { normHe } from '../voice/tells.js';
 //     10 only about a quarter of viewers finish)
 //   - one idea per slide, and the payoff on the last slide: the call to action
 //     is drawn on that slide by the design, not given a slide of its own
+//   - a do-dont's rules come from guidance documents (a design system, a style
+//     guide, a security cheat sheet), quoted like any other fact
 //   - every factual claim traces to a quote (HARD RULE 3). A role in `factFree`
 //     carries no fact of its own (a myth as people say it, a verdict, a joke's
 //     setup, "agree?"), and any number on it must still be in the post's quotes.
@@ -116,6 +118,14 @@ export const KINDS = {
     photo: null,
     cta: 'send',
     prompt: `meme: text-led jokes about the audience's insider pain, in the account's own design (never a meme template, a film still or another page's picture). 3 to 5 "joke" slides: title is the setup (a situation every one of them knows), body the punchline, short and spoken. A joke that states a fact (a rate, a deadline, a sum) cites it. The last slide, "truth", is the real fact behind the jokes, sourced. Punch at the situation, never at a group of people. Every joke slide is a joke (a setup and a twist a reader would send to a friend), never a fact read out: a price list is not a meme. The captions never promise a number of jokes.`,
+  },
+  'do-dont': {
+    group: 'entertaining',
+    name: 'עושים ולא עושים',
+    segments: [['rule', 4, 6]],
+    photo: null,
+    cta: 'save',
+    prompt: `do-dont: 4 to 6 rules on one subject (a sign-up form, a landing page, a prompt, keeping a key secret), one rule a slide, each from the guidance in the documents. A "rule" slide's title is the rule in a few spoken words, said as what to do ("תכתבו בתוך השדה איך התשובה נראית"); its body one short line on why, sourced. Its visual is a "dodont": the same small screen drawn twice, wrong and right, so the reader sees the rule before reading it; the design labels the two sides and numbers the rules. The two sides differ only where the rule is, and everything else on them is the same. The screens are made-up examples of an app the reader might build (never a real product's screen, name or logo). The cover names the subject and how many rules ("5 טעויות בטופס הרשמה שמבריחות משתמשים") and gives no rule away. Never number a rule yourself, and never write "לא" or "כן" as a label: the design draws them.`,
   },
   list: {
     group: 'number',
@@ -275,6 +285,18 @@ export function kindProblems(format, post) {
       if (!up && !down) out.push(`the ranking's order does not follow its number (${nums.join(', ')} from 5th to 1st): order the places by the number that ranks them`);
     }
   }
+  if (name === 'do-dont') {
+    // The rule is seen before it is read: without its two screens a rule slide is the tips list the account does not post.
+    content.forEach((s, i) => {
+      if (s.role === 'rule' && s.visual?.type !== 'dodont') out.push(`slide ${i + 1}: a rule slide shows its rule as a "dodont" visual (the same screen drawn wrong and right)`);
+      if (/(?:^|\s)(?:כלל|טיפ|טעות)\s*(?:\d|מספר|ראשון|ראשונה|שני|שנייה|שלישי|שלישית)|^\s*\d+\s*[.)]/.test(`${s.title}`)) out.push(`slide ${i + 1}: no rule numbers in the text, the design draws them`);
+    });
+    const rules = content.filter((s) => s.role === 'rule').length;
+    const WORDS = { שלושה: 3, שלוש: 3, ארבעה: 4, ארבע: 4, חמישה: 5, חמש: 5, שישה: 6, שש: 6 };
+    const m = `${post.hook} ${post.sub}`.match(/(\d+|שלושה|שלוש|ארבעה|ארבע|חמישה|חמש|שישה|שש)\s+(?:טעויות|כללים|טיפים|דברים|חוקים)/);
+    const said = m ? Number(WORDS[m[1]] ?? m[1]) : null;
+    if (said != null && said !== rules) out.push(`the cover promises ${said} and the post has ${rules} rules: make them match`);
+  }
   if (name === 'iceberg') content.forEach((s, i) => linesOfBody(s.body).length > 3 && out.push(`slide ${i + 1}: a layer holds 1 to 3 short lines`));
   if (name === 'myth-fact') {
     content.forEach((s, i) => {
@@ -298,6 +320,7 @@ export function structureNumbers(format, content) {
   if (name === 'guess-who') out.add(String(content.filter((s) => s.role === 'clue').length));
   if (name === 'myth-fact') out.add(String(content.filter((s) => s.role === 'myth').length));
   if (name === 'iceberg') out.add(String(content.length));
+  if (name === 'do-dont') out.add(String(content.filter((s) => s.role === 'rule').length));
   return out;
 }
 

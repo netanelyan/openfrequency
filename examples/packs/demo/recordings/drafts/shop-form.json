@@ -1,0 +1,254 @@
+{
+  "document": "shop-form",
+  "format": "shop-rules",
+  "outline": {
+    "usable": true,
+    "why": "the page gives four clear rules for a shop's order form, each one easy to draw as a screen done wrong and done right",
+    "topic": "4 טעויות בטופס ההזמנה של חנות צמחים",
+    "subject": {
+      "a": "",
+      "b": "",
+      "answer": "",
+      "date": ""
+    },
+    "imageQuery": "",
+    "facts": [
+      {
+        "id": "f1",
+        "claim": "מראים בתוך השדה איך התשובה נראית, למשל גודל העציץ בסנטימטרים, וכך הלקוחות ממלאים נכון כבר בפעם הראשונה",
+        "quote": "Show the expected answer inside the field, such as the pot size in centimetres, so customers fill it in right the first time.",
+        "doc": "D1"
+      },
+      {
+        "id": "f2",
+        "claim": "רמז מעורפל כמו 'המידה שלכם' משאיר אנשים לנחש, ורבים מוותרים",
+        "quote": "A vague hint like 'your size' leaves people guessing, and many give up.",
+        "doc": "D1"
+      },
+      {
+        "id": "f3",
+        "claim": "מקבצים תחת כותרת קצרה את השדות ששייכים יחד, כמו פרטי משלוח, כדי שהעין תמצא אותם מהר",
+        "quote": "Group the fields that belong together under a short heading, such as delivery details, so the eye finds them quickly.",
+        "doc": "D1"
+      },
+      {
+        "id": "f4",
+        "claim": "הלוגו של החנות שייך לפינה העליונה של הדף, שם המבקרים מצפים למצוא אותו",
+        "quote": "Put the shop's logo in the top corner of the page, where visitors expect to find it.",
+        "doc": "D1"
+      },
+      {
+        "id": "f5",
+        "claim": "לוגו שמרחף באמצע התפריט דוחף את הקישורים הצידה ונראה כמו פרסומת",
+        "quote": "A logo floating in the middle of the menu pushes the links aside and looks like an advert.",
+        "doc": "D1"
+      },
+      {
+        "id": "f6",
+        "claim": "טקסט אפור בהיר על לבן קשה לקריאה בטלפון בשמש, ועדיף טקסט כהה על רקע בהיר",
+        "quote": "Light grey text on white is hard to read on a phone in the sun; use dark text on a light background.",
+        "doc": "D1"
+      },
+      {
+        "id": "f7",
+        "claim": "הבטחת המשלוח היא הטקסט הכי חשוב, ולכן היא צריכה להיות השורה הכי קלה לקריאה",
+        "quote": "The text of the delivery promise matters most, so it should be the easiest line to read.",
+        "doc": "D1"
+      }
+    ],
+    "items": [
+      {
+        "role": "rule",
+        "point": "פורמט בתוך השדה",
+        "facts": [
+          "f1",
+          "f2"
+        ]
+      },
+      {
+        "role": "rule",
+        "point": "כותרת לכל קבוצת שדות",
+        "facts": [
+          "f3"
+        ]
+      },
+      {
+        "role": "rule",
+        "point": "הלוגו בפינה",
+        "facts": [
+          "f4",
+          "f5"
+        ]
+      },
+      {
+        "role": "rule",
+        "point": "טקסט כהה על רקע בהיר",
+        "facts": [
+          "f6",
+          "f7"
+        ]
+      }
+    ]
+  },
+  "slides": {
+    "hook": "4 טעויות בטופס ההזמנה של חנות צמחים",
+    "sub": "והתיקון של כל אחת",
+    "hookPattern": "form-mistakes",
+    "subject": {
+      "a": "",
+      "b": "",
+      "answer": "",
+      "date": ""
+    },
+    "slides": [
+      {
+        "role": "rule",
+        "title": "איך התשובה נראית, כבר בתוך השדה",
+        "body": "רמז כמו 'המידה שלכם' משאיר לנחש, ורבים מוותרים. גודל העציץ בסנטימטרים עונה מראש.",
+        "a": "",
+        "b": "",
+        "facts": [
+          "f1",
+          "f2"
+        ],
+        "visual": {
+          "type": "dodont",
+          "title": "טופס הזמנה",
+          "a": "",
+          "b": "",
+          "style": "app",
+          "items": [
+            {
+              "label": "field",
+              "value": "המידה שלכם...",
+              "value2": "קוטר בסנטימטרים",
+              "sub": "גודל העציץ"
+            },
+            {
+              "label": "button",
+              "value": "#B4512A להזמנה",
+              "value2": "#B4512A להזמנה",
+              "sub": ""
+            }
+          ]
+        },
+        "imageQuery": ""
+      },
+      {
+        "role": "rule",
+        "title": "כותרת קצרה לכל קבוצת שדות",
+        "body": "כשפרטי המשלוח יושבים תחת כותרת אחת, העין מוצאת אותם מהר.",
+        "a": "",
+        "b": "",
+        "facts": [
+          "f3"
+        ],
+        "visual": {
+          "type": "dodont",
+          "title": "",
+          "a": "",
+          "b": "",
+          "style": "app",
+          "items": [
+            {
+              "label": "heading",
+              "value": "",
+              "value2": "פרטי משלוח",
+              "sub": ""
+            },
+            {
+              "label": "field",
+              "value": "",
+              "value2": "",
+              "sub": "כתובת"
+            },
+            {
+              "label": "field",
+              "value": "",
+              "value2": "",
+              "sub": "עיר"
+            }
+          ]
+        },
+        "imageQuery": ""
+      },
+      {
+        "role": "rule",
+        "title": "הלוגו בפינה העליונה",
+        "body": "שם מחפשים אותו. לוגו באמצע התפריט דוחף את הקישורים ונראה כמו פרסומת.",
+        "a": "",
+        "b": "",
+        "facts": [
+          "f4",
+          "f5"
+        ],
+        "visual": {
+          "type": "dodont",
+          "title": "דף הבית",
+          "a": "",
+          "b": "",
+          "style": "web",
+          "items": [
+            {
+              "label": "nav",
+              "value": "center",
+              "value2": "start",
+              "sub": ""
+            },
+            {
+              "label": "heading",
+              "value": "עציצים למרפסת",
+              "value2": "עציצים למרפסת",
+              "sub": ""
+            }
+          ]
+        },
+        "imageQuery": ""
+      },
+      {
+        "role": "rule",
+        "title": "טקסט כהה על רקע בהיר",
+        "body": "אפור בהיר על לבן נעלם בטלפון בשמש, והבטחת המשלוח צריכה להיות השורה הכי קלה לקריאה.",
+        "a": "",
+        "b": "",
+        "facts": [
+          "f6",
+          "f7"
+        ],
+        "visual": {
+          "type": "dodont",
+          "title": "",
+          "a": "",
+          "b": "",
+          "style": "app",
+          "items": [
+            {
+              "label": "text",
+              "value": "#C3C8CE משלוח עד הבית בכל הארץ",
+              "value2": "#1F2A1B משלוח עד הבית בכל הארץ",
+              "sub": ""
+            }
+          ]
+        },
+        "imageQuery": ""
+      }
+    ],
+    "coverVisual": {
+      "type": "none",
+      "title": "",
+      "a": "",
+      "b": "",
+      "style": "",
+      "items": []
+    },
+    "caption": "ארבעה דברים קטנים מבדילים בין טופס הזמנה שממלאים עד הסוף לבין טופס שנוטשים באמצע. הלקוחות צריכים לדעת מה לכתוב בכל שדה, למצוא מהר את פרטי המשלוח ולקרוא את הטקסט גם בטלפון בשמש. כל תיקון כאן הוא שינוי קטן בעיצוב, והוא חוסך הזמנות שנזנחו.",
+    "captionShort": "ארבע טעויות בטופס הזמנה, וכל אחת מתוקנת בדקה.",
+    "question": "מה הכי מעצבן אתכם בטופס הזמנה?",
+    "keywords": [
+      "טופס הזמנה",
+      "חנות צמחים",
+      "order form",
+      "UX"
+    ]
+  }
+}

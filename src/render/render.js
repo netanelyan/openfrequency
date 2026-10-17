@@ -339,10 +339,12 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
   const brand = pack.brandLogo ? dataUri(pack.brandLogo) : null;
   const opts = pack.theme.options || {};
   const noHandle = opts.handleTag === false;
-  const noSources = opts.sourceLine === false;
   // The closing "follow" slide, when the account has one, takes the call to action off the last content slide.
   const end = pack.meta.endSlide?.title ? pack.meta.endSlide : null;
   const kindNow = format ? kindName(format) : 'list';
+  // A do-dont's rules are someone else's guidance, under licences that ask for credit: its slides name their source
+  // even on an account that keeps its sources off the slides.
+  const noSources = opts.sourceLine === false && kindNow !== 'do-dont';
   // Every slide on a photograph (theme.options.backgroundPhoto): its own, else one of the post's, in turn, else the
   // one found for the post's scene ('bg'). Never a guess-who's answer, whose face would show through the blur.
   // The post's own subject (the cover's photograph, never a guess-who's answer) and its scene; a slide's portrait of

@@ -451,6 +451,8 @@ export function sourceLabel(db, fact, { article = true } = {}) {
 const HOSTS = {
   'news.ycombinator.com': 'Hacker News', 'platform.claude.com': 'Anthropic', 'code.claude.com': 'Anthropic', 'docs.anthropic.com': 'Anthropic', 'developers.openai.com': 'OpenAI', 'openai.com': 'OpenAI',
   'ai.google.dev': 'Google', 'vercel.com': 'Vercel', 'www.netlify.com': 'Netlify', 'supabase.com': 'Supabase', 'stripe.com': 'Stripe', 'docs.github.com': 'GitHub', 'github.blog': 'GitHub', 'cursor.com': 'Cursor', 'www.wix.com': 'Wix', 'trustmrr.com': 'TrustMRR',
+  'design-system.service.gov.uk': 'GOV.UK Design System', 'www.gov.uk': 'GOV.UK', 'guidance.publishing.service.gov.uk': 'GOV.UK', 'designsystem.digital.gov': 'U.S. Web Design System', 'developer.mozilla.org': 'MDN',
+  'docs.cloud.google.com': 'Google Cloud', 'firebase.google.com': 'Firebase', 'cheatsheetseries.owasp.org': 'OWASP', 'www.postgresql.org': 'PostgreSQL',
 };
 
 /** The label of a page from a topic bank: its site's own name (a Wikipedia article as any other). */

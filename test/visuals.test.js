@@ -36,6 +36,17 @@ test('a visual is checked for its type, its size and its fields', () => {
   assert.match(visualProblems(v('mock', [['npm i -g vercel', 'מתקין את ה-CLI'], ['vercel', 'done']], { style: 'terminal' }), all, 's')[0], /in English letters/);
   assert.match(visualProblems(v('mock', [['vercel', 'Ready'], ['CNAME', 'cname.vercel-dns.com']], { style: 'terminal' }), all, 's')[0], /not a command a reader can type/);
   assert.deepEqual(visualProblems(v('mock', [['npx -y add-mcp https://mcp.vercel.com', 'Added'], ['OPENAI_API_KEY=sk-... npm run dev', 'Ready on http://localhost:3000']], { style: 'terminal' }), all, 's'), []);
+  // A do-dont draws the same screen twice from a few known elements, and the two sides differ.
+  assert.match(visualProblems(v('dodont', [['field', 'x', 'y', 'שם']], { style: 'poster' }), all, 's')[0], /app, web, chat, code/);
+  assert.match(visualProblems(v('dodont', [['slider', 'x', 'y']], { style: 'app' }), all, 's')[0], /one of field, button/);
+  assert.match(visualProblems(v('dodont', [['field', 'x', 'y']], { style: 'app' }), all, 's')[0], /its label in sub/);
+  assert.match(visualProblems(v('dodont', [['nav', 'left', 'center']], { style: 'web' }), all, 's')[0], /start or center/);
+  assert.match(visualProblems(v('dodont', [['line', 'const key = "מפתח"', 'process.env.KEY']], { style: 'code' }), all, 's')[0], /English letters/);
+  assert.match(visualProblems(v('dodont', [['button', '#2F6BFF שליחה', '#2F6BFF שליחה']], { style: 'app' }), all, 's')[0], /the same/);
+  assert.match(visualProblems(v('dodont', [['line', 'const OPENAI_API_KEY = "sk-proj-XXXXXXXXXXXXXXXX"', 'process.env.OPENAI_API_KEY']], { style: 'code' }), all, 's')[0], /at most 40 characters/);
+  assert.match(visualProblems(v('dodont', [['text', 'a', 'b']], { style: 'app', a: 'red' }), all, 's')[0], /hex code/);
+  assert.deepEqual(visualProblems(v('dodont', [['nav', 'center', 'start'], ['heading', 'ברוכים הבאים', 'ברוכים הבאים']], { style: 'web' }), all, 's'), []);
+  assert.deepEqual(visualProblems(v('dodont', [['text', '#9AA0A6 מחיר לחודש', '#1B1F24 מחיר לחודש']], { style: 'app', a: '#FFFFFF', b: '#FFFFFF' }), all, 's'), []);
   // A pack draws only its own types.
   assert.match(visualProblems(v('pitch', [['A', 'GK'], ['B', 'CB'], ['C', 'ST']]), ['timeline', 'bars'], 's')[0], /timeline, bars/);
   for (const [type, s] of Object.entries(SAMPLE_VISUALS)) assert.deepEqual(visualProblems(normVisual(s.visual), all, type), [], type);
@@ -66,6 +77,10 @@ test('every number a graphic draws is held to the quotes, like the slide text', 
   assert.match(bad.problems.join(' '), /visual's number 4 is not in the quotes/);
   // A kit's colours and a pitch's positions are not numbers.
   assert.equal(visualText(v('kit', [['הקבוצה', '#C8102E #FFFFFF']])), 'הקבוצה');
+  // A do-dont's screens are read for their words, never for their colours, element names or the logo's place.
+  assert.equal(visualText(v('dodont', [['nav', 'center', 'start'], ['field', '', 'XXXX XXXX', 'מספר כרטיס'], ['button', '#2F6BFF המשך', '#0047FF']], { style: 'app', a: '#FFFFFF' })), 'מספר כרטיס XXXX XXXX המשך');
+  const dd = gate({ slides: [{ kind: 'cover', title: '', body: '', factKeys: [] }, slide(v('dodont', [['field', 'מספר', '4580 1234', 'כרטיס']], { style: 'app' }))], facts });
+  assert.match(dd.problems.join(' '), /4580/);
   // The cover's graphic too.
   const cover = gate({ slides: [{ kind: 'cover', title: '', body: '', factKeys: [] }], facts, extra: { coverVisual: v('stat', [['קהל', '70,024']]) } });
   assert.match(cover.problems.join(' '), /70024|70,024/);
@@ -91,10 +106,15 @@ test('a graphic is drawn with its text isolated, and the cover always has a pict
   assert.match(html, /<bdi>AC Milan<\/bdi>/);
   // A meme's cover is the meme itself, the hook on the account's meme card (coverInner).
   assert.match((await import('../src/render/roles.js')).coverInner({ postKind: 'meme', hook: 'כשהחשבון מגיע', subject: {} }).inner, /cover-meme/);
-  for (const postKind of ['story', 'iceberg', 'ranking', 'guess-who', 'hot-take', 'head-to-head', 'myth-fact', 'what-happened', 'on-this-day']) {
+  for (const postKind of ['story', 'iceberg', 'ranking', 'guess-who', 'hot-take', 'head-to-head', 'myth-fact', 'what-happened', 'on-this-day', 'do-dont']) {
     assert.match(coverVisualHtml({ postKind, subject: { a: 'א', b: 'ב', date: '25 במאי 2005' } }), /cover-vis/, postKind);
   }
   assert.match(coverVisualHtml({ postKind: 'on-this-day', subject: { date: '25 במאי 2005' } }), /v-date/);
+  assert.match(coverVisualHtml({ postKind: 'do-dont', subject: {} }), /art-dodont/);
+  // The wrong screen comes first, where a Hebrew reader starts, and both are labelled.
+  const two = visualHtml(v('dodont', [['field', 'השם שלכם...', '@noa.builds', 'Instagram'], ['button', '#2F6BFF המשך', '#2F6BFF המשך']], { style: 'app' }));
+  assert.match(two, /side no.*לא.*side yes.*כן/s);
+  assert.match(two, /background:#2F6BFF;color:#ffffff/);
   assert.match(coverVisualHtml({ postKind: 'story', coverVisual: v('stat', [['קהל', '70,024']]) }), /v-stat/);
 });
 

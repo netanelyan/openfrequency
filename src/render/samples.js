@@ -70,4 +70,9 @@ export const SAMPLE_VISUALS = {
     slideBody: 'שלוש שורות, ויש לכם שרת שרץ.',
     visual: v('mock', [['npm create next-app my-mvp', 'Success! Created my-mvp'], ['cd my-mvp && npm run dev', 'Ready on http://localhost:3000']], { style: 'terminal' }),
   },
+  dodont: {
+    slideTitle: 'תראו בתוך השדה איך התשובה נראית',
+    slideBody: 'כשרואים את הפורמט, ממלאים נכון כבר בפעם הראשונה.',
+    visual: v('dodont', [['field', 'השם שלכם באינסטגרם...', '@noa.builds', 'Instagram ID'], ['field', 'מספר הכרטיס שלכם...', 'XXXX XXXX XXXX XXXX', 'מספר כרטיס אשראי'], ['button', '#2F6BFF המשך', '#2F6BFF המשך']], { style: 'app', title: 'טופס תשלום' }),
+  },
 };

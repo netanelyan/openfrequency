@@ -240,6 +240,28 @@
       ]
     },
     {
+      "id": "shop-rules",
+      "kind": "do-dont",
+      "name": "עושים ולא עושים",
+      "about": "Rules for the order form of a small online plant shop, each drawn as the same screen done wrong and done right, all from the sources.",
+      "weight": 1,
+      "hooks": [
+        {
+          "id": "form-mistakes",
+          "pattern": "{מספר} טעויות ב{מה} של חנות צמחים",
+          "examples": [
+            "4 טעויות בטופס ההזמנה של חנות צמחים"
+          ]
+        }
+      ],
+      "ctas": [
+        {
+          "kind": "save",
+          "text": "שמרו לפני שבונים את החנות"
+        }
+      ]
+    },
+    {
       "id": "care-guide",
       "name": "מדריך טיפול",
       "about": "How to keep one plant alive and growing, a step per slide, from the source's care instructions.",

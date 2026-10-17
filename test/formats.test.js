@@ -15,7 +15,7 @@ import { Db } from '../src/db/index.js';
 import { makeContext } from '../src/engine.js';
 import { copyPack, opened, tempHome } from './helpers.js';
 
-// The ten kinds of post: their shapes, the checks each kind adds, the gate's
+// The eleven kinds of post: their shapes, the checks each kind adds, the gate's
 // rules for the slides that carry no fact of their own, and a full render of a
 // post of every kind on both platforms.
 
@@ -35,11 +35,17 @@ const SAMPLES = {
   iceberg: { slides: [s('layer', 'כולם יודעים', 'בזיליקום אוהב שמש\nצריך להשקות'), s('layer', 'קצת פחות', 'קוטפים מלמעלה'), s('layer', 'מעטים יודעים', 'פרחים מרים את העלים'), s('layer', 'כמעט אף אחד', 'הוא קרוב משפחה של הנענע')] },
   'hot-take': { slides: [s('case', 'רוב הצמחים מתים מהשקיה', 'שורשים ספוגים נרקבים.'), s('case', 'אדמה יבשה זה לא סימן לצמא', 'השכבה העליונה מתייבשת ראשונה.'), s('case', 'עציץ בלי חור זו מלכודת', 'המים לא יוצאים.'), s('ask', 'פחות מים, יותר צמחים', 'מסכימים?', [])] },
   'myth-fact': { slides: [s('myth', 'צריך להשקות כל יום', '', []), s('fact', 'רוב צמחי הבית רוצים אדמה שמתייבשת', 'בודקים עם האצבע לפני.'), s('myth', 'צמחים לא אוהבים לדבר איתם', '', []), s('fact', 'מה שעוזר זה אור, לא שיחה', 'חלון מזרחי עושה את העבודה.')] },
+  'do-dont': { slides: [
+    s('rule', 'תכתבו את המידה בתוך השדה', 'כשרואים איך התשובה נראית, ממלאים נכון.', ['f1'], { visual: { type: 'dodont', title: 'הזמנת עציץ', a: '', b: '', style: 'app', items: [{ label: 'field', value: 'המידה שלכם...', value2: 'XX ס"מ', sub: 'קוטר העציץ' }, { label: 'button', value: '#2F6BFF הזמנה', value2: '#2F6BFF הזמנה', sub: '' }] } }),
+    s('rule', 'כותרת לכל קבוצה של שדות', 'העין מוצאת מהר מה שייך למה.', ['f1'], { visual: { type: 'dodont', title: '', a: '', b: '', style: 'app', items: [{ label: 'heading', value: '', value2: 'פרטי משלוח', sub: '' }, { label: 'field', value: '', value2: '', sub: 'כתובת' }, { label: 'field', value: '', value2: '', sub: 'עיר' }] } }),
+    s('rule', 'הלוגו בפינה, לא באמצע', 'שם מחפשים אותו.', ['f1'], { visual: { type: 'dodont', title: 'דף הבית', a: '', b: '', style: 'web', items: [{ label: 'nav', value: 'center', value2: 'start', sub: '' }, { label: 'heading', value: 'צמחים לבית', value2: 'צמחים לבית', sub: '' }] } }),
+    s('rule', 'טקסט כהה על רקע בהיר', 'טקסט אפור בהיר קשה לקרוא בשמש.', ['f1'], { visual: { type: 'dodont', title: '', a: '', b: '', style: 'app', items: [{ label: 'text', value: '#B8BEC6 משלוח חינם מעל שני עציצים', value2: '#1B1F24 משלוח חינם מעל שני עציצים', sub: '' }] } }),
+  ] },
   meme: { slides: [s('joke', 'כשקונים צמח רביעי', 'כי השלישי לא שרד את החורף', []), s('joke', 'כשהשכן שואל איך הצמחים', 'מצוין, בעיקר המתים', []), s('joke', 'כשהעלה הראשון מצהיב', 'מתחילים לחפש מטפל לצמחים', []), s('truth', 'רוב הצמחים מתים מעודף מים', 'לא מחוסר אהבה.')] },
 };
 
 test('every kind has a 5 to 8 slide shape, and the samples pass it', () => {
-  assert.equal(Object.keys(KINDS).filter((k) => k !== 'list').length, 10);
+  assert.equal(Object.keys(KINDS).filter((k) => k !== 'list').length, 11);
   for (const [kind, sample] of Object.entries(SAMPLES)) {
     const f = fmt(kind);
     const [lo, hi] = contentRange(f);
@@ -157,7 +163,7 @@ test('the demo pack builds a post of every kind through the real pipeline, offli
     const pack = ctx.pack('demo');
     const byKind = {};
     for (const f of pack.formats.formats) if (f.kind) byKind[f.kind] = f.id;
-    assert.equal(Object.keys(byKind).length, 10, 'the demo has a format of every kind');
+    assert.equal(Object.keys(byKind).length, 11, 'the demo has a format of every kind');
     for (const [kind, formatKey] of Object.entries(byKind)) {
       const res = await buildPost(ctx, { pack, formatKey, day: kind === 'on-this-day' ? '2026-10-14' : null });
       assert.equal(res.status, 'queued', `${kind}: ${res.reason}`);
