@@ -1,11 +1,16 @@
 /* Teder (תדר): the approval desk. One stylesheet, right to left, phone first.
-   Neutral surfaces so each account's slides carry the colour; one cobalt for the
-   action that matters (approve); red only for what cannot be undone. The mark is a
+   Glass in two layers. Behind everything, the accounts' own colours as soft light
+   (accounts.css sets --wash-1..3); the content (cards, panels) is a frosted material
+   over it, translucent and calm; the controls that float (top bar, tab bar, a post's
+   action bar) are the glass proper: blurred, saturated, with a lit rim. One cobalt for
+   the action that matters (approve); red only for what cannot be undone. The mark is a
    level meter in dots, and the same dots tell each account's day on the Today page.
 
-   Contrast, measured (WCAG): ink 18.9:1, secondary 8.5:1, tertiary 5.3:1 on white
-   (4.75:1 on the page); white on cobalt 7.1:1; every status colour 5.3:1 or more on
-   its own tint. Dark: 16.1, 9.1, 5.7; dark ink on cobalt 7.8:1. */
+   Contrast, measured (WCAG) at the worst point, the peak of the reddest wash: ink 13.7:1,
+   secondary 6.2:1, tertiary 4.7:1 on the page; 17.2, 7.7, 5.9 on a card; white on cobalt
+   7.1:1; every status colour 5.3:1 or more on its own tint. Dark, at the yellow wash:
+   13.1, 7.4, 5.2 on the page; 15.0, 8.4, 6.0 on a card. The bars' labels keep 4.5:1 or
+   more over any slide that scrolls under them. */
 
 @font-face {
   font-family: 'Assistant';
@@ -19,15 +24,26 @@
   /* The display face carries the brand (titles, numbers, the wordmark); controls and reading text use the system face. */
   --display: 'Assistant', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
   --text: system-ui, -apple-system, 'Segoe UI', 'Noto Sans Hebrew', Arial, sans-serif;
-  --bg: #f2f3f5;
-  --surface: #ffffff;
-  --fill: #eef0f3;
-  --fill-2: #e4e7ec;
-  --line: #e1e4e9;
-  --line-2: #cdd2da;
+  --bg: #f0f2f7;
+  /* the light behind the glass: each account's colour, strength set here */
+  --wash-a: 14%;
+  /* content: a frosted material; --solid where something must not show through */
+  --surface: rgba(255, 255, 255, 0.7);
+  --solid: #ffffff;
+  --field: rgba(255, 255, 255, 0.88);
+  --mat-edge: rgba(255, 255, 255, 0.7);
+  /* the floating controls: glass */
+  --bar: rgba(255, 255, 255, 0.78);
+  --glass-blur: 28px;
+  --glass-edge: rgba(255, 255, 255, 0.65);
+  --rim: rgba(255, 255, 255, 0.9);
+  --fill: rgba(28, 34, 52, 0.06);
+  --fill-2: rgba(28, 34, 52, 0.1);
+  --line: rgba(28, 34, 52, 0.1);
+  --line-2: rgba(28, 34, 52, 0.2);
   --ink: #0f1115;
   --ink-2: #474d59;
-  --ink-3: #666c78;
+  --ink-3: #585e6a;
   --accent: #2747d6;
   --accent-ink: #ffffff;
   --accent-soft: #e9edff;
@@ -39,9 +55,8 @@
   --bad-bg: #fce7e7;
   --bad-ink: #ffffff;
   --scrim: rgba(15, 17, 21, 0.62);
-  --bar: rgba(255, 255, 255, 0.82);
-  --shadow: 0 1px 2px rgba(15, 17, 21, 0.05), 0 8px 24px -16px rgba(15, 17, 21, 0.22);
-  --shadow-bar: 0 -1px 0 rgba(15, 17, 21, 0.06), 0 -12px 32px -24px rgba(15, 17, 21, 0.35);
+  --shadow: 0 1px 2px rgba(20, 24, 40, 0.05), 0 10px 30px -18px rgba(20, 24, 40, 0.28), inset 0 0 0 1px var(--mat-edge);
+  --shadow-bar: 0 10px 34px -12px rgba(20, 24, 40, 0.3), 0 1px 3px rgba(20, 24, 40, 0.08);
   --r: 18px;
   --r-m: 14px;
   --r-s: 10px;
@@ -53,15 +68,22 @@
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
-    --bg: #0b0c0e;
-    --surface: #17181c;
-    --fill: #212329;
-    --fill-2: #2a2d34;
-    --line: #2a2d33;
-    --line-2: #3a3e46;
+    --bg: #08090c;
+    --wash-a: 16%;
+    --surface: rgba(24, 26, 32, 0.66);
+    --solid: #17181c;
+    --field: rgba(10, 11, 14, 0.55);
+    --mat-edge: rgba(255, 255, 255, 0.07);
+    --bar: rgba(24, 26, 32, 0.8);
+    --glass-edge: rgba(255, 255, 255, 0.1);
+    --rim: rgba(255, 255, 255, 0.14);
+    --fill: rgba(255, 255, 255, 0.06);
+    --fill-2: rgba(255, 255, 255, 0.1);
+    --line: rgba(255, 255, 255, 0.08);
+    --line-2: rgba(255, 255, 255, 0.16);
     --ink: #f3f4f6;
     --ink-2: #b4bac4;
-    --ink-3: #8b929e;
+    --ink-3: #959ca8;
     --accent: #8a9dff;
     --accent-ink: #0b0c0e;
     --accent-soft: #1d2442;
@@ -73,18 +95,28 @@
     --bad-bg: #3a1517;
     --bad-ink: #1a0607;
     --scrim: rgba(0, 0, 0, 0.6);
-    --bar: rgba(23, 24, 28, 0.8);
-    --shadow: 0 1px 0 rgba(0, 0, 0, 0.4), 0 10px 28px -18px rgba(0, 0, 0, 0.9);
-    --shadow-bar: 0 -1px 0 rgba(255, 255, 255, 0.05), 0 -12px 32px -24px rgba(0, 0, 0, 0.9);
+    --shadow: 0 1px 0 rgba(0, 0, 0, 0.4), 0 10px 28px -18px rgba(0, 0, 0, 0.9), inset 0 0 0 1px var(--mat-edge);
+    --shadow-bar: 0 12px 34px -14px rgba(0, 0, 0, 0.85), 0 1px 3px rgba(0, 0, 0, 0.5);
   }
 }
 
-/* Increase Contrast: the quiet text and the hairlines come up. */
+/* Increase Contrast: the quiet text and the hairlines come up, and the glass thickens. */
 @media (prefers-contrast: more) {
-  :root { --ink-2: #2b3038; --ink-3: #3f4550; --line: #b9bfc8; --line-2: #8f97a3; }
+  :root { --ink-2: #2b3038; --ink-3: #3f4550; --line: #b9bfc8; --line-2: #8f97a3; --surface: rgba(255, 255, 255, 0.94); --bar: rgba(255, 255, 255, 0.95); --mat-edge: #b9bfc8; --glass-edge: #8f97a3; }
 }
 @media (prefers-contrast: more) and (prefers-color-scheme: dark) {
-  :root { --ink-2: #d5d9df; --ink-3: #c0c5cd; --line: #4a4f58; --line-2: #6a707b; }
+  :root { --ink-2: #d5d9df; --ink-3: #c0c5cd; --line: #4a4f58; --line-2: #6a707b; --surface: rgba(23, 24, 28, 0.96); --bar: rgba(23, 24, 28, 0.96); --mat-edge: #4a4f58; --glass-edge: #6a707b; }
+}
+/* Reduce Transparency, or a browser without backdrop blur: every surface is solid. */
+@media (prefers-reduced-transparency: reduce) {
+  :root { --surface: #ffffff; --bar: #ffffff; --field: #ffffff; }
+}
+@media (prefers-reduced-transparency: reduce) and (prefers-color-scheme: dark) {
+  :root { --surface: #17181c; --bar: #17181c; --field: #0b0c0e; }
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root { --bar: #ffffff; }
+  @media (prefers-color-scheme: dark) { :root { --bar: #17181c; } }
 }
 
 * { box-sizing: border-box; }
@@ -101,6 +133,20 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 @media (min-width: 900px) { body { font-size: 16px; padding-bottom: 48px; } }
+/* The light the glass catches: each account's colour, soft and fixed, so the desk is lit by the channels it runs.
+   A fixed layer, not background-attachment, which iOS ignores. Gradients only: nothing sharp to blur, so the
+   content's material needs no blur of its own. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(70vmax 55vmax at 88% -6%, color-mix(in srgb, var(--wash-1, #4c8dff) var(--wash-a), transparent), transparent 70%),
+    radial-gradient(60vmax 50vmax at -8% 48%, color-mix(in srgb, var(--wash-2, #a07cff) var(--wash-a), transparent), transparent 70%),
+    radial-gradient(65vmax 50vmax at 72% 108%, color-mix(in srgb, var(--wash-3, #3cc7b0) var(--wash-a), transparent), transparent 70%);
+}
 
 a { color: inherit; text-decoration-color: var(--line-2); text-underline-offset: 3px; }
 a:hover { text-decoration-color: currentColor; }
@@ -125,10 +171,24 @@ svg.i { width: 20px; height: 20px; flex: none; stroke: currentColor; fill: none;
   top: 0;
   z-index: 20;
   background: var(--bar);
-  backdrop-filter: saturate(1.6) blur(18px);
-  -webkit-backdrop-filter: saturate(1.6) blur(18px);
-  border-bottom: 1px solid var(--line);
+  backdrop-filter: saturate(1.5) blur(var(--glass-blur));
+  -webkit-backdrop-filter: saturate(1.5) blur(var(--glass-blur));
+  box-shadow: inset 0 -1px 0 var(--glass-edge);
 }
+/* The scroll edge: content softens and fades as it meets the bar, instead of a hard line under it. */
+.top::after {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  top: 100%;
+  height: 18px;
+  pointer-events: none;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  -webkit-mask-image: linear-gradient(to bottom, #000, transparent);
+  mask-image: linear-gradient(to bottom, #000, transparent);
+}
+.top .spend span { color: var(--ink-2); }
 .top .wrap { display: flex; align-items: center; gap: 12px; height: var(--top); }
 .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
 .brand b { font: 800 22px/1 var(--display); letter-spacing: -0.3px; }
@@ -158,16 +218,19 @@ svg.i { width: 20px; height: 20px; flex: none; stroke: currentColor; fill: none;
   height: var(--tab);
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  border-radius: 22px;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 26px;
   background: var(--bar);
-  backdrop-filter: saturate(1.6) blur(18px);
-  -webkit-backdrop-filter: saturate(1.6) blur(18px);
-  border: 1px solid var(--line);
-  box-shadow: var(--shadow-bar);
+  backdrop-filter: saturate(1.6) blur(var(--glass-blur));
+  -webkit-backdrop-filter: saturate(1.6) blur(var(--glass-blur));
+  border: 1px solid var(--glass-edge);
+  box-shadow: var(--shadow-bar), inset 0 1px 0 var(--rim);
 }
-.tabbar a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 44px; font-size: 12px; font-weight: 600; text-decoration: none; color: var(--ink-3); position: relative; border-radius: 18px; }
+/* Labels are the secondary ink, not the tertiary: a dark slide can pass under the glass. */
+.tabbar a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 44px; font-size: 12px; font-weight: 600; text-decoration: none; color: var(--ink-2); position: relative; border-radius: 21px; transition: background-color 0.2s ease; }
 .tabbar a svg.i { width: 24px; height: 24px; }
-.tabbar a[aria-current='page'] { color: var(--accent); }
+.tabbar a[aria-current='page'] { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .tabbar a[aria-current='page'] svg.i { stroke-width: 2.2; }
 .tabbar .badge { position: absolute; top: 5px; inset-inline-start: calc(50% + 6px); min-width: 19px; height: 19px; padding: 0 5px; border-radius: 10px; background: var(--bad); color: var(--bad-ink); font-size: 11.5px; font-weight: 700; line-height: 19px; text-align: center; }
 @media (min-width: 900px) { .tabbar { display: none; } }
@@ -246,7 +309,7 @@ label.f small { font-weight: 400; color: var(--ink-3); font-size: 13.5px; }
 input[type='text'], input[type='password'], input[type='url'], input[type='number'], input[type='date'], select, textarea {
   font: 400 17px/1.4 var(--text);
   color: var(--ink);
-  background: var(--surface);
+  background: var(--field);
   border: 1px solid var(--line-2);
   border-radius: 12px;
   padding: 11px 13px;
@@ -391,11 +454,11 @@ blockquote.q { margin: 0; padding: 9px 12px; border-inline-start: 3px solid var(
 .rejectbox.open { display: grid; }
 
 /* A post's own page keeps its decision in thumb reach on a phone. */
-.actionbar { position: sticky; bottom: calc(var(--tab) + 16px + env(safe-area-inset-bottom)); z-index: 10; margin: 16px 0 0; padding: 10px; display: flex; gap: 8px; border-radius: 22px; background: var(--bar); backdrop-filter: saturate(1.6) blur(18px); -webkit-backdrop-filter: saturate(1.6) blur(18px); box-shadow: var(--shadow-bar), inset 0 0 0 1px var(--line); }
+.actionbar { position: sticky; bottom: calc(var(--tab) + 16px + env(safe-area-inset-bottom)); z-index: 10; margin: 16px 0 0; padding: 10px; display: flex; gap: 8px; border-radius: 26px; background: var(--bar); backdrop-filter: saturate(1.6) blur(var(--glass-blur)); -webkit-backdrop-filter: saturate(1.6) blur(var(--glass-blur)); border: 1px solid var(--glass-edge); box-shadow: var(--shadow-bar), inset 0 1px 0 var(--rim); }
 .actionbar form { display: contents; }
 .actionbar .btn { flex: 1 1 0; }
 .actionbar .btn.primary { flex: 2 1 0; }
-@media (min-width: 900px) { .actionbar { position: static; background: none; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; padding: 0; } }
+@media (min-width: 900px) { .actionbar { position: static; background: none; box-shadow: none; border: 0; backdrop-filter: none; -webkit-backdrop-filter: none; padding: 0; } }
 
 /* ------------------------------------------------------------ account cards */
 
@@ -466,7 +529,7 @@ blockquote.q { margin: 0; padding: 9px 12px; border-inline-start: 3px solid var(
 ol.trace { list-style: none; margin: 0; padding: 0; position: relative; }
 ol.trace::before { content: ''; position: absolute; top: 8px; bottom: 8px; inset-inline-start: 6px; width: 2px; background: var(--line); }
 ol.trace li { position: relative; padding: 0 26px 14px 0; font-size: 15px; }
-ol.trace li::before { content: ''; position: absolute; inset-inline-start: 1px; top: 6px; width: 12px; height: 12px; border-radius: 50%; background: var(--surface); box-shadow: inset 0 0 0 2.5px var(--ink-3); }
+ol.trace li::before { content: ''; position: absolute; inset-inline-start: 1px; top: 6px; width: 12px; height: 12px; border-radius: 50%; background: var(--solid); box-shadow: inset 0 0 0 2.5px var(--ink-3); }
 ol.trace li.ok::before { background: var(--accent); box-shadow: none; }
 ol.trace li.failed::before { background: var(--bad); box-shadow: none; border-radius: 3px; }
 ol.trace li.skipped::before { box-shadow: inset 0 0 0 2px var(--line-2); }
@@ -528,9 +591,10 @@ ol.trace li .d { color: var(--ink-3); font-size: 14px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
 }
-/* Reduce Transparency: the bars become solid. */
+/* Reduce Transparency: the glass becomes solid (the tokens above), and the blur and the scroll edge go. */
 @media (prefers-reduced-transparency: reduce) {
-  .top, .tabbar, .actionbar { background: var(--surface); backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .top, .tabbar, .actionbar { backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .top::after { display: none; }
 }
 
 /* small utilities, so no page needs an inline style (the CSP forbids them) */

@@ -63,7 +63,20 @@ async function readForm(req, limit = 200_000) {
 
 /** accounts.css: each account's own colour as --acc, so pages need no inline style. */
 function accountsCss(ctx) {
-  return ctx.packs.map((p) => `.acc-${p.id.replace(/[^a-z0-9-]/g, '')}{--acc:${/^#[0-9a-f]{3,8}$/i.test(p.theme.colors.accent) ? p.theme.colors.accent : '#888'}}`).join('\n');
+  const hex = (c) => (/^#[0-9a-f]{3,8}$/i.test(c) ? c : null);
+  const rules = ctx.packs.map((p) => `.acc-${p.id.replace(/[^a-z0-9-]/g, '')}{--acc:${hex(p.theme.colors.accent) || '#888'}}`);
+  // The light behind the glass (body::before): the first three accounts' colours. A dark one (a navy, a brown)
+  // would muddy the page and the text over it, so it is left out and the stylesheet's own colour stands in.
+  const washes = ctx.packs.map((p) => hex(p.theme.colors.accent)).filter((c) => c && lightEnough(c)).slice(0, 3);
+  if (washes.length) rules.push(`:root{${washes.map((c, i) => `--wash-${i + 1}:${c}`).join(';')}}`);
+  return rules.join('\n');
+}
+
+/** Relative luminance of #rgb or #rrggbb at least 0.15: bright enough to wash a page without dimming its text. */
+function lightEnough(c) {
+  const h = c.length === 4 ? [...c.slice(1)].map((x) => x + x).join('') : c.slice(1, 7);
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b >= 0.15;
 }
 
 const flash = (msg) => `of_flash=${encodeURIComponent(String(msg).slice(0, 200))}; Path=/; Max-Age=20; SameSite=Strict`;
