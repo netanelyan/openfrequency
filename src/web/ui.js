@@ -116,8 +116,8 @@ export function layout(ctx, body) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#eeeff2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111113" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-title" content="תדר">
 <title>${esc(ctx.title)} · תדר</title>
 <link rel="stylesheet" href="/static/style.css?v=${ctx.v || 1}">
