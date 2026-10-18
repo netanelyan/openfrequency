@@ -1,16 +1,18 @@
 /* Teder (תדר): the approval desk. One stylesheet, right to left, phone first.
-   Glass in two layers. Behind everything, the accounts' own colours as soft light
-   (accounts.css sets --wash-1..3); the content (cards, panels) is a frosted material
-   over it, translucent and calm; the controls that float (top bar, tab bar, a post's
-   action bar) are the glass proper: blurred, saturated, with a lit rim. One cobalt for
-   the action that matters (approve); red only for what cannot be undone. The mark is a
-   level meter in dots, and the same dots tell each account's day on the Today page.
+   Glass all the way through. Behind everything, a tinted gradient lit by the accounts' own
+   colours as orbs of light (accounts.css sets --wash-1..3). Every surface is glass over it:
+   cards and panels frosted and clear enough for the light to come through, chips, buttons
+   and fields as lighter panes on them, the slides' counters as dark glass, and the controls
+   that float (top bar, tab bar, a post's action bar, the toast) as the clearest glass, with a
+   lit rim. One cobalt for the action that matters (approve); red only for what cannot be
+   undone. The mark is a level meter in dots, and the same dots tell each account's day.
 
-   Contrast, measured (WCAG) at the worst point, the centre of the darkest orb: ink 9.0:1 and
-   the page's quiet text (--ink-p) 4.7:1 on the page; on a card, secondary 6.4:1, tertiary
-   4.9:1; white on cobalt 7.1:1; every status colour 5.3:1 or more on its own tint. Dark:
-   8.6 and 6.0 on the page; 6.9 and 4.9 on a card. The bars' labels keep 4.5:1 or more
-   over any slide that scrolls under them. */
+   Contrast, measured (WCAG) at the worst point, the centre of the darkest orb under the
+   clearest part of the glass: on the page, ink 7.6:1 and its quiet text (--ink-p) 4.6:1;
+   on a card, secondary 6.3:1, tertiary 5.1:1, cobalt 5.1:1, every status colour 4.9:1 or
+   more; white on cobalt 8.1:1. Dark: 6.0 and 4.7 on the page; 7.6, 5.8 and 5.3 on a card.
+   The bars' labels are the main ink, 5.0:1 or more over any slide passing under them; the
+   slides' counters 4.7:1. */
 
 @font-face {
   font-family: 'Assistant';
@@ -24,42 +26,48 @@
   /* The display face carries the brand (titles, numbers, the wordmark); controls and reading text use the system face. */
   --display: 'Assistant', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
   --text: system-ui, -apple-system, 'Segoe UI', 'Noto Sans Hebrew', Arial, sans-serif;
-  --bg: #eef0f6;
+  --bg: #eceff9;
+  /* the page under the light: a tinted gradient, never a flat grey */
+  --bg-grad: linear-gradient(165deg, #e9edfb 0%, #f3eef8 55%, #eef4f6 100%);
   /* the light behind the glass: each account's colour, strength set here */
-  --wash-a: 40%;
-  /* content: a frosted material; --solid where something must not show through */
-  --surface: rgba(255, 255, 255, 0.6);
-  --surface-hi: rgba(255, 255, 255, 0.74);
-  --mat-blur: 24px;
+  --wash-a: 50%;
+  /* content: frosted glass; --solid where something must not show through */
+  --surface: rgba(255, 255, 255, 0.48);
+  --surface-hi: rgba(255, 255, 255, 0.64);
+  --mat-blur: 26px;
   --solid: #ffffff;
-  --field: rgba(255, 255, 255, 0.88);
-  --mat-edge: rgba(255, 255, 255, 0.85);
-  /* the floating controls: glass */
-  --bar: rgba(255, 255, 255, 0.76);
-  --glass-blur: 28px;
-  --glass-edge: rgba(255, 255, 255, 0.65);
-  --rim: rgba(255, 255, 255, 0.9);
-  --fill: rgba(28, 34, 52, 0.06);
-  --fill-2: rgba(28, 34, 52, 0.1);
+  --field: rgba(255, 255, 255, 0.82);
+  --mat-edge: rgba(255, 255, 255, 0.75);
+  /* the floating controls: the clearest glass */
+  --bar: rgba(255, 255, 255, 0.62);
+  --glass-blur: 32px;
+  --glass-edge: rgba(255, 255, 255, 0.7);
+  --rim: rgba(255, 255, 255, 0.95);
+  /* panes on the glass (chips, buttons): lighter, with their own edge */
+  --fill: rgba(255, 255, 255, 0.5);
+  --fill-2: rgba(255, 255, 255, 0.75);
+  --fill-edge: rgba(255, 255, 255, 0.8);
+  /* a meter's empty track: the one fill that must read darker than the glass */
+  --track: rgba(28, 34, 52, 0.12);
   --line: rgba(28, 34, 52, 0.1);
   --line-2: rgba(28, 34, 52, 0.2);
   --ink: #0f1115;
-  --ink-2: #474d59;
-  --ink-3: #585e6a;
+  --ink-2: #3d434e;
+  --ink-3: #4b515d;
   /* the quiet text that sits straight on the coloured page, one step darker than on a card */
-  --ink-p: #3d434e;
-  --accent: #2747d6;
+  --ink-p: #343a45;
+  --accent: #2240c4;
   --accent-ink: #ffffff;
   --accent-soft: #e9edff;
-  --ok: #11703f;
+  --ok: #0d5e33;
   --ok-bg: #e2f3e9;
-  --warn: #7d4a00;
+  --warn: #6e4100;
   --warn-bg: #fbefd9;
-  --bad: #b4232a;
+  --bad: #a01d24;
   --bad-bg: #fce7e7;
   --bad-ink: #ffffff;
   --scrim: rgba(15, 17, 21, 0.62);
-  --shadow: 0 1px 2px rgba(20, 24, 40, 0.05), 0 10px 30px -18px rgba(20, 24, 40, 0.28), inset 0 0 0 1px var(--mat-edge);
+  --shadow: 0 1px 2px rgba(20, 24, 40, 0.04), 0 14px 36px -18px rgba(30, 36, 80, 0.3), inset 0 0 0 1px var(--mat-edge), inset 0 1px 0 var(--rim);
   --shadow-bar: 0 10px 34px -12px rgba(20, 24, 40, 0.3), 0 1px 3px rgba(20, 24, 40, 0.08);
   --r: 18px;
   --r-m: 14px;
@@ -72,36 +80,39 @@
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
-    --bg: #08090c;
-    --wash-a: 30%;
-    --surface: rgba(22, 24, 30, 0.5);
-    --surface-hi: rgba(36, 38, 46, 0.5);
-    --solid: #17181c;
-    --field: rgba(10, 11, 14, 0.55);
-    --mat-edge: rgba(255, 255, 255, 0.12);
-    --bar: rgba(22, 24, 30, 0.8);
-    --glass-edge: rgba(255, 255, 255, 0.1);
-    --rim: rgba(255, 255, 255, 0.14);
-    --fill: rgba(255, 255, 255, 0.06);
-    --fill-2: rgba(255, 255, 255, 0.1);
-    --line: rgba(255, 255, 255, 0.08);
-    --line-2: rgba(255, 255, 255, 0.16);
-    --ink: #f3f4f6;
-    --ink-2: #b4bac4;
-    --ink-3: #959ca8;
-    --ink-p: #c9ced6;
-    --accent: #8a9dff;
+    --bg: #0b0c16;
+    --bg-grad: linear-gradient(165deg, #0b0d1c 0%, #120b1d 55%, #08111a 100%);
+    --wash-a: 40%;
+    --surface: rgba(10, 12, 22, 0.45);
+    --surface-hi: rgba(40, 44, 64, 0.45);
+    --solid: #161822;
+    --field: rgba(8, 9, 16, 0.5);
+    --mat-edge: rgba(255, 255, 255, 0.14);
+    --bar: rgba(12, 14, 24, 0.62);
+    --glass-edge: rgba(255, 255, 255, 0.14);
+    --rim: rgba(255, 255, 255, 0.18);
+    --fill: rgba(255, 255, 255, 0.08);
+    --fill-2: rgba(255, 255, 255, 0.14);
+    --fill-edge: rgba(255, 255, 255, 0.12);
+    --track: rgba(255, 255, 255, 0.16);
+    --line: rgba(255, 255, 255, 0.1);
+    --line-2: rgba(255, 255, 255, 0.18);
+    --ink: #f5f6f8;
+    --ink-2: #cdd2da;
+    --ink-3: #b3b9c3;
+    --ink-p: #d9dde3;
+    --accent: #9aabff;
     --accent-ink: #0b0c0e;
     --accent-soft: #1d2442;
-    --ok: #5fd594;
+    --ok: #6fe0a2;
     --ok-bg: #10291b;
-    --warn: #f2b861;
+    --warn: #f5c272;
     --warn-bg: #33260f;
-    --bad: #ff8a8d;
+    --bad: #ff9a9d;
     --bad-bg: #3a1517;
     --bad-ink: #1a0607;
     --scrim: rgba(0, 0, 0, 0.6);
-    --shadow: 0 1px 0 rgba(0, 0, 0, 0.4), 0 10px 28px -18px rgba(0, 0, 0, 0.9), inset 0 0 0 1px var(--mat-edge);
+    --shadow: 0 1px 0 rgba(0, 0, 0, 0.35), 0 16px 40px -20px rgba(0, 0, 0, 0.9), inset 0 0 0 1px var(--mat-edge), inset 0 1px 0 var(--rim);
     --shadow-bar: 0 12px 34px -14px rgba(0, 0, 0, 0.85), 0 1px 3px rgba(0, 0, 0, 0.5);
   }
 }
@@ -115,14 +126,14 @@
 }
 /* Reduce Transparency, or a browser without backdrop blur: every surface is solid. */
 @media (prefers-reduced-transparency: reduce) {
-  :root { --surface: #ffffff; --surface-hi: #ffffff; --bar: #ffffff; --field: #ffffff; }
+  :root { --surface: #ffffff; --surface-hi: #ffffff; --bar: #ffffff; --field: #ffffff; --fill: #eef0f3; --fill-2: #e4e7ec; }
 }
 @media (prefers-reduced-transparency: reduce) and (prefers-color-scheme: dark) {
-  :root { --surface: #17181c; --surface-hi: #17181c; --bar: #17181c; --field: #0b0c0e; }
+  :root { --surface: #17181c; --surface-hi: #17181c; --bar: #17181c; --field: #0b0c0e; --fill: #212329; --fill-2: #2a2d34; }
 }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  :root { --bar: #ffffff; }
-  @media (prefers-color-scheme: dark) { :root { --bar: #17181c; } }
+  :root { --bar: #ffffff; --surface: rgba(255, 255, 255, 0.86); --surface-hi: rgba(255, 255, 255, 0.86); }
+  @media (prefers-color-scheme: dark) { :root { --bar: #17181c; --surface: rgba(23, 24, 28, 0.9); --surface-hi: rgba(23, 24, 28, 0.9); } }
 }
 
 * { box-sizing: border-box; }
@@ -152,9 +163,10 @@ body::before {
   --o2: color-mix(in srgb, var(--wash-2, #a07cff) var(--wash-a), transparent);
   --o3: color-mix(in srgb, var(--wash-3, #3cc7b0) var(--wash-a), transparent);
   background:
-    radial-gradient(circle 36vmax at 90% 6%, var(--o1) 0 34%, transparent 70%),
-    radial-gradient(circle 32vmax at 4% 48%, var(--o2) 0 34%, transparent 70%),
-    radial-gradient(circle 34vmax at 72% 96%, var(--o3) 0 34%, transparent 70%);
+    radial-gradient(circle 40vmax at 92% 4%, var(--o1) 0 30%, transparent 72%),
+    radial-gradient(circle 36vmax at 2% 50%, var(--o2) 0 30%, transparent 72%),
+    radial-gradient(circle 38vmax at 74% 98%, var(--o3) 0 30%, transparent 72%),
+    var(--bg-grad, var(--bg));
 }
 /* The content's material: frosted, the light showing through, a lit edge. Not the glass of the bars: no rim
    highlight, less blur, so what floats still reads as above what scrolls. */
@@ -204,12 +216,12 @@ svg.i { width: 20px; height: 20px; flex: none; stroke: currentColor; fill: none;
   -webkit-mask-image: linear-gradient(to bottom, #000, transparent);
   mask-image: linear-gradient(to bottom, #000, transparent);
 }
-.top .spend span { color: var(--ink-2); }
+.top .spend span { color: var(--ink); }
 .top .wrap { display: flex; align-items: center; gap: 12px; height: var(--top); }
 .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
 .brand b { font: 800 22px/1 var(--display); letter-spacing: -0.3px; }
 .nav { display: none; gap: 2px; margin-inline-start: 20px; }
-.nav a { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border-radius: 999px; text-decoration: none; color: var(--ink-2); font-weight: 600; font-size: 15px; }
+.nav a { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border-radius: 999px; text-decoration: none; color: var(--ink); font-weight: 600; font-size: 15px; }
 .nav a:hover { background: var(--fill); color: var(--ink); }
 .nav a[aria-current='page'] { background: var(--accent-soft); color: var(--accent); }
 .nav .badge { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: var(--accent); color: var(--accent-ink); font-size: 12px; font-weight: 700; line-height: 20px; text-align: center; }
@@ -243,10 +255,11 @@ svg.i { width: 20px; height: 20px; flex: none; stroke: currentColor; fill: none;
   border: 1px solid var(--glass-edge);
   box-shadow: var(--shadow-bar), inset 0 1px 0 var(--rim);
 }
-/* Labels are the secondary ink, not the tertiary: a dark slide can pass under the glass. */
-.tabbar a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 44px; font-size: 12px; font-weight: 600; text-decoration: none; color: var(--ink-2); position: relative; border-radius: 21px; transition: background-color 0.2s ease; }
+/* Labels are the main ink: the glass is clear, and a dark slide can pass under it. The selected tab sits on a
+   solid tinted pane, so its cobalt label keeps its contrast whatever is behind. */
+.tabbar a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 44px; font-size: 12px; font-weight: 600; text-decoration: none; color: var(--ink); position: relative; border-radius: 21px; transition: background-color 0.2s ease; }
 .tabbar a svg.i { width: 24px; height: 24px; }
-.tabbar a[aria-current='page'] { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.tabbar a[aria-current='page'] { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--solid)); box-shadow: inset 0 0 0 1px var(--fill-edge); }
 .tabbar a[aria-current='page'] svg.i { stroke-width: 2.2; }
 .tabbar .badge { position: absolute; top: 5px; inset-inline-start: calc(50% + 6px); min-width: 19px; height: 19px; padding: 0 5px; border-radius: 10px; background: var(--bad); color: var(--bad-ink); font-size: 11.5px; font-weight: 700; line-height: 19px; text-align: center; }
 @media (min-width: 900px) { .tabbar { display: none; } }
@@ -266,7 +279,7 @@ h3 { font-size: 16px; margin: 0; font-weight: 650; }
 .lede { color: var(--ink-p); max-width: 64ch; margin: 0 0 18px; }
 
 /* chips and dots */
-.chip { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 600; line-height: 1; padding: 6px 10px; border-radius: 999px; background: var(--fill); color: var(--ink-2); white-space: nowrap; }
+.chip { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 600; line-height: 1; padding: 6px 10px; border-radius: 999px; background: var(--fill); color: var(--ink-2); white-space: nowrap; box-shadow: inset 0 0 0 1px var(--fill-edge); }
 .chip svg.i { width: 15px; height: 15px; }
 .chip.ok { background: var(--ok-bg); color: var(--ok); }
 .chip.warn { background: var(--warn-bg); color: var(--warn); }
@@ -301,6 +314,7 @@ h3 { font-size: 16px; margin: 0; font-weight: 650; }
   border-radius: 999px;
   border: 0;
   background: var(--fill);
+  box-shadow: inset 0 0 0 1px var(--fill-edge);
   color: var(--ink);
   cursor: pointer;
   text-decoration: none;
@@ -310,10 +324,10 @@ h3 { font-size: 16px; margin: 0; font-weight: 650; }
 }
 .btn:hover { background: var(--fill-2); }
 .btn:active { transform: scale(0.97); }
-.btn.primary { background: var(--accent); color: var(--accent-ink); }
+.btn.primary { background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 88%, #fff), var(--accent)); color: var(--accent-ink); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 8px 20px -10px color-mix(in srgb, var(--accent) 70%, transparent); }
 .btn.primary:hover { filter: brightness(1.08); }
 .btn.dark { background: var(--ink); color: var(--bg); }
-.btn.ghost { background: transparent; color: var(--ink-2); }
+.btn.ghost { background: transparent; box-shadow: none; color: var(--ink-2); }
 .btn.ghost:hover { background: var(--fill); color: var(--ink); }
 .btn.danger { background: transparent; color: var(--bad); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--bad) 45%, transparent); }
 .btn.danger:hover, .btn.danger.armed { background: var(--bad); color: var(--bad-ink); box-shadow: none; }
@@ -344,12 +358,12 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .seg input { position: absolute; opacity: 0; pointer-events: none; }
 .seg label { display: grid; place-items: center; gap: 1px; min-height: 52px; padding: 6px 8px; border-radius: 11px; font-size: 15px; font-weight: 650; color: var(--ink-2); cursor: pointer; text-align: center; }
 .seg label small { font-size: 12px; font-weight: 500; color: var(--ink-3); }
-.seg input:checked + label { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+.seg input:checked + label { background: var(--field); color: var(--ink); box-shadow: var(--shadow); }
 .seg input:focus-visible + label { outline: 3px solid var(--accent); }
 
 /* meters */
-meter { width: 100%; height: 8px; border-radius: 6px; background: var(--fill-2); border: 0; display: block; }
-meter::-webkit-meter-bar { background: var(--fill-2); border-radius: 6px; border: 0; height: 8px; }
+meter { width: 100%; height: 8px; border-radius: 6px; background: var(--track); border: 0; display: block; }
+meter::-webkit-meter-bar { background: var(--track); border-radius: 6px; border: 0; height: 8px; }
 meter::-webkit-meter-optimum-value { background: var(--accent); border-radius: 6px; }
 meter::-webkit-meter-suboptimum-value { background: var(--warn); border-radius: 6px; }
 meter::-webkit-meter-even-less-good-value { background: var(--bad); border-radius: 6px; }
@@ -433,8 +447,10 @@ meter::-moz-meter-bar { background: var(--accent); border-radius: 6px; }
 .strip a { scroll-snap-align: start; display: block; border-radius: 12px; overflow: hidden; background: var(--fill); aspect-ratio: 9 / 16; position: relative; box-shadow: 0 0 0 1px var(--line); }
 .strip.ig a { aspect-ratio: 4 / 5; }
 .strip img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.strip a .n { position: absolute; top: 8px; inset-inline-end: 8px; background: var(--scrim); color: #fff; font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 999px; direction: ltr; }
-.strip a .has { position: absolute; bottom: 8px; inset-inline-start: 8px; background: var(--scrim); color: #fff; font-size: 12px; font-weight: 650; padding: 3px 8px; border-radius: 999px; }
+.strip a .n { position: absolute; top: 8px; inset-inline-end: 8px; color: #fff; font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 999px; direction: ltr; }
+.strip a .has { position: absolute; bottom: 8px; inset-inline-start: 8px; color: #fff; font-size: 12px; font-weight: 650; padding: 3px 8px; border-radius: 999px; }
+/* Over a slide: dark glass, dark enough (55%) for white text over the lightest slide. */
+.strip a .n, .strip a .has { background: rgba(10, 12, 20, 0.55); backdrop-filter: saturate(1.4) blur(10px); -webkit-backdrop-filter: saturate(1.4) blur(10px); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18); }
 .dots { display: flex; justify-content: center; gap: 5px; padding: 4px 0; }
 .dots i { width: 6px; height: 6px; border-radius: 3px; background: var(--line-2); transition: width 0.2s ease, background-color 0.2s ease; }
 .dots i.on { width: 18px; background: var(--accent); }
@@ -598,7 +614,7 @@ ol.trace li .d { color: var(--ink-3); font-size: 14px; }
 @keyframes rise { from { opacity: 0; transform: scale(0.2); } to { opacity: 1; transform: scale(1); } }
 
 /* toast: what a tap did, where the thumb is */
-#toast { position: fixed; inset-inline: 16px; bottom: calc(var(--tab) + 24px + env(safe-area-inset-bottom)); margin: 0 auto; max-width: 420px; background: var(--ink); color: var(--bg); padding: 14px 18px; border-radius: 16px; font-weight: 600; font-size: 15px; box-shadow: var(--shadow); opacity: 0; transform: translateY(10px); pointer-events: none; transition: opacity 0.2s ease, transform 0.2s ease; z-index: 50; }
+#toast { position: fixed; inset-inline: 16px; bottom: calc(var(--tab) + 24px + env(safe-area-inset-bottom)); margin: 0 auto; max-width: 420px; background: rgba(15, 17, 24, 0.72); backdrop-filter: saturate(1.5) blur(20px); -webkit-backdrop-filter: saturate(1.5) blur(20px); color: #fff; padding: 14px 18px; border-radius: 18px; font-weight: 600; font-size: 15px; box-shadow: var(--shadow-bar), inset 0 0 0 1px rgba(255, 255, 255, 0.14); opacity: 0; transform: translateY(10px); pointer-events: none; transition: opacity 0.2s ease, transform 0.2s ease; z-index: 50; }
 #toast.show { opacity: 1; transform: translateY(0); }
 #toast.bad { background: var(--bad); color: var(--bad-ink); }
 @media (min-width: 900px) { #toast { bottom: 28px; } }
@@ -632,8 +648,8 @@ ol.trace li .d { color: var(--ink-3); font-size: 14px; }
 .srcname { margin: 8px 0 2px; font-size: 17px; }
 .js .js-hide { display: none; }
 .cols > *, .posts > *, .accounts > * { min-width: 0; }
-a.back { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; text-decoration: none; color: var(--accent); font-weight: 600; }
-a.back svg.i { transform: rotate(-90deg); width: 18px; height: 18px; }
+a.back { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; text-decoration: none; color: var(--ink); font-weight: 600; }
+a.back svg.i { transform: rotate(-90deg); width: 18px; height: 18px; color: var(--accent); }
 details.panel > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; min-height: 32px; }
 details.panel > summary::-webkit-details-marker { display: none; }
 details.panel > summary::after { content: ''; margin-inline-start: auto; width: 9px; height: 9px; border-inline-end: 2px solid var(--ink-3); border-bottom: 2px solid var(--ink-3); transform: rotate(45deg); transition: transform 0.2s ease; }
