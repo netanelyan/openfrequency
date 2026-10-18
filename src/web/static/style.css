@@ -1,7 +1,8 @@
 /* Teder (תדר): the approval desk. One stylesheet, right to left, phone first.
    Glass all the way through, in few colours. Behind everything, a cool tinted gradient lit
-   by three orbs of one blue-grey family, the cobalt's own: enough light for the glass to
-   catch, no colour of its own to compete with the slides. Every surface is glass over it:
+   by three orbs of silver: no hue at all, only light and shade for the glass to catch, so
+   nothing competes with the slides and the colour left on the page is the colour that means
+   something. Every surface is glass over it:
    cards and panels frosted and clear enough for the light to come through, chips, buttons
    and fields as lighter panes on them, the slides' counters as dark glass, and the controls
    that float (top bar, tab bar, a post's action bar, the toast) as the clearest glass, with a
@@ -9,9 +10,9 @@
    undone. The mark is a level meter in dots, and the same dots tell each account's day.
 
    Contrast, measured (WCAG) at the worst point, the centre of the darkest orb under the
-   clearest part of the glass: on the page, ink 10.7:1 and its quiet text (--ink-p) 6.5:1;
-   on a card, secondary 7.5:1, tertiary 6.0:1, cobalt 6.1:1, every status colour 5.9:1 or
-   more; white on cobalt 8.1:1. Dark: 7.3 and 5.8 on the page; 8.4, 6.4 and 5.8 on a card.
+   clearest part of the glass: on the page, ink 11.5:1 and its quiet text (--ink-p) 7.0:1;
+   on a card, secondary 7.8:1, tertiary 6.2:1, cobalt 6.3:1, every status colour 6.1:1 or
+   more; white on cobalt 8.1:1. Dark: 6.3 and 5.0 on the page; 7.7, 5.9 and 5.3 on a card.
    The bars' labels are the main ink, 5.0:1 or more over any slide passing under them; the
    slides' counters 4.7:1. */
 
@@ -27,14 +28,14 @@
   /* The display face carries the brand (titles, numbers, the wordmark); controls and reading text use the system face. */
   --display: 'Assistant', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
   --text: system-ui, -apple-system, 'Segoe UI', 'Noto Sans Hebrew', Arial, sans-serif;
-  --bg: #eceff9;
+  --bg: #eef0f3;
   /* the page under the light: a tinted gradient, never a flat grey */
-  --bg-grad: linear-gradient(165deg, #e9edfb 0%, #eef0f7 55%, #eceff6 100%);
-  /* the light behind the glass: one blue-grey family, strength set here */
-  --orb-1: #7d95f5;
-  --orb-2: #a9b6d9;
-  --orb-3: #8fa6e8;
-  --wash-a: 50%;
+  --bg-grad: linear-gradient(165deg, #eef0f3 0%, #f4f5f7 55%, #e9ebef 100%);
+  /* the light behind the glass: silver, a highlight and two greys; strength set here */
+  --orb-1: #ffffff;
+  --orb-2: #a9afba;
+  --orb-3: #c6cad2;
+  --wash-a: 55%;
   /* content: frosted glass; --solid where something must not show through */
   --surface: rgba(255, 255, 255, 0.48);
   --surface-hi: rgba(255, 255, 255, 0.64);
@@ -71,7 +72,7 @@
   --bad-bg: #fce7e7;
   --bad-ink: #ffffff;
   --scrim: rgba(15, 17, 21, 0.62);
-  --shadow: 0 1px 2px rgba(20, 24, 40, 0.04), 0 14px 36px -18px rgba(30, 36, 80, 0.3), inset 0 0 0 1px var(--mat-edge), inset 0 1px 0 var(--rim);
+  --shadow: 0 1px 2px rgba(20, 24, 40, 0.04), 0 14px 36px -18px rgba(20, 22, 28, 0.26), inset 0 0 0 1px var(--mat-edge), inset 0 1px 0 var(--rim);
   --shadow-bar: 0 10px 34px -12px rgba(20, 24, 40, 0.3), 0 1px 3px rgba(20, 24, 40, 0.08);
   --r: 18px;
   --r-m: 14px;
@@ -84,15 +85,19 @@
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
-    --bg: #0b0c16;
-    --bg-grad: linear-gradient(165deg, #0b0d1c 0%, #0d0e1a 55%, #090c16 100%);
+    --bg: #0c0d10;
+    --bg-grad: linear-gradient(165deg, #0c0d10 0%, #111215 55%, #0a0b0d 100%);
+    /* graphite: steel greys with a cool sheen */
+    --orb-1: #9aa2b0;
+    --orb-2: #6f7684;
+    --orb-3: #c3c8d0;
     --wash-a: 40%;
-    --surface: rgba(10, 12, 22, 0.45);
-    --surface-hi: rgba(40, 44, 64, 0.45);
-    --solid: #161822;
-    --field: rgba(8, 9, 16, 0.5);
+    --surface: rgba(14, 15, 18, 0.45);
+    --surface-hi: rgba(48, 50, 56, 0.45);
+    --solid: #17181b;
+    --field: rgba(8, 9, 11, 0.5);
     --mat-edge: rgba(255, 255, 255, 0.14);
-    --bar: rgba(12, 14, 24, 0.62);
+    --bar: rgba(14, 15, 18, 0.62);
     --glass-edge: rgba(255, 255, 255, 0.14);
     --rim: rgba(255, 255, 255, 0.18);
     --fill: rgba(255, 255, 255, 0.08);
@@ -154,7 +159,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 @media (min-width: 900px) { body { font-size: 16px; padding-bottom: 48px; } }
-/* The light the glass catches: three orbs in one blue-grey family, fixed, so the cards' frost shows their
+/* The light the glass catches: three orbs of silver, fixed, so the cards' frost shows their
    edges as they scroll over them. A fixed layer, not
    background-attachment, which iOS ignores. The orbs sit apart, so their strongest parts never stack. */
 body::before {
