@@ -6,11 +6,11 @@
    the action that matters (approve); red only for what cannot be undone. The mark is a
    level meter in dots, and the same dots tell each account's day on the Today page.
 
-   Contrast, measured (WCAG) at the worst point, the peak of the reddest wash: ink 13.7:1,
-   secondary 6.2:1, tertiary 4.7:1 on the page; 17.2, 7.7, 5.9 on a card; white on cobalt
-   7.1:1; every status colour 5.3:1 or more on its own tint. Dark, at the yellow wash:
-   13.1, 7.4, 5.2 on the page; 15.0, 8.4, 6.0 on a card. The bars' labels keep 4.5:1 or
-   more over any slide that scrolls under them. */
+   Contrast, measured (WCAG) at the worst point, the centre of the darkest orb: ink 9.0:1 and
+   the page's quiet text (--ink-p) 4.7:1 on the page; on a card, secondary 6.4:1, tertiary
+   4.9:1; white on cobalt 7.1:1; every status colour 5.3:1 or more on its own tint. Dark:
+   8.6 and 6.0 on the page; 6.9 and 4.9 on a card. The bars' labels keep 4.5:1 or more
+   over any slide that scrolls under them. */
 
 @font-face {
   font-family: 'Assistant';
@@ -24,16 +24,18 @@
   /* The display face carries the brand (titles, numbers, the wordmark); controls and reading text use the system face. */
   --display: 'Assistant', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
   --text: system-ui, -apple-system, 'Segoe UI', 'Noto Sans Hebrew', Arial, sans-serif;
-  --bg: #f0f2f7;
+  --bg: #eef0f6;
   /* the light behind the glass: each account's colour, strength set here */
-  --wash-a: 14%;
+  --wash-a: 40%;
   /* content: a frosted material; --solid where something must not show through */
-  --surface: rgba(255, 255, 255, 0.7);
+  --surface: rgba(255, 255, 255, 0.6);
+  --surface-hi: rgba(255, 255, 255, 0.74);
+  --mat-blur: 24px;
   --solid: #ffffff;
   --field: rgba(255, 255, 255, 0.88);
-  --mat-edge: rgba(255, 255, 255, 0.7);
+  --mat-edge: rgba(255, 255, 255, 0.85);
   /* the floating controls: glass */
-  --bar: rgba(255, 255, 255, 0.78);
+  --bar: rgba(255, 255, 255, 0.76);
   --glass-blur: 28px;
   --glass-edge: rgba(255, 255, 255, 0.65);
   --rim: rgba(255, 255, 255, 0.9);
@@ -44,6 +46,8 @@
   --ink: #0f1115;
   --ink-2: #474d59;
   --ink-3: #585e6a;
+  /* the quiet text that sits straight on the coloured page, one step darker than on a card */
+  --ink-p: #3d434e;
   --accent: #2747d6;
   --accent-ink: #ffffff;
   --accent-soft: #e9edff;
@@ -69,12 +73,13 @@
   :root {
     color-scheme: dark;
     --bg: #08090c;
-    --wash-a: 16%;
-    --surface: rgba(24, 26, 32, 0.66);
+    --wash-a: 30%;
+    --surface: rgba(22, 24, 30, 0.5);
+    --surface-hi: rgba(36, 38, 46, 0.5);
     --solid: #17181c;
     --field: rgba(10, 11, 14, 0.55);
-    --mat-edge: rgba(255, 255, 255, 0.07);
-    --bar: rgba(24, 26, 32, 0.8);
+    --mat-edge: rgba(255, 255, 255, 0.12);
+    --bar: rgba(22, 24, 30, 0.8);
     --glass-edge: rgba(255, 255, 255, 0.1);
     --rim: rgba(255, 255, 255, 0.14);
     --fill: rgba(255, 255, 255, 0.06);
@@ -84,6 +89,7 @@
     --ink: #f3f4f6;
     --ink-2: #b4bac4;
     --ink-3: #959ca8;
+    --ink-p: #c9ced6;
     --accent: #8a9dff;
     --accent-ink: #0b0c0e;
     --accent-soft: #1d2442;
@@ -102,17 +108,17 @@
 
 /* Increase Contrast: the quiet text and the hairlines come up, and the glass thickens. */
 @media (prefers-contrast: more) {
-  :root { --ink-2: #2b3038; --ink-3: #3f4550; --line: #b9bfc8; --line-2: #8f97a3; --surface: rgba(255, 255, 255, 0.94); --bar: rgba(255, 255, 255, 0.95); --mat-edge: #b9bfc8; --glass-edge: #8f97a3; }
+  :root { --ink-2: #2b3038; --ink-3: #3f4550; --line: #b9bfc8; --line-2: #8f97a3; --surface: rgba(255, 255, 255, 0.94); --surface-hi: rgba(255, 255, 255, 0.94); --bar: rgba(255, 255, 255, 0.95); --mat-edge: #b9bfc8; --glass-edge: #8f97a3; }
 }
 @media (prefers-contrast: more) and (prefers-color-scheme: dark) {
-  :root { --ink-2: #d5d9df; --ink-3: #c0c5cd; --line: #4a4f58; --line-2: #6a707b; --surface: rgba(23, 24, 28, 0.96); --bar: rgba(23, 24, 28, 0.96); --mat-edge: #4a4f58; --glass-edge: #6a707b; }
+  :root { --ink-2: #d5d9df; --ink-3: #c0c5cd; --line: #4a4f58; --line-2: #6a707b; --surface: rgba(23, 24, 28, 0.96); --surface-hi: rgba(23, 24, 28, 0.96); --bar: rgba(23, 24, 28, 0.96); --mat-edge: #4a4f58; --glass-edge: #6a707b; }
 }
 /* Reduce Transparency, or a browser without backdrop blur: every surface is solid. */
 @media (prefers-reduced-transparency: reduce) {
-  :root { --surface: #ffffff; --bar: #ffffff; --field: #ffffff; }
+  :root { --surface: #ffffff; --surface-hi: #ffffff; --bar: #ffffff; --field: #ffffff; }
 }
 @media (prefers-reduced-transparency: reduce) and (prefers-color-scheme: dark) {
-  :root { --surface: #17181c; --bar: #17181c; --field: #0b0c0e; }
+  :root { --surface: #17181c; --surface-hi: #17181c; --bar: #17181c; --field: #0b0c0e; }
 }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   :root { --bar: #ffffff; }
@@ -133,19 +139,29 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 @media (min-width: 900px) { body { font-size: 16px; padding-bottom: 48px; } }
-/* The light the glass catches: each account's colour, soft and fixed, so the desk is lit by the channels it runs.
-   A fixed layer, not background-attachment, which iOS ignores. Gradients only: nothing sharp to blur, so the
-   content's material needs no blur of its own. */
+/* The light the glass catches: each account's colour as an orb of light, fixed, so the desk is lit by the
+   channels it runs and the cards' frost shows its edges as they scroll over it. A fixed layer, not
+   background-attachment, which iOS ignores. The orbs sit apart, so their strongest parts never stack. */
 body::before {
   content: '';
   position: fixed;
   inset: 0;
   z-index: -1;
   pointer-events: none;
+  --o1: color-mix(in srgb, var(--wash-1, #4c8dff) var(--wash-a), transparent);
+  --o2: color-mix(in srgb, var(--wash-2, #a07cff) var(--wash-a), transparent);
+  --o3: color-mix(in srgb, var(--wash-3, #3cc7b0) var(--wash-a), transparent);
   background:
-    radial-gradient(70vmax 55vmax at 88% -6%, color-mix(in srgb, var(--wash-1, #4c8dff) var(--wash-a), transparent), transparent 70%),
-    radial-gradient(60vmax 50vmax at -8% 48%, color-mix(in srgb, var(--wash-2, #a07cff) var(--wash-a), transparent), transparent 70%),
-    radial-gradient(65vmax 50vmax at 72% 108%, color-mix(in srgb, var(--wash-3, #3cc7b0) var(--wash-a), transparent), transparent 70%);
+    radial-gradient(circle 36vmax at 90% 6%, var(--o1) 0 34%, transparent 70%),
+    radial-gradient(circle 32vmax at 4% 48%, var(--o2) 0 34%, transparent 70%),
+    radial-gradient(circle 34vmax at 72% 96%, var(--o3) 0 34%, transparent 70%);
+}
+/* The content's material: frosted, the light showing through, a lit edge. Not the glass of the bars: no rim
+   highlight, less blur, so what floats still reads as above what scrolls. */
+.card, .panel, .day, .list {
+  background: linear-gradient(160deg, var(--surface-hi), var(--surface));
+  backdrop-filter: saturate(1.6) blur(var(--mat-blur));
+  -webkit-backdrop-filter: saturate(1.6) blur(var(--mat-blur));
 }
 
 a { color: inherit; text-decoration-color: var(--line-2); text-underline-offset: 3px; }
@@ -242,12 +258,12 @@ svg.i { width: 20px; height: 20px; flex: none; stroke: currentColor; fill: none;
 main.wrap { padding-top: 20px; }
 .head { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px 16px; margin: 4px 0 18px; }
 .head h1 { margin: 0; font: 800 32px/1.08 var(--display); letter-spacing: -0.5px; }
-.head .sub { color: var(--ink-3); font-size: 15px; }
+.head .sub { color: var(--ink-p); font-size: 15px; }
 .head .end { margin-inline-start: auto; display: flex; gap: 8px; flex-wrap: wrap; }
 @media (min-width: 900px) { .head h1 { font-size: 38px; } }
 h2 { font: 700 19px/1.25 var(--text); margin: 0; letter-spacing: -0.2px; }
 h3 { font-size: 16px; margin: 0; font-weight: 650; }
-.lede { color: var(--ink-2); max-width: 64ch; margin: 0 0 18px; }
+.lede { color: var(--ink-p); max-width: 64ch; margin: 0 0 18px; }
 
 /* chips and dots */
 .chip { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 600; line-height: 1; padding: 6px 10px; border-radius: 999px; background: var(--fill); color: var(--ink-2); white-space: nowrap; }
@@ -257,6 +273,7 @@ h3 { font-size: 16px; margin: 0; font-weight: 650; }
 .chip.bad { background: var(--bad-bg); color: var(--bad); }
 .chip.sig { background: var(--accent-soft); color: var(--accent); }
 .chip.ghost { background: transparent; box-shadow: inset 0 0 0 1px var(--line-2); }
+.group > header .chip.ghost { color: var(--ink-p); }
 .dot { display: inline-block; vertical-align: middle; width: 10px; height: 10px; border-radius: 50%; background: var(--acc, var(--ink-3)); flex: none; }
 
 /* banners: status in the page, never a pop-up */
@@ -343,7 +360,7 @@ meter::-moz-meter-bar { background: var(--accent); border-radius: 6px; }
 /* The signature: each account's day as a row of dots, in the mark's own language. A shape for every state, so
    colour is never the only difference: a ring waits for you, a ring with a centre is scheduled, a disc went out,
    a square was stopped by the checks. */
-.day { background: var(--surface); border-radius: var(--r); box-shadow: var(--shadow); padding: 18px 18px 14px; margin: 0 0 24px; }
+.day { border-radius: var(--r); box-shadow: var(--shadow); padding: 18px 18px 14px; margin: 0 0 24px; }
 .day .lead { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .day .lead b { font: 800 44px/1 var(--display); color: var(--accent); letter-spacing: -1px; font-variant-numeric: tabular-nums; }
 .day .lead b.zero { color: var(--ink-3); }
@@ -370,13 +387,13 @@ meter::-moz-meter-bar { background: var(--accent); border-radius: 6px; }
 .group { margin: 0 0 30px; scroll-margin-top: calc(var(--top) + 12px); }
 .group > header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 2px 12px; }
 .group > header h2 { font: 800 22px/1.15 var(--display); }
-.group > header .handle { color: var(--ink-3); font-size: 14px; }
+.group > header .handle { color: var(--ink-p); font-size: 14px; }
 .group > header .end { margin-inline-start: auto; display: flex; gap: 6px; }
 
 .posts { display: grid; gap: 16px; }
 @media (min-width: 1100px) { .posts { grid-template-columns: 1fr 1fr; align-items: start; } }
 
-.card { background: var(--surface); border-radius: var(--r); box-shadow: var(--shadow); overflow: hidden; position: relative; }
+.card { border-radius: var(--r); box-shadow: var(--shadow); overflow: hidden; position: relative; }
 .card.acc::before { content: ''; position: absolute; inset-inline: 0; top: 0; height: 4px; background: var(--acc, var(--line)); }
 .post { display: flex; flex-direction: column; padding-top: 4px; transition: opacity 0.25s ease, transform 0.25s ease, max-height 0.35s ease, margin 0.35s ease; max-height: 4000px; }
 .post.leaving { opacity: 0; transform: translateX(-24px) scale(0.98); }
@@ -487,7 +504,7 @@ blockquote.q { margin: 0; padding: 9px 12px; border-inline-start: 3px solid var(
 
 /* ------------------------------------------------------------ tables, panels, empty states */
 
-.panel { background: var(--surface); border-radius: var(--r); padding: 18px; box-shadow: var(--shadow); }
+.panel { border-radius: var(--r); padding: 18px; box-shadow: var(--shadow); }
 .panel + .panel, .panel + details.panel, details.panel + .panel { margin-top: 16px; }
 .panel > header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
 .panel > header .end { margin-inline-start: auto; }
@@ -550,7 +567,7 @@ ol.trace li .d { color: var(--ink-3); font-size: 14px; }
 .keys .end { margin-inline-start: auto; }
 
 /* settings list rows that lead somewhere (More) */
-.list { display: grid; background: var(--surface); border-radius: var(--r); box-shadow: var(--shadow); overflow: hidden; }
+.list { display: grid; border-radius: var(--r); box-shadow: var(--shadow); overflow: hidden; }
 .list a, .list button { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 10px 16px; text-decoration: none; border: 0; border-bottom: 1px solid var(--line); background: none; font: inherit; color: inherit; text-align: start; width: 100%; cursor: pointer; }
 .list > :last-child, .list form:last-child button { border-bottom: 0; }
 .list form { display: contents; }
@@ -586,7 +603,7 @@ ol.trace li .d { color: var(--ink-3); font-size: 14px; }
 #toast.bad { background: var(--bad); color: var(--bad-ink); }
 @media (min-width: 900px) { #toast { bottom: 28px; } }
 
-.foot { color: var(--ink-3); font-size: 13px; text-align: center; padding: 32px 0 8px; }
+.foot { color: var(--ink-p); font-size: 13px; text-align: center; padding: 32px 0 8px; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
