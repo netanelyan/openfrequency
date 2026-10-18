@@ -60,7 +60,7 @@ function listPage(ctx, pc) {
   const rows = ctx.db.all('SELECT * FROM onboarding ORDER BY updated_at DESC LIMIT 20').map((r) => ({ ...r, seed: j(r.seed_json, {}) }));
   return layout(
     { ...pc, title: 'חשבון חדש', active: 'new' },
-    `<div class="head"><h1>חשבון חדש</h1><span class="sub">מנישה ודוגמאות, למקורות מאושרים, לחמישה פוסטים לדוגמה</span></div>
+    `<div class="head"><h1>חשבון חדש</h1><span class="sub">בוחרים נישה ודוגמאות, מאשרים מקורות, ומקבלים חמישה פוסטים לדוגמה.</span></div>
 <div class="cols"><section class="panel"><header><h2>מתחילים מכאן</h2></header>
 <p class="muted">המנוע יחפש אתרים סמכותיים (ממשלה, תיעוד רשמי, כלי תקשורת מבוססים), ימצא להם פידים, יציע מקורות נתונים מובנים, יבדוק אילו פורמטים עובדים בנישה, וידרג כל מקור עם סיבה. שום מקור לא נכנס בלי אישור שלכם.</p>
 <form method="post" action="/new" class="formgrid">${csrfField(pc)}

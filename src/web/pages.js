@@ -135,11 +135,11 @@ export function todayPage(ctx, d) {
   // The day in the mark's own language: one dot per post, its shape its state (see .pulse in the stylesheet).
   const dotsOf = (g) => {
     const dots = [...g.waiting.map(() => 'w'), ...g.scheduled.map(() => 's'), ...g.published.map(() => 'p'), ...g.blocked.map(() => 'b')];
-    return dots.length ? `<span class="pulse" aria-hidden="true">${dots.map((c) => `<i class="${c}"></i>`).join('')}</span>` : '<span class="none">שקט</span>';
+    return dots.length ? `<span class="pulse" aria-hidden="true">${dots.map((c) => `<i class="${c}"></i>`).join('')}</span>` : '<span class="none">אין פוסטים היום</span>';
   };
   const said = (g) => [g.waiting.length && `${g.waiting.length} מחכים`, g.scheduled.length && `${g.scheduled.length} מתוזמנים`, g.published.length && `${g.published.length} פורסמו`, g.blocked.length && `${g.blocked.length} נחסמו`].filter(Boolean).join(', ') || 'אין פוסטים היום';
   const day = `<section class="day" aria-label="היום במבט אחד">
-<div class="lead"><b class="${all.length ? '' : 'zero'}">${all.length}</b><span>${all.length === 1 ? 'פוסט אחד מחכה לך' : all.length ? 'פוסטים מחכים לך' : 'אין מה לאשר כרגע'}</span></div>
+<div class="lead">${all.length > 1 ? `<span class="num">${all.length}</span> פוסטים מחכים לך` : all.length ? 'פוסט אחד מחכה לך' : 'אין מה לאשר כרגע'}</div>
 <p class="rest">${sched.length} מתוזמנים · ${pub.length} פורסמו היום · ${blocked.length} נחסמו בבדיקות</p>
 <div class="lines">${d.groups.map((g) => `<a href="#g-${esc(g.pack.id)}">${accDot(g.pack.id)}<span class="nm">${esc(g.pack.meta.displayName)}</span><span class="end">${dotsOf(g)}<span class="sr">${esc(said(g))}</span></span></a>`).join('')}</div>
 <div class="legend" aria-hidden="true"><span><span class="pulse"><i class="w"></i></span>מחכה לך</span><span><span class="pulse"><i class="s"></i></span>מתוזמן</span><span><span class="pulse"><i class="p"></i></span>פורסם</span><span><span class="pulse"><i class="b"></i></span>נחסם</span></div>
@@ -219,7 +219,7 @@ ${post.status !== 'taken_down' ? `<details><summary class="muted">${icon('alert'
 <div><button class="btn danger" type="submit">רשום והורד את הפוסט</button></div></form></details>` : ''}</section>`
     : '';
 
-  const body = `<div class="head"><div><a class="muted small back" href="/">${icon('chev')}חזרה להיום</a><h1>${esc(post.hook || post.topic || 'פוסט')}</h1></div><span class="end">${statusChip(post.status)}</span></div>
+  const body = `<div class="head"><div><a class="muted small back" href="/">${icon('chev')}חזרה להיום</a><h1 class="title">${esc(post.hook || post.topic || 'פוסט')}</h1></div><span class="sub">${statusChip(post.status)}</span></div>
 ${post.reason ? `<div class="banner ${post.status === 'blocked' || post.status === 'failed' ? 'bad' : 'info'}">${icon('alert')}<div><b>${esc(post.reason)}</b></div></div>` : ''}
 <div class="cols">
 <div>
@@ -259,7 +259,7 @@ ${takedownPanel}
 /* ------------------------------------------------------------ accounts */
 
 export function accountsPage(ctx, rows) {
-  const body = `<div class="head"><h1>חשבונות</h1><span class="sub">${rows.length} חשבונות, כל אחד מותג משלו</span><span class="end"><a class="btn sm" href="/new">${icon('plus')}חשבון חדש</a></span></div>
+  const body = `<div class="head"><h1>חשבונות</h1><span class="sub">${rows.length === 1 ? 'חשבון אחד' : `${rows.length} חשבונות`}</span><span class="end"><a class="btn sm" href="/new">${icon('plus')}חשבון חדש</a></span></div>
 <div class="accounts">${rows
     .map(({ pack, acc, spend, cap, plan, publishers, week }) => {
       const paused = acc.status === 'paused';
@@ -306,7 +306,7 @@ ${l.hooks.some((h) => h.used) ? `<table class="table stack"><thead><tr><th>תב�
   .sort((a, b) => (b.avg ?? -1) - (a.avg ?? -1))
   .map((h) => `<tr><td data-k="">${esc(h.pattern)}</td><td data-k="פורמט">${esc(h.format)}</td><td class="n" data-k="שימושים">${h.used}</td><td class="n" data-k="ממוצע">${h.avg != null ? `${h.avg.toFixed(2)}× (${h.n})` : 'אין עוד מספרים'}</td></tr>`)
   .join('')}</tbody></table>` : '<p class="muted small">אין עדיין פוסטים לפי תבניות השער: כל תבנית מקבלת קודם שני תורות, ואז נבחרת לפי התוצאות.</p>'}</section>`).join('')}
-${d.scored.length ? `<div class="cols even"><section class="panel"><header><h2>מנצחים</h2></header>${table(d.winners)}</section><section class="panel"><header><h2>מפסידים</h2></header>${table(d.losers)}</section></div>` : `<div class="empty">${icon('results')}<b>אין עדיין מספרים</b>מספרים נקראים מ-Zernio רק מפוסטים שפורסמו באמת, והציון נקבע 72 שעות אחרי הפרסום. שום מספר לא מומצא כדי למלא את הדף.</div>`}
+${d.scored.length ? `<div class="cols even"><section class="panel"><header><h2>מנצחים</h2></header>${table(d.winners)}</section><section class="panel"><header><h2>מפסידים</h2></header>${table(d.losers)}</section></div>` : `<div class="empty">${icon('results')}<b>אין עדיין מספרים</b>המספרים נקראים מ-Zernio רק מפוסטים שפורסמו בפועל, והציון נקבע 72 שעות אחרי הפרסום.</div>`}
 <section class="panel mt16"><header><h2>מה נושר ולמה</h2></header>${dropped.length ? `<ul class="factlist">${dropped.map((r) => `<li>${accDot(r.pack.id)} <b>${esc(r.name)}</b> ${r.status === 'dropped' ? '<span class="chip bad">נשר</span>' : '<span class="chip warn">בסכנה</span>'}<div class="muted small">${esc(r.dropped_why || 'שתי התוצאות האחרונות מתחת ל-70% מהחציון: עוד אחת והוא נושר')}</div></li>`).join('')}</ul>` : '<p class="muted">אף פורמט לא נשר ואף אחד לא בסכנה.</p>'}</section>
 ${d.formats
   .map(
@@ -383,7 +383,7 @@ export function budgetPanel(ctx, d) {
 <div class="row spread"><span>הוצאה ב-${esc(p.month)}</span><b class="ltr num">$${p.spent.toFixed(2)} / $${p.cap}</b></div>
 <meter min="0" max="${p.cap || 1}" low="${(p.cap || 1) * 0.7}" high="${(p.cap || 1) * 0.8}" optimum="0" value="${Math.min(p.spent, p.cap || 1)}"></meter>
 <dl class="kv mt12"><dt>תחזית לסוף החודש</dt><dd>${usd(p.forecast)}</dd><dt>שמור לקריאות שעוד רצות</dt><dd>${usd(p.reserved, 3)}</dd><dt>נשאר</dt><dd>${usd(p.left)} · בערך ${p.postsLeft} פוסטים, ב-${usd(p.costPerPost, 3)} לפוסט</dd></dl>
-<table class="table stack mt12"><thead><tr><th>חשבון</th><th>נתח</th><th>הוצאה</th><th>לפוסט</th><th>ביום</th><th>נשארו החודש</th><th>חוזק</th></tr></thead><tbody>${rows}</tbody></table>
+<div class="scrollx mt12"><table class="table stack"><thead><tr><th>חשבון</th><th>נתח</th><th>הוצאה</th><th>לפוסט</th><th>ביום</th><th>נשארו החודש</th><th>חוזק</th></tr></thead><tbody>${rows}</tbody></table></div>
 <p class="muted small">התקרה היא <code class="ltr">OF_BUDGET_MONTHLY_USD</code> ב-<code class="ltr">.env</code> (${capUsd}), לכל שירות בתשלום חוץ מ-Zernio. כל קריאה שומרת קודם את המחיר הגבוה ביותר שהיא יכולה לעלות, ולכן שום דבר לא עובר את התקרה. כשהתחזית עוברת אותה, החשבון החלש ביותר יורד לפוסט אחד ביום, ואחריו הבא. ב-80% מופיעה אזהרה, וב-100% שום פוסט לא נכתב עד החודש הבא.</p>
 <form method="post" action="/settings/budget" class="formgrid mt12">${csrfField(ctx)}<label class="f">תקרה נמוכה יותר לחודש הזה <small>עד ${capUsd}; 0 חוזר לתקרה מ-<code class="ltr">.env</code></small><input type="number" name="budget" min="0" max="${d.envCap}" step="0.5" value="${esc(lower)}"></label><button class="btn" type="submit">שמור</button></form></section>`;
 }
@@ -401,7 +401,7 @@ ${budgetPanel(ctx, d)}
 <section class="panel"><header><h2>שעת ייצור יומית</h2></header><form method="post" action="/settings/generate-at" class="formgrid">${csrfField(ctx)}<label class="f">שעה (שעון ישראל)<input type="text" name="at" value="${esc(s.generateAt)}" pattern="[0-2][0-9]:[0-5][0-9]" dir="ltr"></label><button class="btn" type="submit">שמור</button></form></section>
 </div>
 <div>
-<section class="panel"><header><h2>מפתחות</h2><span class="end muted small">רק אם הוגדר, אף פעם לא הערך</span></header><ul class="keys">${d.keys.map((x) => `<li>${x.set ? `<span class="chip ok">${icon('check')}מוגדר</span>` : '<span class="chip ghost">חסר</span>'}<div><code>${esc(x.name)}</code><div class="muted small">${esc(x.he || x.what)}</div></div></li>`).join('')}</ul></section>
+<section class="panel"><header><h2>מפתחות</h2><span class="end muted small">הערכים עצמם לא מוצגים</span></header><ul class="keys">${d.keys.map((x) => `<li>${x.set ? `<span class="chip ok">${icon('check')}מוגדר</span>` : '<span class="chip ghost">חסר</span>'}<div><code>${esc(x.name)}</code><div class="muted small">${esc(x.he || x.what)}</div></div></li>`).join('')}</ul></section>
 <section class="panel"><header><h2>מצב המנוע</h2></header><dl class="kv"><dt>מקורות וכתיבה</dt><dd>${d.mode === 'live' ? '<span class="chip ok">חי</span> מקורות אמיתיים ו-Claude' : '<span class="chip warn">הקלטות</span> בלי רשת ובלי מפתח'}</dd>
 <dt>מתג פרסום חי</dt><dd>${d.liveSwitch ? '<span class="chip ok">PUBLISH_MODE=live</span>' : '<span class="chip ghost">כבוי: הכל יבש</span>'}</dd>
 ${d.publishers.map((p) => `<dt>${esc(p.name)}</dt><dd>${p.platforms.map((x) => `${PLATFORM_HE[x.platform] || x.platform}: ${publisherHe(x)}`).join(' · ')}</dd>`).join('')}</dl></section>
@@ -423,10 +423,10 @@ ${row('/settings', 'settings', 'הגדרות', 'כיבוי כללי, תקציב,
 }
 
 export function loginPage({ error = null } = {}) {
-  return `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="color-scheme" content="light dark"><meta name="theme-color" content="#eef0f3" media="(prefers-color-scheme: light)"><meta name="theme-color" content="#0c0d10" media="(prefers-color-scheme: dark)"><title>כניסה · תדר</title><link rel="stylesheet" href="/static/style.css"><link rel="icon" href="/static/icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/static/icon-180.png"><link rel="manifest" href="/static/manifest.webmanifest"></head>
+  return `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="color-scheme" content="light dark"><meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)"><meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)"><title>כניסה · תדר</title><link rel="stylesheet" href="/static/style.css"><link rel="icon" href="/static/icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/static/icon-180.png"><link rel="manifest" href="/static/manifest.webmanifest"></head>
 <body class="login"><form class="card" method="post" action="/login">
 <div class="hero"><span class="mark" aria-hidden="true"><svg viewBox="0 0 100 100">${markDots(true)}</svg></span><b>תדר</b></div>
-<p>שולחן האישורים: כל פוסט, כל עובדה, כל מקור.</p>
+<p>היכנסו כדי לאשר את הפוסטים של היום.</p>
 ${error ? `<div class="err" role="alert">${esc(error)}</div>` : ''}
 <label class="f">שם משתמש<input type="text" name="user" autocomplete="username" autocapitalize="off" spellcheck="false" required dir="ltr"></label>
 <label class="f">סיסמה<input type="password" name="password" autocomplete="current-password" required dir="ltr"></label>
