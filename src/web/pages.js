@@ -1,6 +1,7 @@
 import { accDot, csrfField, dayHe, esc, icon, k, layout, markDots, MODE_HE, postButton, shortDate, stamp, statusChip, timeHe, usd, weekdayNarrow } from './ui.js';
 import { PAUSE_REASONS } from '../autonomy/rails.js';
 import { KINDS, MIX } from '../formats/kinds.js';
+import { BOXES, MEASURES, PRIORITY } from '../metrics/feedback.js';
 
 const KIND_HE = Object.fromEntries(Object.entries(KINDS).map(([k2, v]) => [k2, v.name]));
 
@@ -284,6 +285,42 @@ ${paused ? `<div class="paused${acc.paused_reason === 'kill' ? ' kill' : ''}">${
 
 /* ------------------------------------------------------------ results */
 
+const pct = (x) => (x == null ? '–' : `${(x * 100).toFixed(x < 0.01 ? 2 : 1)}%`);
+const DIRECTIVE_HE = { open: ['מחכה למשבצת', 'warn'], used: ['נכתב', 'ok'], expired: ['הוחלף בדוח חדש', 'ghost'] };
+
+/** The morning's feedback, one panel per account: the posts of the last three days in their boxes, and what each box asked for. */
+export function feedbackPanels(list) {
+  return list
+    .map(({ pack, day, text, report, directives }) => {
+      const head = `<header>${accDot(pack.id)}<h2>${esc(pack.meta.displayName)}: המשוב של הבוקר</h2>${day ? `<span class="end muted small">${esc(dayHe(day))}</span>` : ''}</header>`;
+      if (!report) return `<section class="panel">${head}<p class="muted">עוד אין דוח. כל בוקר, לפני שנכתבים הפוסטים, המנוע קורא מחדש את המספרים של הפוסטים משלושת הימים האחרונים, ושם כל אחד מהם באחת מארבע קופסאות.</p></section>`;
+      const posts = report.posts || [];
+      const measures = [...new Set(posts.flatMap((p) => Object.values(p.platforms || {}).map((x) => x.measure)))];
+      const row = (p) => {
+        const x = p.platforms?.[p.primary] || {};
+        return `<li><a href="/post/${esc(p.post)}">${esc(p.hook || p.post)}</a><div class="muted small num">${esc(PLATFORM_HE[p.primary] || p.primary || '')}: ${k(x.views)} צפיות מול חציון ${k(Math.round(x.medianViews || 0))} · ${pct(x.rate)} מול ${pct(x.medianRate)}</div></li>`;
+      };
+      const cells = PRIORITY.map((b) => {
+        const ins = posts.filter((p) => p.box === b);
+        return `<div class="cell ${b}"><b>${esc(BOXES[b].he)}</b><span class="todo">${esc(BOXES[b].todo)}</span>${ins.length ? `<ul>${ins.map(row).join('')}</ul>` : '<p class="muted small">אין</p>'}</div>`;
+      }).join('');
+      const waiting = posts.filter((p) => !p.box);
+      const plans = directives.length
+        ? `<h3>מה זה משנה בפוסטים הבאים</h3><ul class="factlist">${directives
+            .map((d) => {
+              const [label, tone] = DIRECTIVE_HE[d.status] || [d.status, 'ghost'];
+              return `<li><span class="chip ${tone}">${esc(label)}</span> ${esc(BOXES[d.box]?.todo || d.action)}${d.plan?.steer?.hook ? ` <span class="muted small">(בעקבות "${esc(d.plan.steer.hook)}")</span>` : ''}${d.used_post_id ? ` <a href="/post/${esc(d.used_post_id)}">${esc(d.used_hook || 'הפוסט')}</a>` : ''}</li>`;
+            })
+            .join('')}</ul>`
+        : '';
+      return `<section class="panel">${head}<p class="muted small">${esc(text)}. צפיות מול החציון של החשבון עצמו, באותו גיל של הפוסט; פעולה: ${measures.map((m) => esc(MEASURES[m] || m)).join(', ') || 'אין עוד מספרים'}. הודעות פרטיות לא נקראות אף פעם.</p>
+<div class="matrix">${cells}</div>
+${waiting.length ? `<p class="muted small">עוד לא בקופסה (אין מספיק פוסטים קודמים להשוואה, או שהפלטפורמה עוד לא מסרה מספרים): ${waiting.map((p) => esc(p.hook || p.post)).join(' · ')}</p>` : ''}
+${plans}</section>`;
+    })
+    .join('');
+}
+
 const bars = (last) =>
   `<span class="rel" aria-label="שלוש התוצאות האחרונות ביחס לחציון">${last.map((r) => `<i class="${r.rel >= 1 ? 'win' : r.rel < 0.7 ? 'lose' : ''} h${Math.max(1, Math.min(4, Math.round(r.rel * 2)))}" title="${r.rel.toFixed(2)}"></i>`).join('')}</span>`;
 
@@ -297,6 +334,7 @@ export function resultsPage(ctx, d) {
   const dropped = d.formats.flatMap((f) => f.rows.filter((r) => r.status === 'dropped' || r.atRisk).map((r) => ({ ...r, pack: f.pack })));
   const body = `<div class="head"><h1>תוצאות</h1><span class="sub">30 הימים האחרונים</span></div>
 ${d.demo ? `<div class="banner info">${icon('alert')}<div><b>נתוני הדגמה בדויים.</b><p>המספרים בדף הזה נזרעו לחשבון הדמו כדי להראות איך הדף נראה. מספרים אמיתיים מגיעים רק מ-Zernio, 72 שעות אחרי פרסום.</p></div></div>` : ''}
+${feedbackPanels(d.feedback || [])}
 <p class="lede">כל פוסט נמדד 72 שעות אחרי שעלה, מול החציון של אותה פלטפורמה: בטיקטוק שיתופים ולייקים לצפייה (טיקטוק לא מדווחת שמירות), באינסטגרם שמירות לחשיפה (reach). 70% מהפוסטים בפורמטים מוכחים, 30% בניסיונות, ופורמט נושר אחרי 3 תוצאות ברצף מתחת ל-70% מהחציון.</p>
 ${(d.learning || []).filter((l) => l.share != null).map((l) => `<section class="panel"><header>${accDot(l.pack.id)}<h2>${esc(l.pack.meta.displayName)}: בידור מול מספרים</h2></header>
 <p>עכשיו <b class="num">${Math.round(l.share * 100)}%</b> מהפוסטים בפורמטים של בידור (סיפור, נחשו מי, קרחון...) ו-<b class="num">${Math.round((1 - l.share) * 100)}%</b> בפורמטים של מספרים (ראש בראש, דירוג).${l.recent ? ` מתוך ${l.recent} הפוסטים האחרונים, ${l.recentEnt} היו בידור.` : ''}</p>

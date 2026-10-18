@@ -104,7 +104,7 @@ export function budgetBanner(b) {
 export function layout(ctx, body) {
   const section = SECTION_OF[ctx.active] || ctx.active;
   const badge = (key) => (key === 'today' && ctx.waiting ? `<b class="badge num" aria-label="${ctx.waiting} מחכים לך">${ctx.waiting}</b>` : '');
-  const nav = NAV.map(([href, label, key]) => `<a href="${href}"${key === section ? ' aria-current="page"' : ''}>${label}${badge(key)}</a>`).join('');
+  const nav = NAV.map(([href, label, key, ic]) => `<a href="${href}"${key === section ? ' aria-current="page"' : ''}>${icon(ic)}<span>${label}</span>${badge(key)}</a>`).join('');
   const tabs = NAV.map(([href, label, key, ic]) => `<a href="${href}"${key === section ? ' aria-current="page"' : ''}>${icon(ic)}<span>${label}</span>${badge(key)}</a>`).join('');
   const s = ctx.spend || { usd: 0, cap: 0 };
   const cap = Number(s.cap) || 0;

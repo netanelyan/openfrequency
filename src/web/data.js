@@ -1,3 +1,4 @@
+import { latestFeedback } from '../metrics/feedback.js';
 import { DAY, monthKey, now } from '../core/clock.js';
 import { waitingImages } from '../images/index.js';
 import { KEYS, isSet } from '../core/env.js';
@@ -148,7 +149,9 @@ export function results(ctx, t = now()) {
     const ent = recent.filter((p) => (p.grp || groups[p.format_id]) === 'entertaining').length;
     return { pack, share, learned, hooks, recent: recent.length, recentEnt: ent };
   });
-  return { posts, scored, winners, losers, formats, medians, demo, trends, learning };
+  // The morning's feedback: each account's latest report and what became of its plans.
+  const feedback = latestFeedback(ctx.db, ctx.packs);
+  return { posts, scored, winners, losers, formats, medians, demo, trends, learning, feedback };
 }
 
 /** A pack's hand-checked facts, each with its state today and anything wrong with it. */
