@@ -125,6 +125,8 @@ export function limitsFor(kind, pack = null) {
  * kind: 'cover' | 'sub' | 'slideTitle' | 'slideBody' | 'slideLines' | 'caption' | 'captionLong' | 'captionShort'
  * extra: the pack's own banned phrases (rules.json bannedPhrases)
  */
+const ON_SLIDE = new Set(['cover', 'sub', 'slideTitle', 'slideBody']);
+
 export function tellsIn(text, { kind = 'slideBody', extra = [], pack = null } = {}) {
   const out = [];
   const add = (code, msg) => out.push({ code, msg });
@@ -158,7 +160,8 @@ export function tellsIn(text, { kind = 'slideBody', extra = [], pack = null } = 
   }
 
   // Lines are items: each is counted on its own, so five places are five lines, not one long sentence.
-  const sentences = kind === 'slideLines' ? raw.split(/\n+/).flatMap((l) => sentencesOf(l)) : sentencesOf(raw);
+  // On a slide a line break is where the eye rests (src/rules/overlay.js), not the end of a sentence.
+  const sentences = kind === 'slideLines' ? raw.split(/\n+/).flatMap((l) => sentencesOf(l)) : ON_SLIDE.has(kind) ? sentencesOf(raw.replace(/\s*\n+\s*/g, ' ')) : sentencesOf(raw);
   for (const raw1 of sentences) {
     // A score as fans write it ("ישראל 9, טייוואן 0") is one thing, not two; four scores in a row are still a list.
     const s = raw1.replace(SCORE_COMMA, '$1 ');

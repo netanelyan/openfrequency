@@ -1,4 +1,5 @@
 import { COMPLIANCE } from '../rules/compliance.js';
+import { overlayOf } from '../rules/overlay.js';
 import { CONNECTIVES, FILLER, FORMAL, LIMITS, limitsFor } from '../voice/tells.js';
 import { focusText } from '../sources/text.js';
 import { contentRange, groupOf, hookPatterns, kindName, kindOf, shapesPrompt } from '../formats/kinds.js';
@@ -260,9 +261,9 @@ const SLIDES_TASK = {
 
 The request names the format and its kind, the content slides with their roles, the verified facts, the outline and the cover pattern to follow. Write:
 - hook: the cover line. 3 to 11 words, after the cover pattern the request names (adapt it to this post, never copy it word for word). It makes them need the second slide: a question or a promise that only the slides answer ("איך ברצלונה עשו את הבלתי אפשרי בקאמפ נואו?" pulls; "ברצלונה ניצחה 6:1" is already over), built on the post's most surprising concrete detail where the pattern allows (a score, a sum, a quote, a name). Never only the famous name of the story, and never the payoff the last slide holds. A count it promises ("3 רמזים", "5 ...") is the count of the slides that follow. A number only if it is the number of content slides, a top 5 or 10, or it appears in a fact's quote. hookPattern: that pattern's id.
-- sub: one short line under the cover line, or "".
+- sub: one short line under the cover line, or "" when the cover line alone fills the cover's lines (LINES in the request).
 - subject: as in the outline (you may shorten a name).
-- slides: exactly the outline's content slides, the same roles in the same order, each { role, title: up to 60 characters, body: up to 230 characters in one to three short sentences (or short lines, one per line, where the shape says so), a and b: the two values on a head-to-head stat slide and "" everywhere else, facts: the ids of the facts it states }. Every number on a slide, dates and years included, must appear in the quotes of the facts it lists.
+- slides: exactly the outline's content slides, the same roles in the same order, each { role, title: up to 60 characters, body: up to 230 characters in one to three short sentences, broken into lines as the request's LINES says (or one item a line, where the shape says so), a and b: the two values on a head-to-head stat slide and "" everywhere else, facts: the ids of the facts it states }. Every number on a slide, dates and years included, must appear in the quotes of the facts it lists.
 - caption, captionShort, keywords: as the account's rules say. For a legacy list post, captionShort and keywords may be empty.
 - question: one short question about this post's own subject that a reader could answer from their own life, or "" when none would sound natural. Never a line that fits any post ("ידעתם את זה?", "מה דעתכם?", "למי זה יכול לעזור?"): those are dropped.`,
 };
@@ -353,7 +354,32 @@ export function slidesPrompt(pack, { ttl = '5m' } = {}) {
 /** How many content slides need a visual, so that with the cover at least half of the slides have one. */
 export const visualsNeeded = (n) => Math.max(0, Math.ceil((n + 1) / 2) - 1);
 
-export function slidesUser({ format, n, outline, facts, edits = [], problems = [], lastDraft = null, hook = null, cta = null, day = null, pack = null }) {
+/**
+ * The overlay rules as the writer is told them (src/rules/overlay.js holds them and checks them): the
+ * account's own numbers, so a pack that asks for longer lines is written for as it asks.
+ */
+export function linesRule(pack = null) {
+  const o = overlayOf(pack);
+  const [lo, hi] = o.wordsPerLine;
+  const [a, b] = o.linesPerSlide;
+  return `LINES: the words on a slide sit over a picture, read in a second. Break them by hand with "\\n": ${lo} to ${hi} words a line (only the last line of a text may be shorter), ${a} to ${b} lines on a slide, title and body together (on the cover, the cover line and the line under it together). A title is a reaction, what a person says when they see it ("81 יום, ואף אחד לא השקה"), never a label that names the part ("טיפ 3", "עובדה:", "התפנית"). A body that is a list (places 10 to 6, a layer) keeps one item a line.`;
+}
+
+/**
+ * What the morning's feedback found, said to the writer (src/metrics/feedback.js): why this post is planned the
+ * way it is, so the cover, the caption or the angle change where the numbers say they should. "" when it is not.
+ */
+export function steerLine(steer) {
+  if (!steer?.kind) return '';
+  const was = steer.hook ? `"${steer.hook}"` : 'a recent post';
+  if (steer.kind === 'variation') return `FROM THE RESULTS: ${was} reached more people than this account's usual post, and more of them acted on it. This post is variation ${steer.n || 1} of ${steer.of || 3} of it: the same story and facts, a new cover line in the pattern named here. Never the words of ${was}.`;
+  if (steer.kind === 'new-cta') return `FROM THE RESULTS: ${was} reached more people than usual, but few acted on it. Keep a cover as strong, in the pattern named here; the call to action is a different one, and write the captions a new way${steer.cta ? ` (the last call to action was "${steer.cta}")` : ''}.`;
+  if (steer.kind === 'new-hooks') return `FROM THE RESULTS: ${was} reached fewer people than usual, but those it reached acted on it. Keep the call to action; the cover must be radically different from ${was}: another angle, another first word, and another kind of first-slide picture${steer.cover ? ` than its "${steer.cover}"` : ''}.`;
+  if (steer.kind === 'new-angle') return `FROM THE RESULTS: ${was}${steer.format ? ` (${steer.format})` : ''} did poorly on views and on action. This post takes a new angle${steer.topic ? `, far from "${steer.topic}"` : ''}.`;
+  return '';
+}
+
+export function slidesUser({ format, n, outline, facts, edits = [], problems = [], lastDraft = null, hook = null, cta = null, day = null, pack = null, steer = null }) {
   const legacy = kindName(format) === 'list';
   const body = limitsFor('slideBody', pack);
   const sub = limitsFor('sub', pack);
@@ -367,6 +393,8 @@ export function slidesUser({ format, n, outline, facts, edits = [], problems = [
     body.maxChars < LIMITS.slideBody.maxChars ? `TEXT: this account keeps slides short. A slide's body is at most ${body.maxChars} characters and ${body.sentences} sentences: one point, the words a fan would say, no number the point does not need.` : '',
     sub.maxChars < LIMITS.sub.maxChars ? `SUB: the line under the cover is at most ${sub.maxChars} characters, one punchy line that makes them swipe (the stakes or a tease, never an explanation of the topic), or "".` : '',
     !legacy ? `VISUALS: at least ${visualsNeeded(n)} of the ${n} content slides carry a visual (a stat slide's two values count).` : '',
+    linesRule(pack),
+    steerLine(steer),
     `TOPIC: ${outline.topic}`,
     !legacy && outline.subject ? `SUBJECT: ${Object.entries(outline.subject).filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`).join(', ') || '(none)'}` : '',
     'FACTS (state only these; cite their ids):',

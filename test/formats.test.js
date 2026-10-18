@@ -171,7 +171,7 @@ test('the demo pack builds a post of every kind through the real pipeline, offli
       assert.equal(post.kind, kind);
       const n = post.slides.length;
       assert.ok(n >= 5 && n <= 8, `${kind}: ${n} slides`);
-      assert.ok(post.caption.length >= 200 && post.caption_ig?.startsWith(post.hook), `${kind}: two captions, the Instagram one led by the cover line`);
+      assert.ok(post.caption.length >= 200 && post.caption_ig?.startsWith(post.hook.replace(/\s*\n\s*/g, ' ')), `${kind}: two captions, the Instagram one led by the cover line`);
       assert.ok(post.hook_pattern && post.data.cta?.text, `${kind}: a cover pattern and a call to action`);
       for (const p of ['tiktok', 'instagram']) assert.equal(post.media[p].length, n, `${kind}: every slide on ${p}`);
     }

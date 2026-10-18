@@ -17,11 +17,16 @@ import { wantedPublisher } from '../publish/index.js';
 import { currentToken, igConfig, refreshToken } from '../publish/instagram.js';
 import { fightWeekSlots, parseEvents, recapsDue, saveEvents } from '../schedule/events.js';
 import { refreshSource } from '../sources/index.js';
+import { morningFeedback, withDirectives } from '../metrics/feedback.js';
 
 // The engine running on its own: one tick a minute.
 //
 //   1. plan the month against the budget; lift a budget pause when the money is
 //      there again (a new month, or room in the account's allocation)
+//   1b. the morning's feedback, at settings.feedbackAt (never after generateAt):
+//      the last three days' posts read fresh and put in their boxes, and what
+//      each box asks becomes a directive the day's generation hands to a slot
+//      (src/metrics/feedback.js)
 //   2. generate, a day ahead: once a day, at settings.generateAt (Israel time),
 //      each running account gets a post for each of tomorrow's slots (Shabbat,
 //      the festivals and out-of-window slots are dropped by slotsFor and never
@@ -76,10 +81,11 @@ export async function generate(ctx, plans, report) {
   const { db } = ctx;
   const useBatch = ctx.llm.kind === 'claude' && ctx.batchApi && process.env.OF_BATCH !== 'off';
   const stopped = new Set();
-  const one = async (gctx, { pack, slotAt, formatKey = null, subject = null }) => {
+  const one = async (gctx, { pack, slotAt, formatKey = null, subject = null, directive = null }) => {
     if (stopped.has(pack.id)) return;
     try {
-      const res = await buildPost(gctx, { pack, slotAt, formatKey, subject });
+      const res = await buildPost(gctx, { pack, slotAt, formatKey, subject, directive });
+      if (directive?.id) db.update('directives', directive.id, { used_post_id: res.postId });
       db.update('posts', res.postId, { mode_at_queue: db.get('SELECT mode FROM accounts WHERE id = ?', pack.id)?.mode });
       report.generated.push({ account: pack.id, post: res.postId, status: res.status, reason: res.reason, cost: res.cost });
       if (res.kind === 'fact_check') pauseAccount(db, pack.id, 'fact_check', res.reason);
@@ -189,6 +195,23 @@ export async function tick(ctx, { t = now() } = {}) {
   // ---- 1a. the calendars of the packs that follow events, once a day
   for (const pack of ctx.packs) await syncEvents(ctx, pack, { t }).catch((e) => report.errors.push({ account: pack.id, step: 'events', error: e.message }));
 
+  // ---- 1b. the morning's feedback, before anything is drafted: once a day per account
+  const feedbackAt = cfg.feedbackAt < cfg.generateAt ? cfg.feedbackAt : cfg.generateAt;
+  if (t >= israelInstant(today, feedbackAt).getTime()) {
+    for (const pack of ctx.packs) {
+      const key = `feedback:${pack.id}:${today}`;
+      const acc = db.get('SELECT status FROM accounts WHERE id = ?', pack.id);
+      if (!acc || acc.status === 'onboarding' || getSetting(db, key)) continue;
+      setSetting(db, key, new Date(t).toISOString());
+      try {
+        const fb = await morningFeedback(ctx, pack, { t });
+        report.feedback = { ...(report.feedback || {}), [pack.id]: { posts: fb.posts.length, directives: fb.directives.length } };
+      } catch (e) {
+        report.errors.push({ account: pack.id, step: 'feedback', error: e.message });
+      }
+    }
+  }
+
   // ---- 2. generate, a day ahead, once a day
   const plans = [];
   if (!ctx.generating && t >= israelInstant(today, cfg.generateAt).getTime()) {
@@ -203,7 +226,7 @@ export async function tick(ctx, { t = now() } = {}) {
       if (!plans.length) savePlan(db, plan, { t });
       setSetting(db, genKey, nowIso());
       const lead = ctx.llm.kind === 'claude' && ctx.batchApi && process.env.OF_BATCH !== 'off' ? CATCH_UP_LEAD_MS : 0;
-      for (const p of fightWeekPlans(db, pack, generationTargets(db, pack, { t, lead }))) plans.push({ pack, ...p });
+      for (const p of withDirectives(db, pack, fightWeekPlans(db, pack, generationTargets(db, pack, { t, lead })))) plans.push({ pack, ...p });
     }
   }
   if (plans.length) {

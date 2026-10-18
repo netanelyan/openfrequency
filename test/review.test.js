@@ -50,7 +50,7 @@ test('a text scored 4 or more is rewritten, and the rewrite is kept when it pass
     const res = await buildPost(ctx, { pack: ctx.pack('demo'), formatKey: 'care-guide' });
     assert.equal(res.status, 'queued', res.reason);
     const post = loadPost(ctx.db, res.postId);
-    assert.equal(post.hook, 'בזיליקום במרפסת: 5 דברים שהוא צריך מכם.', 'the rewrite is kept, its exclamation mark fixed in code');
+    assert.equal(post.hook, 'בזיליקום במרפסת: 5 דברים\nשהוא צריך מכם.', 'the rewrite is kept, its exclamation mark fixed and its line broken in code');
     assert.equal(post.checks.rewrites.length, 1);
     assert.equal(post.checks.reviewer, 'claude');
     assert.equal(calls.find((c) => c.task === 'review').model, 'claude-sonnet-5-5', 'the review runs on Sonnet: Haiku was measured and missed what it is for');

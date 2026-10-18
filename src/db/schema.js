@@ -378,4 +378,44 @@ export const MIGRATIONS = [
   -- only after six hours, or for another day.
   ALTER TABLE sources ADD COLUMN last_docs_json TEXT;
   `,
+  `
+  -- What a post led people to do, where the platform reports it: taps on the
+  -- link in the bio after seeing it, follows and profile visits (Instagram's
+  -- media insights). Null when the platform did not say.
+  ALTER TABLE metrics ADD COLUMN link_clicks INTEGER;
+  ALTER TABLE metrics ADD COLUMN follows INTEGER;
+  ALTER TABLE metrics ADD COLUMN profile_visits INTEGER;
+
+  -- The morning's feedback: each post of the last three days on views against
+  -- the account's own median, and on what it led people to do.
+  CREATE TABLE feedback (
+    id            INTEGER PRIMARY KEY,
+    day           TEXT NOT NULL,                 -- Israel date
+    account_id    TEXT NOT NULL REFERENCES accounts(id),
+    report_json   TEXT NOT NULL,                 -- the posts, their boxes, the baselines, the measure
+    text          TEXT NOT NULL,
+    at            TEXT NOT NULL,
+    UNIQUE (day, account_id)
+  );
+
+  -- What the feedback asks of the next posts: one row per post to make. Open
+  -- until a slot takes it; a new morning's report replaces the open ones.
+  CREATE TABLE directives (
+    id            INTEGER PRIMARY KEY,
+    account_id    TEXT NOT NULL REFERENCES accounts(id),
+    day           TEXT NOT NULL,
+    post_id       TEXT REFERENCES posts(id),     -- the post the result is about
+    platform      TEXT,
+    box           TEXT NOT NULL CHECK (box IN ('hh','hl','lh','ll')),
+    action        TEXT NOT NULL,
+    plan_json     TEXT NOT NULL,
+    status        TEXT NOT NULL CHECK (status IN ('open','used','expired')),
+    used_post_id  TEXT,
+    created_at    TEXT NOT NULL,
+    used_at       TEXT
+  );
+  CREATE INDEX directives_account ON directives(account_id, status);
+
+  ALTER TABLE posts ADD COLUMN directive_id INTEGER;
+  `,
 ];

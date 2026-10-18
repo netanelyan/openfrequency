@@ -37,8 +37,17 @@ const { buildPost } = await import('../src/pipeline/build.js');
 const { publishPost } = await import('../src/publish/index.js');
 const { addUser } = await import('../src/web/auth.js');
 const { learn } = await import('../src/metrics/collect.js');
+const { morningFeedback } = await import('../src/metrics/feedback.js');
 const { israelDate, israelInstant, addDays } = await import('../src/schedule/israel.js');
 const { slotsFor } = await import('../src/schedule/slots.js');
+const { inRest } = await import('../src/schedule/shabbat.js');
+// The dry publisher refuses Shabbat and the festivals as the real one does: a post dated on one is published, in the
+// demo, at the same hour of the weekday before it, and keeps its own date.
+const weekday = (iso, hhmm) => {
+  let d = israelDate(Date.parse(iso));
+  while (inRest(israelInstant(d, hhmm).getTime())) d = addDays(d, -1);
+  return israelInstant(d, hhmm).getTime();
+};
 const { closeBrowser } = await import('../src/render/render.js');
 const { writeSummaries } = await import('../src/autonomy/runner.js');
 
@@ -57,23 +66,30 @@ const build = async (opts = {}) => {
   return r;
 };
 
-// Three posts published in the past fortnight, with demo readings 72h+ later.
+// Five posts published in the past fortnight, two of them in the last three days, each with demo readings once a
+// day (at 12, 36, 60 and 84 hours, as far as its age goes), so the morning's feedback has something to put in its boxes.
 const past = [];
 for (const [daysAgo, views, likes, shares, saves] of [
   [12, 4200, 310, 64, 120],
   [8, 1900, 96, 11, 31],
   [5, 6100, 520, 140, 260],
+  [2, 5600, 560, 150, 240],
+  [1.6, 1500, 50, 5, 14],
 ]) {
   const r = await build();
   const at = new Date(now - daysAgo * 24 * HOUR).toISOString();
   db.update('posts', r.postId, { status: 'approved', approved_by: 'demo', approved_at: at, slot_at: at });
-  await publishPost(ctx, r.postId, { t: Date.parse(israelInstant(israelDate(Date.parse(at)), '12:45').toISOString()) }).catch((e) => console.log(`demo publish: ${e.message}`));
+  await publishPost(ctx, r.postId, { t: weekday(at, '12:45') }).catch((e) => console.log(`demo publish: ${e.message}`));
   db.update('posts', r.postId, { published_at: at, created_at: at });
   for (const [platform, v, l, s, sv] of [
     ['tiktok', views, likes, shares, null],
     ['instagram', Math.round(views * 0.35), Math.round(likes * 0.4), Math.round(shares * 0.3), saves],
   ]) {
-    db.insert('metrics', { post_id: r.postId, platform, collected_at: new Date(Date.parse(at) + 80 * HOUR).toISOString(), age_hours: 80, views: v, likes: l, comments: Math.round(l / 12), shares: s, saves: sv, raw_json: { source: 'demo-seed' } });
+    for (const age of [12, 36, 60, 84].filter((a) => a <= daysAgo * 24)) {
+      const f = Math.min(1, (age + 12) / 84);
+      const n = (x) => (x == null ? null : Math.round(x * f));
+      db.insert('metrics', { post_id: r.postId, platform, collected_at: new Date(Date.parse(at) + age * HOUR).toISOString(), age_hours: age, views: n(v), likes: n(l), comments: n(l / 12), shares: n(s), saves: n(sv), raw_json: { source: 'demo-seed' } });
+    }
   }
   past.push(r.postId);
 }
@@ -96,7 +112,7 @@ for (const [id, views] of [['demo-coffee', 2600], ['demo-running', 5300]]) {
   const a = await buildPost(ctx, { pack: p });
   const at = new Date(now - 6 * 24 * HOUR).toISOString();
   db.update('posts', a.postId, { status: 'approved', approved_by: 'demo', approved_at: at, slot_at: at });
-  await publishPost(ctx, a.postId, { t: Date.parse(israelInstant(israelDate(Date.parse(at)), '19:00').toISOString()) }).catch((e) => console.log(`demo publish: ${e.message}`));
+  await publishPost(ctx, a.postId, { t: weekday(at, '19:00') }).catch((e) => console.log(`demo publish: ${e.message}`));
   db.update('posts', a.postId, { published_at: at, created_at: at });
   for (const [platform, v, sv] of [['tiktok', views, null], ['instagram', Math.round(views * 0.3), Math.round(views * 0.02)]]) {
     db.insert('metrics', { post_id: a.postId, platform, collected_at: new Date(Date.parse(at) + 80 * HOUR).toISOString(), age_hours: 80, views: v, likes: Math.round(v * 0.06), comments: Math.round(v * 0.004), shares: Math.round(v * 0.012), saves: sv, raw_json: { source: 'demo-seed' } });
@@ -106,6 +122,8 @@ for (const [id, views] of [['demo-coffee', 2600], ['demo-running', 5300]]) {
   if (id === 'demo-running' && b.status === 'queued') db.update('posts', b.postId, { status: 'approved', approved_by: 'engine:auto', approved_at: new Date().toISOString() });
 }
 learn(ctx);
+// This morning's feedback, from the demo readings above.
+for (const p of ctx.packs) await morningFeedback(ctx, p, { pull: false });
 writeSummaries(ctx, addDays(today, -1));
 await closeBrowser();
 

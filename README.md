@@ -69,7 +69,7 @@ Five sections, the same on a phone and a desk:
 |---|---|
 | **Today** | the day at a glance (a row of dots per account: waiting, scheduled, out, stopped), then every post that waits for you, decision first: the cover line, the slides, what the checks found in one line, and approve, edit or reject. Captions and facts fold open below |
 | **Accounts** | each account's mode, schedule, kill switch and week; a new account |
-| **Results** | each post's numbers and what the engine learned from them, in plain words |
+| **Results** | this morning's feedback for each account (its last three days' posts in four boxes, and what each box changes in the next posts), each post's numbers, and what the engine learned from them, in plain words |
 | **Sources** | every source with why it is trusted, hand-checked facts, adding and removing |
 | **Settings** | the month's spend and forecast, which keys are set (never their values), your account and signing out |
 
@@ -156,7 +156,7 @@ and edit its files.
 
 | File | Holds |
 |---|---|
-| `pack.json` | id, display name, handle, bio, platforms and the publisher of each, Zernio and Instagram ids, schedule (windows, slots, posts per day), autonomy mode, budget share, compliance checks, topics, audience; `imagery` (providers, `safety`); `research` (`minDetails`, `maxAgeDays`); `events` and `schedule.fightWeek` for an account that follows fight cards; `endSlide`, a closing slide that asks to follow; `writing`: shorter limits than the engine's for `cover`, `sub` (the line under the cover), `slideTitle`, `slideBody`, `slideLines`, `captionLong` (TikTok's) and `captionShort` (Instagram's), in `maxChars`, `sentences`, `maxWords` and `minChars` |
+| `pack.json` | id, display name, handle, bio, platforms and the publisher of each, Zernio and Instagram ids, schedule (windows, slots, posts per day), autonomy mode, budget share, compliance checks, topics, audience; `imagery` (providers, `safety`); `research` (`minDetails`, `maxAgeDays`); `events` and `schedule.fightWeek` for an account that follows fight cards; `endSlide`, a closing slide that asks to follow; `overlay`: the text on the slides (`wordsPerLine` [4, 6], `linesPerSlide` [3, 4], `safeZone` { top 0.1, bottom 0.2 }, `outline` in em, more `labels`); `writing`: shorter limits than the engine's for `cover`, `sub` (the line under the cover), `slideTitle`, `slideBody`, `slideLines`, `captionLong` (TikTok's) and `captionShort` (Instagram's), in `maxChars`, `sentences`, `maxWords` and `minChars` |
 | `voice.md` | who is talking, to whom, how it sounds, with `## שורות טובות` and `## שורות רעות` |
 | `theme.json` | a template and variant from the engine's library, colours, fonts, the graphics it draws (`visuals`), whether slides sit on a blurred photograph and the scenes searched for it (`backgroundQueries`) |
 | `sources.json` | approved sources only: type (`rss`, `web`, `api`), url, why it is trusted, what its terms allow, when it was approved. A source taken out of the file is no longer read |
@@ -188,6 +188,24 @@ of entertaining and number posts by up to 5 points a week (between 40% and 80%),
 keeps 70% of posts on proven formats and 30% on trials, drops a format after three
 weak results in a row, favours the cover patterns that work, and once a week looks at
 formats that do well on YouTube Shorts, copying the format, never the content.
+
+**The morning's feedback.** Each morning before anything is drafted (`feedbackAt`,
+06:30), the last three days' posts are read again and each one goes in a box:
+views against the account's own median, read at the same age, by what it led
+people to do per view (taps on the bio link where Instagram reports them for every
+post compared, otherwise likes, comments, shares and saves; never messages).
+High and high: three variations of the cover, from the same story. High views, low
+action: the same cover pattern, another call to action and caption. Low views, high
+action: the same call to action, a radically different cover and first slide. Low
+and low: another format or angle. Each answer becomes a plan the day's first free
+slots take, and the writer is told why. Results shows the report and what became of
+each plan (`src/metrics/feedback.js`).
+
+**The text on a slide.** Short lines broken by hand (4 to 6 words), 3 to 4 lines
+on a slide, titles that react rather than label, nothing in the top 10% or the
+bottom 20%, and a thick outline on text over a picture. A line left too long is
+broken in code; the rest is checked like any other rule, and the renderer measures
+every line against the safe zone (`src/rules/overlay.js`, `pack.json` `overlay`).
 
 **Fight week.** An account that follows fight cards reads the calendar daily. Three
 days before a card its first slot is a tale of the tape, the day before a pick, the
@@ -371,12 +389,12 @@ src/llm         Claude (official SDK, through the network door), the CLI backend
 src/budget      the monthly ledger, reservations, the month's plan
 src/voice       Hebrew tells, honesty, the reviewer
 src/verify      facts against stored documents, the render gate
-src/rules       pack rules, cross-promotion, investment-advice compliance
+src/rules       pack rules, cross-promotion, investment-advice compliance, the text on a slide
 src/images      licensed photographs and the image screen
 src/render      fonts, templates and their variants, the graphics, Chromium
 src/pipeline    one post from topic to queue; export to disk
 src/publish     dry, Zernio (TikTok), Instagram, takedowns
-src/metrics     reading numbers, crediting formats
+src/metrics     reading numbers, crediting formats, the morning's feedback
 src/formats     the kinds of post, rotation, the mix, cover patterns
 src/trends      formats that work on YouTube Shorts
 src/autonomy    the runner and its rails

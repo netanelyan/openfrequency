@@ -1,6 +1,7 @@
 import { bestInk, rgbList } from './color.js';
 import { fontFaces, headlineFaces, headlineFamily } from './fonts.js';
 import { VISUAL_CSS } from './visuals.js';
+import { OVERLAY } from '../rules/overlay.js';
 
 // The page every slide is drawn on, whatever the template.
 //
@@ -12,6 +13,11 @@ import { VISUAL_CSS } from './visuals.js';
 // Two sizes, one design: TikTok is 1080x1920 with safe zones for the player's
 // own furniture (the search bar on top, the caption and the button rail at the
 // bottom and on the right); Instagram is 1080x1350, what the feed crops to.
+//
+// The account's safe zone (pack.json overlay.safeZone: no text in the top 10% or
+// the bottom 20% by default) widens the padding where it asks for more than the
+// platform does, so the layout keeps text out of it; the renderer then measures
+// every line of text and refuses a slide with one inside it (render.js).
 
 export const SIZES = {
   // TikTok draws its tabs at the top, its buttons down the right edge (where a Hebrew line starts) and the caption,
@@ -77,10 +83,17 @@ export const ICON = {
   receipt: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2zM9 7h6M9 11h6M9 15h4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
 };
 
-/** :root variables from a theme, shared by every template. */
-export function rootCss(theme, size) {
-  const c = theme.colors;
+/** The padding of the frame on one platform: the platform's own, or the account's safe zone where that is wider. */
+export function padFor(size, overlay = OVERLAY) {
   const geo = SIZES[size];
+  const z = { ...OVERLAY.safeZone, ...(overlay?.safeZone || {}) };
+  return { ...geo.pad, top: Math.max(geo.pad.top, Math.ceil(z.top * geo.h)), bottom: Math.max(geo.pad.bottom, Math.ceil(z.bottom * geo.h)) };
+}
+
+/** :root variables from a theme, shared by every template. */
+export function rootCss(theme, size, overlay = OVERLAY) {
+  const c = theme.colors;
+  const geo = { ...SIZES[size], pad: padFor(size, overlay) };
   const onAccent = c.onAccent || bestInk(c.accent, c.ink, c.bg);
   const onAccent2 = bestInk(c.accent2, c.ink, c.bg);
   return `
@@ -99,6 +112,8 @@ body{direction:rtl;text-align:right;background:var(--bg);color:var(--ink);font-f
 bdi{unicode-bidi:isolate}
 .frame{position:absolute;inset:0;padding:var(--pt) var(--pr) var(--pb) var(--pl);display:flex;flex-direction:column}
 .fit{overflow:hidden}
+/* The writer breaks the lines on a slide by hand (src/rules/overlay.js): a break is kept, and a line too wide for its box still wraps. */
+.hook,.sub,.title,.body,.rtitle,.rbody,.answer,.myth-text,.punch,.setup,.q,h1.fit,h2.fit,p.fit{white-space:pre-line;text-wrap:balance}
 .probe{position:absolute;top:-400px;left:-400px;font-family:'Heebo';font-weight:700;font-size:40px;color:transparent}
 .photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 30%}
 .scrim{position:absolute;inset:0;background:linear-gradient(to top, rgba(8,10,14,var(--scrim,0.82)) 0%, rgba(8,10,14,calc(var(--scrim,0.82)*0.85)) 45%, rgba(8,10,14,0) 85%)}
@@ -123,7 +138,9 @@ body.no-handle .tag,body.no-handle .who,body.no-handle .kick,body.no-handle .sta
 const HEADLINE_CSS = '.hook,.title,.rtitle,.k-closer h2,.versus,.answer,.myth-text,.meme .punch,.vs .val,.q,.count,.cnt,.head .n{font-family:var(--headline)}';
 
 /** The whole page for one slide. `parts` is what a template returns. */
-export function page({ theme, size, slide, parts, photo, photoPos = null, blur = false, bg = null, split = null, splitPos = null }) {
+export function page({ theme, size, slide, parts, photo, photoPos = null, blur = false, bg = null, split = null, splitPos = null, overlay = OVERLAY }) {
+  const zone = { ...OVERLAY.safeZone, ...(overlay?.safeZone || {}) };
+  const outline = Number(overlay?.outline ?? OVERLAY.outline);
   const at = (pos) => (pos ? ` style="object-position:${esc(pos)}"` : '');
   // Behind a slide with no photograph of its own, the account's background photograph, blurred and veiled in the
   // theme's own ground colour so its text keeps the contrast it was designed with.
@@ -135,12 +152,12 @@ export function page({ theme, size, slide, parts, photo, photoPos = null, blur =
 <style>
 ${fontFaces(families)}
 ${headlineFaces(theme.fonts.display)}
-${rootCss(theme, size)}
+${rootCss(theme, size, overlay)}
 ${parts.css}
 ${VISUAL_CSS}
 ${HEADLINE_CSS}
 </style></head>
-<body class="t-${theme.template} v-${theme.variant || 'a'} k-${slide.kind} s-${size}${photo || split ? ' has-photo' : ''}${backdrop ? ' has-bg' : ''}${slide.noHandle ? ' no-handle' : ''}${slide.hasVisual ? ' has-vis' : ''}${parts.bodyClass ? ` ${parts.bodyClass}` : ''}"${parts.bodyStyle ? ` style="${esc(parts.bodyStyle)}"` : ''}>
+<body class="t-${theme.template} v-${theme.variant || 'a'} k-${slide.kind} s-${size}${photo || split ? ' has-photo' : ''}${backdrop ? ' has-bg' : ''}${slide.noHandle ? ' no-handle' : ''}${slide.hasVisual ? ' has-vis' : ''}${parts.bodyClass ? ` ${parts.bodyClass}` : ''}"${parts.bodyStyle ? ` style="${esc(parts.bodyStyle)}"` : ''} data-zone-top="${zone.top}" data-zone-bottom="${zone.bottom}" data-outline="${outline}">
 ${photo ? `<img class="photo${blur ? ' blur' : ''}" src="${photo}"${blur ? '' : at(photoPos)} alt=""><div class="scrim" data-scrim></div>` : ''}
 ${split ? `<div class="split"><img class="half" src="${split[0]}"${at(splitPos?.[0])} alt=""><img class="half" src="${split[1]}"${at(splitPos?.[1])} alt=""></div><div class="scrim" data-scrim></div>` : ''}
 ${backdrop ? `<img class="bgphoto" src="${bg}" alt=""><div class="bgveil"${theme.options?.backgroundVeil != null ? ` style="--bg-veil:${Number(theme.options.backgroundVeil)}"` : ''}></div>` : ''}

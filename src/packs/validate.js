@@ -4,6 +4,7 @@ import { isFont } from '../render/fonts.js';
 import { isTemplate, TEMPLATES } from '../render/templates/registry.js';
 import { COMPLIANCE, FINANCIAL, isCompliance } from '../rules/compliance.js';
 import { ctasOf, hookPatterns, isKind, KINDS, MIX } from '../formats/kinds.js';
+import { overlayConfigProblems } from '../rules/overlay.js';
 
 // What a pack must be, checked in code. Every problem is one line of English the
 // website and the CLI can print. An empty list means the pack is valid.
@@ -160,6 +161,7 @@ export function validatePack(pack) {
     if (!['cover', 'sub', 'slideTitle', 'slideBody', 'slideLines', 'captionLong', 'captionShort'].includes(k) || !isObj(v)) p.push(`pack.json: writing.${k} is not a text the pack can limit (cover, sub, slideTitle, slideBody, slideLines, captionLong, captionShort)`);
     else for (const [m, n] of Object.entries(v)) if (!['maxChars', 'sentences', 'maxWords', 'minChars'].includes(m) || !(Number.isInteger(n) && n > 0)) p.push(`pack.json: writing.${k}.${m} must be maxChars, sentences, maxWords or minChars, a whole number`);
   }
+  p.push(...overlayConfigProblems(meta.overlay));
   if ([...String(meta.displayName || '')].length > 30) p.push('pack.json: displayName is over 30 characters, the limit on Instagram and TikTok');
   if (!Array.isArray(formats.caption?.questions) || !formats.caption.questions.length) p.push('formats.json: caption.questions must list at least one question');
   const tags = [...(formats.hashtags?.broad || []), ...(formats.hashtags?.niche || [])];

@@ -17,15 +17,18 @@ import { audit } from '../core/store.js';
 // adjacent.
 //
 // Read once a day per post until 30 days, so the 72-hour reading exists and
-// later ones replace nothing: each reading is its own row with its age.
+// later ones replace nothing: each reading is its own row with its age. The
+// morning's feedback (feedback.js) asks for a fresh reading of the last three
+// days' posts: `only` names them, `freshHours` is how old a reading may be.
 
-export async function collectMetrics(ctx, { t = now(), source = null, instagram = null } = {}) {
+export async function collectMetrics(ctx, { t = now(), source = null, instagram = null, only = null, freshHours = 20 } = {}) {
   const { db } = ctx;
   const read = source || (zernioConfigured() ? zernioAnalytics : null);
   const readIg = instagram || ((pack, mediaId) => instagramInsights(db, pack, mediaId));
   const out = { asked: 0, got: 0, why: read ? null : 'no Zernio key: TikTok numbers are read only through Zernio' };
   const posts = db.all("SELECT id, account_id, published_at, publish_json FROM posts WHERE status = 'published' AND published_at IS NOT NULL AND published_at >= ?", new Date(t - 30 * DAY).toISOString());
   for (const p of posts) {
+    if (only && !only.includes(p.id)) continue;
     const pub = j(p.publish_json, {});
     const zid = Object.values(pub).find((r) => r?.zernioId)?.zernioId;
     const ig = pub.instagram?.via === 'instagram' && pub.instagram.mediaId ? pub.instagram.mediaId : null;
@@ -34,7 +37,7 @@ export async function collectMetrics(ctx, { t = now(), source = null, instagram 
     const age = (t - Date.parse(p.published_at)) / HOUR;
     // Once a day, and always once the post crosses 72 hours, which is the reading that counts.
     const due72 = age >= 72 && !(last?.age >= 72);
-    if (last?.at && t - Date.parse(last.at) < 20 * HOUR && !due72) continue;
+    if (last?.at && t - Date.parse(last.at) < freshHours * HOUR && !due72) continue;
     out.asked++;
     let stats = {};
     if (zid && read) {
@@ -56,7 +59,7 @@ export async function collectMetrics(ctx, { t = now(), source = null, instagram 
     if (!Object.keys(stats).length) continue;
     for (const [platform, s] of Object.entries(stats)) {
       if (s.views == null && s.reach == null) continue;
-      db.insert('metrics', { post_id: p.id, platform, collected_at: new Date(t).toISOString(), age_hours: age, views: s.views, reach: s.reach ?? null, likes: s.likes, comments: s.comments, shares: s.shares, saves: platform === 'tiktok' ? null : s.saves, raw_json: s });
+      db.insert('metrics', { post_id: p.id, platform, collected_at: new Date(t).toISOString(), age_hours: age, views: s.views, reach: s.reach ?? null, likes: s.likes, comments: s.comments, shares: s.shares, saves: platform === 'tiktok' ? null : s.saves, link_clicks: s.linkClicks ?? null, follows: s.follows ?? null, profile_visits: s.profileVisits ?? null, raw_json: s });
       out.got++;
     }
   }

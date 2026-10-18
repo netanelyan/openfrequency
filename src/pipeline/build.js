@@ -14,6 +14,7 @@ import { resolveFormat } from '../trends/index.js';
 import { isGenericQuestion, limitsFor, mechanicalFix, normHe, tellsIn } from '../voice/tells.js';
 import { BLOCK_AT, REWRITE_AT, reviewTexts } from '../voice/review.js';
 import { checkRules } from '../rules/check.js';
+import { lineDraft, oneLine, overlayProblems } from '../rules/overlay.js';
 import { gate, numbersIn, verifyFact } from '../verify/claims.js';
 import { findImage } from '../images/index.js';
 import { normVisual, slideHasVisual, visualProblems, visualsOf, visualText } from '../render/visuals.js';
@@ -137,6 +138,17 @@ export async function candidateDocs(ctx, pack, { usedWithinDays = 45, day = null
   return fresh;
 }
 
+/** The candidates a stored document key names, read from the database (a variation of a post whose feed moved on). */
+export function storedCandidates(db, pack, key) {
+  const rows = db.all(
+    "SELECT d.*, s.name AS sourceName, s.key AS sourceKey FROM documents d JOIN sources s ON s.id = d.source_id WHERE s.account_id = ? AND s.status = 'approved' AND (d.group_key = ? OR d.key = ? OR CAST(d.id AS TEXT) = ?) AND (d.expires_at IS NULL OR d.expires_at > ?) ORDER BY d.fetched_at DESC",
+    pack.id, key, key, key, nowIso()
+  );
+  // One snapshot of each document: the newest.
+  const seen = new Set();
+  return candidatesOf(rows.filter((d) => !seen.has(d.url) && seen.add(d.url)));
+}
+
 /**
  * Documents read together: those that share a group (two articles for a
  * head-to-head) are one candidate. Each candidate has the key its recorded
@@ -226,7 +238,8 @@ export function textsOf({ hook, sub, slides, caption, captionShort }) {
  */
 export function igCaption({ hook, captionShort, question }) {
   if (!String(captionShort || '').trim()) return null;
-  return [String(hook || '').trim(), joinCaption(captionShort, question)].filter(Boolean).join('\n\n');
+  // The cover line as one line: its breaks are the slide's, not the caption's.
+  return [oneLine(hook), joinCaption(captionShort, question)].filter(Boolean).join('\n\n');
 }
 
 /** What the gate and the token hold beyond the slides, in one fixed order. */
@@ -250,6 +263,8 @@ export function checkPost(ctx, pack, draft, facts, format = null) {
   const f = format || { kind: 'list' };
   for (const t of textsOf(draft)) for (const x of tellsIn(t.text, { kind: t.kind, extra: pack.rules.bannedPhrases || [], pack })) problems.push({ where: t.where, code: `voice:${x.code}`, msg: x.msg });
   for (const x of checkRules({ pack, others: ctx.packs || [], texts: textsOf(draft) })) problems.push(x);
+  // The text over the picture: short lines broken by hand, a few a slide, reactions not labels (pack.json "overlay").
+  for (const x of overlayProblems(draft, pack)) problems.push(x);
   if (kindName(f) !== 'list') {
     const content = draft.slides.filter((s) => s.kind === 'item');
     for (const msg of shapeProblems(f, content.map((s) => s.role))) problems.push({ where: 'shape', code: 'shape', msg });
@@ -415,7 +430,7 @@ export function draftFromAnswer(ctx, pack, { format, answer: d, outline, items, 
   if (!legacy) draft.coverVisual = normVisual(d.coverVisual);
   draft.captionIg = igCaption(draft);
   // What code can fix, code fixes: no model call for a stray exclamation mark.
-  const fixes = [...fixDraft(draft), ...citeNumbers(draft, facts)];
+  const fixes = [...fixDraft(draft), ...lineDraft(draft, pack), ...citeNumbers(draft, facts)];
   const checked = checkPost(ctx, pack, draft, facts, format);
   // The details the research found are what makes a post worth finishing: at least three of them on the slides.
   const details = facts.filter((f) => f.verified && f.detail).map((f) => f.key);
@@ -593,8 +608,15 @@ export function postDraft(post) {
 /** The format a stored post was made in, or the phase 1 list. */
 export const formatOfPost = (db, pack, post) => resolveFormat(db, pack, post.format_id) || { id: post.format_id, kind: post.kind || 'list' };
 
-export async function buildPost(ctx, { pack, formatKey = null, sample = false, slotAt = null, maxDocs = 6, subject = null, day = null, hookId = null, ctaText = null, docKey = null }) {
+export async function buildPost(ctx, { pack, formatKey = null, sample = false, slotAt = null, maxDocs = 6, subject = null, day = null, hookId = null, ctaText = null, docKey = null, directive = null }) {
   const { db } = ctx;
+  // The morning's feedback may have planned this post (src/metrics/feedback.js): a format, a cover pattern, a call to
+  // action, the document of a post that worked, and why. What the caller fixed itself wins.
+  const dv = directive || {};
+  formatKey ||= dv.formatKey || null;
+  hookId ||= dv.hookId || null;
+  ctaText ||= dv.ctaText || null;
+  docKey ||= dv.docKey || null;
   const account = db.get('SELECT * FROM accounts WHERE id = ?', pack.id);
   if (!account) throw new Error(`no account row for ${pack.id}: sync the packs first`);
   if (!sample) {
@@ -603,7 +625,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
   }
 
   ensureFormats(db, pack);
-  const fkey = formatKey || pickFormat(db, pack.id, { groups: groupsOf(pack), mix: mixOf(db, pack) }) || pack.formats.formats[0].id;
+  const fkey = formatKey || pickFormat(db, pack.id, { groups: groupsOf(pack), mix: mixOf(db, pack), exclude: dv.avoidFormats || [] }) || pickFormat(db, pack.id, { groups: groupsOf(pack), mix: mixOf(db, pack) }) || pack.formats.formats[0].id;
   const resolve = (k) => resolveFormat(db, pack, k);
   let format = resolve(fkey) || pack.formats.formats[0];
   // When no fresh document fits the format the rotation picked, the others in the
@@ -616,7 +638,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
   const postDay = day || (slotAt ? israelDate(Date.parse(slotAt)) : israelDate(now()));
   const postId = newId('p');
   const at = nowIso();
-  db.insert('posts', { id: postId, account_id: pack.id, format_id: format.id, kind: kindName(format), grp: groupOf(format), status: 'drafting', sample: sample ? 1 : 0, slot_at: slotAt, created_at: at, updated_at: at });
+  db.insert('posts', { id: postId, account_id: pack.id, format_id: format.id, kind: kindName(format), grp: groupOf(format), status: 'drafting', sample: sample ? 1 : 0, slot_at: slotAt, directive_id: dv.id || null, created_at: at, updated_at: at });
   const pctx = { ...ctx, pack, postId, sources: ctx.sourcesFor ? ctx.sourcesFor(pack) : ctx.sources, subjectText: subject?.text || null };
   const finish = (status, patch = {}) => {
     const spend = postSpend(db, postId);
@@ -633,14 +655,22 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     // The pack's prefix is cached for an hour in a batch, whose rounds can be more than five minutes apart.
     const ttl = ctx.llm.batch ? '1h' : '5m';
     step(db, postId, 'format', 'info', { format: format.id, name: format.name, kind: kindName(format), group: groupOf(format) });
+    if (directive) step(db, postId, 'feedback', 'info', { directive: dv.id || null, box: dv.box || null, steer: dv.steer || null });
 
     // ---- topic: documents from approved sources
-    const docs = await candidateDocs(pctx, pack, { day: postDay, keepBlocked: Boolean(subject?.terms?.length) });
+    // A variation of a post that worked is drafted from that post's own document again.
+    const docs = await candidateDocs(pctx, pack, { day: postDay, keepBlocked: Boolean(subject?.terms?.length), ...(dv.reuseDocs ? { usedWithinDays: 0 } : {}) });
     step(db, postId, 'topic', docs.length ? 'ok' : 'failed', { candidates: docs.length, mode: pctx.sources.kind });
     if (!docs.length) return block('no_source', 'אין מסמכים חדשים מהמקורות המאושרים');
     let candidates = candidatesOf(docs);
     // One named document (or group): the launch set, and a test, ask for a post from exactly that.
     if (docKey) candidates = candidates.filter((c) => c.key === docKey);
+    // A feed moves on: the document a winning post came from is read from the database when today's read no longer has it,
+    // and when it is gone (expired, its source removed) the variation is drafted from what there is.
+    if (dv.docKey && dv.docKey === docKey && !candidates.length) {
+      candidates = storedCandidates(db, pack, docKey);
+      if (!candidates.length) candidates = candidatesOf(docs);
+    }
     // A fight week's post is about its event; anything else about something else waits.
     if (subject?.terms?.length) {
       const about = (c) => c.docs.some((d) => subject.terms.every((t) => String(d.text).toLowerCase().includes(String(t).toLowerCase())));
@@ -679,7 +709,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
         const p = outlinePrompt(pack, { ttl });
         try {
           const res = await askJson(pctx, {
-            task: 'outline', role: 'draft', system: p.system, user: outlineUser(f, refs, { avoid: subject ? [] : recent, faceless: [...new Set(faceless)], day: postDay, subject: subject?.text, maxAgeDays: String(c.key).startsWith('bank:') ? null : pack.meta.research?.maxAgeDays || null }), schema: p.schema, effort: EFFORT.outline, maxTokens: MAX_TOKENS.outline,
+            task: 'outline', role: 'draft', system: p.system, user: outlineUser(f, refs, { avoid: subject || dv.steer?.kind === 'variation' ? [] : recent, faceless: [...new Set(faceless)], day: postDay, subject: subject?.text, maxAgeDays: String(c.key).startsWith('bank:') ? null : pack.meta.research?.maxAgeDays || null }), schema: p.schema, effort: EFFORT.outline, maxTokens: MAX_TOKENS.outline,
             meta: { recordingsDir: pack.recordingsDir, docKey: c.key, format: f.base || f.id, attempt: 0 },
           });
           tried++;
@@ -746,11 +776,15 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     const closer = legacy ? pickBy(format.closers, postId) : null;
     // A pattern and a call to action can be fixed in advance (the launch set does, so the text drafted for them and the post agree).
     const fixedHook = hookId ? hookPatterns(format).find((h) => h.id === hookId) : null;
-    const hook = legacy ? null : fixedHook || pickHook(db, pack.id, format);
+    // Feedback that says the cover did not pull asks for another pattern than that post's.
+    const otherHooks = dv.avoidHook ? hookPatterns(format).filter((h) => h.id !== dv.avoidHook) : [];
+    const hook = legacy ? null : fixedHook || (otherHooks.length ? pickBy(otherHooks, postId) : null) || pickHook(db, pack.id, format);
     const ctas = ctasOf(pack, format);
     const lastCta = db.get("SELECT json_extract(data_json, '$.cta.text') AS t FROM posts WHERE account_id = ? AND data_json IS NOT NULL AND status NOT IN ('blocked') ORDER BY created_at DESC LIMIT 1", pack.id)?.t;
     const fixedCta = ctaText ? ctas.find((c) => c.text === ctaText) : null;
-    const cta = legacy || !ctas.length ? null : fixedCta || pickBy(ctas.length > 1 ? ctas.filter((c) => c.text !== lastCta) : ctas, postId);
+    // A call to action the feedback found did not convert is not used again on this post.
+    const fresh = ctas.filter((c) => c.text !== lastCta && c.text !== dv.avoidCta);
+    const cta = legacy || !ctas.length ? null : fixedCta || pickBy(fresh.length ? fresh : ctas.length > 1 ? ctas.filter((c) => c.text !== lastCta) : ctas, postId);
     let draft = null;
     let checked = null;
     let lastProblems = [];
@@ -759,7 +793,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
       let res;
       try {
         res = await askJson(pctx, {
-          task: 'slides', role: 'draft', system: sp.system, user: slidesUser({ format, n: items.length, outline: { ...outline, items }, facts: verifiedFacts, edits, problems: lastProblems.map(say), lastDraft: lastAnswer, hook, cta, day: postDay, pack }), schema: sp.schema,
+          task: 'slides', role: 'draft', system: sp.system, user: slidesUser({ format, n: items.length, outline: { ...outline, items }, facts: verifiedFacts, edits, problems: lastProblems.map(say), lastDraft: lastAnswer, hook, cta, day: postDay, pack, steer: dv.steer || null }), schema: sp.schema,
           effort: EFFORT.slides, maxTokens: MAX_TOKENS.slides, meta: { recordingsDir: pack.recordingsDir, docKey: cand.key, format: format.base || format.id, attempt },
         });
       } catch (e) {
@@ -786,7 +820,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     }
     if (checked.problems.length) {
       // The law and honesty come first in the reason, then the facts, then the shape, then the voice.
-      const rank = (p) => (/^(compliance|honesty|brand|rule)/.test(p.code) ? 0 : p.code === 'verify' ? 1 : /^(shape|caption|keywords|length)$/.test(p.code) ? 2 : 3);
+      const rank = (p) => (/^(compliance|honesty|brand|rule)/.test(p.code) ? 0 : p.code === 'verify' ? 1 : /^(shape|caption|keywords|length|overlay)$/.test(p.code) ? 2 : 3);
       const sorted = checked.problems.slice().sort((a, b) => rank(a) - rank(b));
       const kind = rank(sorted[0]) === 0 ? 'rules' : rank(sorted[0]) === 1 ? 'fact_check' : rank(sorted[0]) === 2 ? 'shape' : 'voice';
       return block(kind, sorted.slice(0, 3).map(say).join(' · '), { problems: sorted.map(say) });
@@ -849,6 +883,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
         else if (t.where === 'caption') next.caption = text;
         else if (t.where === 'caption short') next.captionShort = text;
         else next.slides[t.idx][t.field] = text;
+        lineDraft(next, pack);
         next.captionIg = igCaption(next);
         const before = new Set(checkPost(pctx, pack, draft, facts, format).problems.map(say));
         const added = checkPost(pctx, pack, next, facts, format).problems.map(say).filter((p) => !before.has(p));

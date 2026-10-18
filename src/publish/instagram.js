@@ -194,7 +194,37 @@ export async function insights(db, pack, mediaId) {
   for (const m of r?.data || []) v[m.name] = m.values?.[0]?.value ?? m.total_value?.value ?? null;
   if (v.reach == null && v.views == null) return null;
   const num = (x) => (x == null ? null : Number(x));
-  return { views: num(v.views), reach: num(v.reach), saves: num(v.saved), shares: num(v.shares), likes: num(v.likes), comments: num(v.comments) };
+  return { views: num(v.views), reach: num(v.reach), saves: num(v.saved), shares: num(v.shares), likes: num(v.likes), comments: num(v.comments), ...(await actionsOf(db, pack, mediaId)) };
+}
+
+/**
+ * What a post led people to do on our own profile: taps on the link in the bio
+ * (profile_activity, broken down by action_type), follows and profile visits.
+ * Asked apart from the counts, so a post or a login that cannot give them still
+ * has its views. A breakdown Meta returned without BIO_LINK_CLICKED means none:
+ * Meta leaves out the actions nobody took. Nothing it did not return is filled in.
+ */
+export async function actionsOf(db, pack, mediaId) {
+  const out = { linkClicks: null, follows: null, profileVisits: null };
+  const value = (m) => m?.total_value?.value ?? m?.values?.[0]?.value ?? null;
+  try {
+    const r = await graph(db, pack, `${mediaId}/insights`, { params: { metric: 'follows,profile_visits' }, step: 'insights' });
+    for (const m of r?.data || []) {
+      if (m.name === 'follows' && value(m) != null) out.follows = Number(value(m));
+      if (m.name === 'profile_visits' && value(m) != null) out.profileVisits = Number(value(m));
+    }
+  } catch {
+    /* an older post, or a login without the metric: left unknown */
+  }
+  try {
+    const r = await graph(db, pack, `${mediaId}/insights`, { params: { metric: 'profile_activity', breakdown: 'action_type' }, step: 'insights' });
+    const m = (r?.data || []).find((x) => x.name === 'profile_activity');
+    const results = m?.total_value?.breakdowns?.[0]?.results;
+    if (Array.isArray(results)) out.linkClicks = Number(results.find((x) => (x.dimension_values || []).includes('BIO_LINK_CLICKED'))?.value || 0);
+  } catch {
+    /* left unknown */
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------- publishing

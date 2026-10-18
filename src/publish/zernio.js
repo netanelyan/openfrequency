@@ -173,7 +173,8 @@ export async function zernioAnalytics(zernioId) {
   for (const p of posts) {
     const a = p.analytics || {};
     const num = (x) => (x == null ? null : Number(x));
-    out[p.platform] = { views: num(a.views ?? a.impressions), likes: num(a.likes), comments: num(a.comments), shares: num(a.shares), saves: p.platform === 'tiktok' ? null : num(a.saves) };
+    // Link clicks only where Zernio reports them (TikTok's own video numbers have none): never a guess.
+    out[p.platform] = { views: num(a.views ?? a.impressions), likes: num(a.likes), comments: num(a.comments), shares: num(a.shares), saves: p.platform === 'tiktok' ? null : num(a.saves), linkClicks: num(a.clicks ?? a.linkClicks) };
   }
   return Object.keys(out).length ? out : null;
 }

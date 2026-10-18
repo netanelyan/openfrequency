@@ -1,3 +1,4 @@
+import { oneLine } from '../rules/overlay.js';
 import { chmodSync, copyFileSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
@@ -162,7 +163,7 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
           imageUrls: publicUrls(post, platform),
           privacy: pack.meta.zernio?.tiktokPrivacy || 'SELF_ONLY',
           aiLabel: Boolean(post.ai_label),
-          title: post.hook,
+          title: oneLine(post.hook),
           sound: platform === 'tiktok' ? await soundFor(db, pack, accountId) : null,
         });
       } else if (via === 'instagram') {
@@ -175,7 +176,7 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
         const body =
           want === 'instagram'
             ? { graph: 'POST /{ig-user-id}/media for each slide (is_carousel_item), then media_type=CAROUSEL with children and caption, then POST /{ig-user-id}/media_publish', userId: pack.meta.instagram?.userId || '<instagram user id>', slides: urls, caption: `${captionFor(platform)}${post.ai_label ? '\n\n<AI line>' : ''}`.slice(0, 2200) }
-            : postBody({ platform, accountId: pack.meta.zernio?.accounts?.[platform] || '<account id>', caption: captionFor(platform), imageUrls: urls, privacy: pack.meta.zernio?.tiktokPrivacy || 'SELF_ONLY', aiLabel: Boolean(post.ai_label), title: post.hook });
+            : postBody({ platform, accountId: pack.meta.zernio?.accounts?.[platform] || '<account id>', caption: captionFor(platform), imageUrls: urls, privacy: pack.meta.zernio?.tiktokPrivacy || 'SELF_ONLY', aiLabel: Boolean(post.ai_label), title: oneLine(post.hook) });
         writeFileSync(path.join(dir, `${want === 'instagram' ? 'instagram' : 'zernio'}-request.${platform}.json`), `${JSON.stringify(body, null, 2)}\n`);
         results[platform] = { via: 'dry', path: dir, status: 'written', wanted: want };
       }

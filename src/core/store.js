@@ -34,6 +34,8 @@ export const DEFAULT_SETTINGS = {
   globalBudgetUsd: 0,
   publishErrorStreak: 3,
   generateAt: '07:00',
+  // The morning's feedback (src/metrics/feedback.js), Israel time; never after generateAt.
+  feedbackAt: '06:30',
 };
 
 export function settings(db) {

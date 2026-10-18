@@ -305,11 +305,21 @@ export function feedbackPanels(list) {
         return `<div class="cell ${b}"><b>${esc(BOXES[b].he)}</b><span class="todo">${esc(BOXES[b].todo)}</span>${ins.length ? `<ul>${ins.map(row).join('')}</ul>` : '<p class="muted small">אין</p>'}</div>`;
       }).join('');
       const waiting = posts.filter((p) => !p.box);
-      const plans = directives.length
-        ? `<h3>מה זה משנה בפוסטים הבאים</h3><ul class="factlist">${directives
-            .map((d) => {
-              const [label, tone] = DIRECTIVE_HE[d.status] || [d.status, 'ghost'];
-              return `<li><span class="chip ${tone}">${esc(label)}</span> ${esc(BOXES[d.box]?.todo || d.action)}${d.plan?.steer?.hook ? ` <span class="muted small">(בעקבות "${esc(d.plan.steer.hook)}")</span>` : ''}${d.used_post_id ? ` <a href="/post/${esc(d.used_post_id)}">${esc(d.used_hook || 'הפוסט')}</a>` : ''}</li>`;
+      if (!posts.some((p) => p.box)) return `<section class="panel">${head}<p class="muted">${esc(text)}.${waiting.length ? ` ${waiting.map((p) => esc(p.hook || p.post)).join(' · ')}` : ''}</p></section>`;
+      // One line per post and answer: the three variations of a winner are one line, with what became of each.
+      const groups = new Map();
+      for (const d of directives) {
+        const key = `${d.post_id}:${d.action}`;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(d);
+      }
+      const plans = groups.size
+        ? `<h3>מה זה משנה בפוסטים הבאים</h3><ul class="factlist">${[...groups.values()]
+            .map((ds) => {
+              const d = ds[0];
+              const states = Object.entries(DIRECTIVE_HE).filter(([st]) => ds.some((x) => x.status === st)).map(([st, [label, tone]]) => `<span class="chip ${tone}">${esc(label)}${ds.length > 1 ? ` ${ds.filter((x) => x.status === st).length}` : ''}</span>`).join(' ');
+              const made = ds.filter((x) => x.used_post_id).map((x) => `<a href="/post/${esc(x.used_post_id)}">${esc(x.used_hook || 'הפוסט')}</a>`).join(' · ');
+              return `<li>${states} ${esc(BOXES[d.box]?.todo || d.action)}${d.plan?.steer?.hook ? ` <span class="muted small">(בעקבות "${esc(d.plan.steer.hook)}")</span>` : ''}${made ? `<div class="small">${made}</div>` : ''}</li>`;
             })
             .join('')}</ul>`
         : '';
@@ -334,8 +344,8 @@ export function resultsPage(ctx, d) {
   const dropped = d.formats.flatMap((f) => f.rows.filter((r) => r.status === 'dropped' || r.atRisk).map((r) => ({ ...r, pack: f.pack })));
   const body = `<div class="head"><h1>תוצאות</h1><span class="sub">30 הימים האחרונים</span></div>
 ${d.demo ? `<div class="banner info">${icon('alert')}<div><b>נתוני הדגמה בדויים.</b><p>המספרים בדף הזה נזרעו לחשבון הדמו כדי להראות איך הדף נראה. מספרים אמיתיים מגיעים רק מ-Zernio, 72 שעות אחרי פרסום.</p></div></div>` : ''}
-${feedbackPanels(d.feedback || [])}
 <p class="lede">כל פוסט נמדד 72 שעות אחרי שעלה, מול החציון של אותה פלטפורמה: בטיקטוק שיתופים ולייקים לצפייה (טיקטוק לא מדווחת שמירות), באינסטגרם שמירות לחשיפה (reach). 70% מהפוסטים בפורמטים מוכחים, 30% בניסיונות, ופורמט נושר אחרי 3 תוצאות ברצף מתחת ל-70% מהחציון.</p>
+${feedbackPanels(d.feedback || [])}
 ${(d.learning || []).filter((l) => l.share != null).map((l) => `<section class="panel"><header>${accDot(l.pack.id)}<h2>${esc(l.pack.meta.displayName)}: בידור מול מספרים</h2></header>
 <p>עכשיו <b class="num">${Math.round(l.share * 100)}%</b> מהפוסטים בפורמטים של בידור (סיפור, נחשו מי, קרחון...) ו-<b class="num">${Math.round((1 - l.share) * 100)}%</b> בפורמטים של מספרים (ראש בראש, דירוג).${l.recent ? ` מתוך ${l.recent} הפוסטים האחרונים, ${l.recentEnt} היו בידור.` : ''}</p>
 <p class="muted small">${l.learned?.why ? `השינוי האחרון (${esc(shortDate(l.learned.at))}): ${esc(l.learned.why)}.` : `עוד לא זז: היחס זז ב-5 נקודות בכל פעם, לכל היותר פעם בשבוע, בין ${Math.round(MIX.min * 100)}% ל-${Math.round(MIX.max * 100)}% בידור, לכיוון הקבוצה שהפוסטים שלה עושים יותר טוב, ורק כשיש לפחות 3 תוצאות בכל קבוצה.`}</p>

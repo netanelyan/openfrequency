@@ -9,6 +9,7 @@ import { endParts } from './end.js';
 import { kindName, ranksOf } from '../formats/kinds.js';
 import { slideHasVisual } from './visuals.js';
 import { focusOf } from '../images/safety.js';
+import { overlayOf } from '../rules/overlay.js';
 
 // Slides to JPEG, through headless Chromium, because Hebrew needs real
 // bidirectional layout and shaping and the browser is the thing that has it.
@@ -27,6 +28,14 @@ import { focusOf } from '../images/safety.js';
 // The legibility gate: theme colours are checked for contrast when the pack is
 // validated; a photograph is measured here, and the scrim over it is set to the
 // alpha that gets white type to 7:1 over the brightest patch where the type sits.
+// Text that sits straight on a picture (a photograph, or the account's blurred
+// backdrop) is outlined as well, in the dark of the scrim or the theme's own
+// ground, so a bright patch anywhere behind a line cannot take it away
+// (pack.json overlay.outline).
+//
+// The safe zone: no line of text may sit in the top or bottom band the account
+// keeps clear (pack.json overlay.safeZone). The frame's padding keeps text out of
+// it; every line is measured here, and a slide with one inside is refused.
 
 let browserPromise = null;
 let idle = null;
@@ -279,6 +288,58 @@ export async function renderHtml(html, { size, file, floor = FIT_FLOOR }) {
     const failed = fitted.filter((f) => !f.fits);
     if (failed.length) throw new RenderError(`too long for the slide even at ${Math.round(floor * 100)}% size: "${failed[0].text}..."`, 'overflow');
 
+    // The outline on text over a picture, and every line measured against the safe zone.
+    const zone = await tab.evaluate(() => {
+      const b = document.body;
+      const H = innerHeight;
+      const top = Number(b.dataset.zoneTop || 0) * H;
+      const bottom = H - Number(b.dataset.zoneBottom || 0) * H;
+      const em = Number(b.dataset.outline || 0);
+      const photo = b.classList.contains('has-photo');
+      const over = photo || b.classList.contains('has-bg');
+      const color = photo ? 'rgba(0,0,0,.85)' : `rgba(${getComputedStyle(b).getPropertyValue('--bg-rgb').trim()},.95)`;
+      // Text on a box of its own (a card, a button, a badge) does not touch the picture: it keeps its own look.
+      const ground = (el) => {
+        for (let p = el; p && p !== b; p = p.parentElement) {
+          const cs = getComputedStyle(p);
+          const m = /^rgba?\(([^)]+)\)$/.exec(cs.backgroundColor);
+          const a = m ? Number(m[1].split(',')[3] ?? 1) : 0;
+          if (a >= 0.5 || cs.backgroundImage !== 'none') return true;
+        }
+        return false;
+      };
+      const bad = [];
+      const outlined = new Set();
+      const walker = document.createTreeWalker(b, NodeFilter.SHOW_TEXT);
+      const range = document.createRange();
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+        if (!n.nodeValue.trim()) continue;
+        const el = n.parentElement;
+        // A giant ghost numeral or question mark is ornament, not a line anyone reads.
+        if (el.closest('.probe,.ghost,.qmark,style,script,title')) continue;
+        const cs = getComputedStyle(el);
+        if (cs.visibility === 'hidden' || cs.display === 'none') continue;
+        range.selectNodeContents(n);
+        const r = [...range.getClientRects()].filter((x) => x.width && x.height);
+        if (!r.length) continue;
+        // A line's box is its face's ascent and descent, taller than the letters in a display face: the letters sit in
+        // the em box at its middle, and that is what must clear the zone ("02/06" in a 56 px face measured 73 px tall).
+        const inkPad = (x) => Math.max(0, (x.height - parseFloat(cs.fontSize)) / 2);
+        const hit = r.find((x) => x.top + inkPad(x) < top - 2 || x.bottom - inkPad(x) > bottom + 2);
+        if (hit) bad.push({ text: n.nodeValue.trim().slice(0, 40), top: Math.round(hit.top), bottom: Math.round(hit.bottom) });
+        if (over && em > 0 && !ground(el)) outlined.add(el);
+      }
+      for (const el of outlined) {
+        el.style.webkitTextStroke = `${em}em ${color}`;
+        el.style.paintOrder = 'stroke fill';
+      }
+      return { bad, outlined: outlined.size, top: Math.round(top), bottom: Math.round(bottom) };
+    });
+    if (zone.bad.length) {
+      const x = zone.bad[0];
+      throw new RenderError(`text in the safe zone (clear above ${zone.top}px and below ${zone.bottom}px): "${x.text}" sits at ${x.top}-${x.bottom}px`, 'safe_zone');
+    }
+
     const dir = await tab.evaluate(() => [document.documentElement.dir, document.documentElement.lang]);
     if (dir[0] !== 'rtl' || dir[1] !== 'he') throw new RenderError('the slide is not right to left Hebrew', 'rtl');
 
@@ -286,7 +347,7 @@ export async function renderHtml(html, { size, file, floor = FIT_FLOOR }) {
     ensureDir(path.dirname(file));
     writeFileSync(`${file}.tmp`, buf);
     renameSync(`${file}.tmp`, file);
-    return { file, fitted, bytes: buf.length };
+    return { file, fitted, outlined: zone.outlined, bytes: buf.length };
   } finally {
     await context.close().catch(() => {});
     keepWarm();
@@ -338,6 +399,7 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
   const focus = new Map([...byIdx].filter(([, p]) => p?.file).map(([i, p]) => [i, focusOf(p)]));
   const brand = pack.brandLogo ? dataUri(pack.brandLogo) : null;
   const opts = pack.theme.options || {};
+  const overlay = overlayOf(pack);
   const noHandle = opts.handleTag === false;
   // The closing "follow" slide, when the account has one, takes the call to action off the last content slide.
   const end = pack.meta.endSlide?.title ? pack.meta.endSlide : null;
@@ -404,7 +466,7 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
       const tries = [{ ...slide }, ...(slide.photo ? [{ ...slide, photo: null, hasVisual: s.kind === 'item' && slideHasVisual({ ...slide, photo: null }) }] : [])];
       let done = false;
       for (const [k, sl] of [...tries.map((t) => [FIT_FLOOR, t]), [0.45, tries.at(-1)]].entries()) {
-        const html = page({ theme: pack.theme, size, slide: sl[1], parts: buildSlide(pack.theme, sl[1]), photo: full ? uri.get(i) : tease ? uri.get(slides.length - 1) : null, photoPos: full ? focus.get(i) : null, blur: tease, split, splitPos: split ? [focus.get('ca'), focus.get('cb')] : null, bg: bgFor(i) });
+        const html = page({ theme: pack.theme, overlay, size, slide: sl[1], parts: buildSlide(pack.theme, sl[1]), photo: full ? uri.get(i) : tease ? uri.get(slides.length - 1) : null, photoPos: full ? focus.get(i) : null, blur: tease, split, splitPos: split ? [focus.get('ca'), focus.get('cb')] : null, bg: bgFor(i) });
         try {
           await renderHtml(html, { size, file, floor: sl[0] });
           if (slide.photo && !sl[1].photo) (dropped[size] ??= new Set()).add(i);
@@ -420,7 +482,7 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
     if (end) {
       const sl = { kind: 'end', handle: pack.meta.handle, noHandle, brand };
       const file = path.join(outDir, `${size}-${String(slides.length + 1).padStart(2, '0')}.jpg`);
-      await renderHtml(page({ theme: pack.theme, size, slide: sl, parts: endParts(pack), bg: bgFor(slides.length) }), { size, file, floor: 0.45 });
+      await renderHtml(page({ theme: pack.theme, overlay, size, slide: sl, parts: endParts(pack), bg: bgFor(slides.length) }), { size, file, floor: 0.45 });
       out[size].push(file);
     }
   }

@@ -111,8 +111,36 @@ test('insights: only what Meta returned, reach where views are missing, and the 
     return { data: [{ name: 'reach', values: [{ value: 800 }] }, { name: 'saved', values: [{ value: 24 }] }, { name: 'shares', values: [{ value: 5 }] }, { name: 'likes', values: [{ value: 60 }] }, { name: 'comments', values: [{ value: 3 }] }] };
   });
   const m = await insights(db, pack(), '17895695668004550');
-  assert.deepEqual(m, { views: null, reach: 800, saves: 24, shares: 5, likes: 60, comments: 3 });
+  // The actions it led to are asked apart; a login that cannot give them leaves them unknown, never zero.
+  assert.deepEqual(m, { views: null, reach: 800, saves: 24, shares: 5, likes: 60, comments: 3, linkClicks: null, follows: null, profileVisits: null });
   assert.equal(postScore('instagram', m), 24 / 800);
+});
+
+test("insights: taps on the bio link from the profile_activity breakdown, follows and profile visits, asked apart", async () => {
+  const db = new Db(':memory:');
+  process.env.IG_TOKEN_DEMO = 'tok';
+  const calls = stubGraph((m, u, p) => {
+    if (p.metric === 'follows,profile_visits') return { data: [{ name: 'follows', values: [{ value: 7 }] }, { name: 'profile_visits', values: [{ value: 41 }] }] };
+    if (p.metric === 'profile_activity') {
+      assert.equal(p.breakdown, 'action_type');
+      return { data: [{ name: 'profile_activity', total_value: { value: 15, breakdowns: [{ dimension_keys: ['action_type'], results: [{ dimension_values: ['BIO_LINK_CLICKED'], value: 12 }, { dimension_values: ['TEXT'], value: 3 }] }] } }] };
+    }
+    return { data: [{ name: 'views', values: [{ value: 900 }] }, { name: 'reach', values: [{ value: 800 }] }] };
+  });
+  const m = await insights(db, pack(), '17895695668004550');
+  assert.equal(m.linkClicks, 12);
+  assert.equal(m.follows, 7);
+  assert.equal(m.profileVisits, 41);
+  assert.ok(calls.every((c) => c.method === 'GET' && c.path.endsWith('/insights')), 'reads of our own media only');
+  // A breakdown that leaves out the bio link means nobody tapped it; a refusal leaves it unknown.
+  stubGraph((m2, u, p) => {
+    if (p.metric === 'profile_activity') return { data: [{ name: 'profile_activity', total_value: { value: 2, breakdowns: [{ dimension_keys: ['action_type'], results: [{ dimension_values: ['TEXT'], value: 2 }] }] } }] };
+    if (p.metric === 'follows,profile_visits') throw Object.assign(new Error('not supported'), { code: 100 });
+    return { data: [{ name: 'views', values: [{ value: 900 }] }] };
+  });
+  const z = await insights(db, pack(), '17895695668004550');
+  assert.equal(z.linkClicks, 0);
+  assert.equal(z.follows, null);
 });
 
 test('an Instagram Login token is refreshed and kept; a new token in .env wins over the kept one', async () => {

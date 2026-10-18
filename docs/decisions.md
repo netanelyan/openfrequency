@@ -1142,3 +1142,50 @@ engine can act on, and what changed:
   In `pack.json`, `zernio.soundCountry` names the chart (`IL` by default) and
   `zernio.sound: "auto"` goes back to TikTok's pick. `zernio:check` shows each
   pack's next sound and sends its private test post with it.
+
+- **The text on a slide follows the slideshow playbook, in code (2026-10-18, the
+  owner's call).** Lines of 4 to 6 words, broken by hand; 3 to 4 lines on a slide,
+  title and body together; a title that reacts ("81 יום, ואף אחד לא השקה") rather
+  than labels ("טיפ 3", "עובדה:", "התפנית"); no text in the top 10% or the bottom
+  20% of the slide; a thick outline on any text that sits on a picture. Each pack
+  may change any of them (`pack.json` `overlay`); these are the defaults
+  (`src/rules/overlay.js`). The writer is asked for the breaks, and a line it left
+  too long is broken in code at the best place (after a comma, never between a
+  number and what it counts), the way punctuation tells are fixed in code: a
+  missing newline is not worth a redraft. What code cannot fix (too many words, a
+  line too short, a label) goes to the one redraft like any other check. Two
+  judgement calls: the last line of a text may be shorter than 4 words (the punch:
+  "ואיך הוא חזר"), and a body that is a list by its kind's design (places 10 to 6,
+  an iceberg's layer) is neither broken nor counted. The safe zone widens the
+  frame's padding where the platform's own does not reach it (Instagram: 135 px at
+  the top, 270 at the bottom; TikTok's already clears it) and every line of text is
+  measured after the fit pass: one inside the zone refuses the slide. The breaks
+  are kept on the slide, and a line still too wide for very large display type
+  wraps, balanced, rather than being set smaller: setting every cover line at 4 to
+  6 words on one line would have shrunk the covers of every template. The outline
+  goes on text that touches the picture only (text on a card keeps its own look),
+  in the dark of the scrim on a photograph and in the theme's ground on a blurred
+  backdrop.
+
+- **Every morning, the last three days' posts are put in a two-by-two, and the
+  answer becomes the next posts' plan (2026-10-18, the owner's call).** At
+  `feedbackAt` (06:30, never after `generateAt`) the runner reads the numbers of
+  the last three days' posts again and puts each one in a box: views against the
+  median of the account's earlier posts on the same platform, each read at the
+  same age (a post 30 hours old against the others near 30 hours, not at 72), and
+  what it led people to do per view against the same median. Taps on the bio link
+  (Instagram's `profile_activity` by `action_type`) are the measure when every post
+  compared has them; otherwise likes, comments, shares and saves. DM keyword
+  replies are not counted and cannot be: hard rule 1 never reads messages.
+  TikTok's numbers through Zernio have no clicks, so on TikTok it is engagement
+  until leads are attributed (planned). Fewer than three earlier posts at that age,
+  and a post is reported but not boxed. Each box has a fixed answer, stored as
+  directives and handed to the day's first free slots, winners first: high and
+  high, three variations (the same document and format, three other cover
+  patterns, drafted again although the document was used); high views and low
+  action, the same cover pattern with another call to action and a caption the
+  writer is told to write anew; low views and high action, the same call to action
+  with another cover pattern and another kind of first slide; low and low, another
+  format. The writer is told why in one line of the slides prompt. A new morning
+  replaces the plans no slot took, and a post that got its answer is not answered
+  again. Results shows each account's report and what became of each plan.
