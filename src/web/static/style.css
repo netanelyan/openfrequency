@@ -73,7 +73,7 @@
   --r-s: 10px;
   --gut: 16px;
   --tab: 62px;
-  --top: 52px;
+  --top: 66px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -172,36 +172,58 @@ svg.i { width: 20px; height: 20px; flex: none; stroke: currentColor; fill: none;
 .mark { width: 28px; height: 28px; border-radius: 7px; background: var(--accent-fill); color: #fff; display: grid; place-items: center; flex: none; }
 .mark svg { width: 20px; height: 20px; fill: currentColor; }
 
-/* ------------------------------------------------------------ the navigation bar: glass, as on apple.com */
+/* ------------------------------------------------------------ the navigation bar: a floating glass capsule */
 
-.top {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  background: var(--bar);
+/* The bar floats: a capsule of glass held off the edges, the same family as the tab bar under the thumb. On a
+   desk the sections sit in the middle as a segmented group, the current one a raised pane; the month's spend is a
+   pill with a ring at the end. It lifts (a deeper shadow) once the page scrolls under it. */
+.top { position: sticky; top: 0; z-index: 20; padding: 10px var(--gut) 0; pointer-events: none; }
+.top .wrap {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 56px;
+  max-width: 1056px;
+  padding-inline: 10px 8px;
+  border-radius: 999px;
+  background: var(--bar-float);
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
-  box-shadow: inset 0 -1px 0 var(--bar-edge);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05), inset 0 0 0 1px var(--bar-edge), inset 0 1px 0 var(--rim);
+  transition: box-shadow 0.25s ease;
 }
-.top .wrap { display: flex; align-items: center; gap: 12px; height: var(--top); }
-.brand { display: flex; align-items: center; gap: 9px; }
+.scrolled .top .wrap { box-shadow: var(--shadow-float), inset 0 0 0 1px var(--bar-edge), inset 0 1px 0 var(--rim); }
+.brand { display: flex; align-items: center; gap: 9px; padding-inline-end: 4px; }
 .brand:hover { text-decoration: none; }
-.brand b { font: 600 20px/1 var(--display); }
-.nav { display: none; gap: 4px; margin-inline-start: 24px; }
-.nav a { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 10px; color: var(--ink-2); font-size: 14px; }
-.nav a:hover { color: var(--ink); text-decoration: none; }
-.nav a[aria-current='page'] { color: var(--ink); font-weight: 600; }
+.brand .mark { width: 34px; height: 34px; border-radius: 10px; }
+.brand .mark svg { width: 24px; height: 24px; }
+.brand b { font: 700 20px/1 var(--display); }
+.nav { display: none; gap: 2px; padding: 3px; border-radius: 999px; background: var(--fill); }
+.nav a { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 16px; border-radius: 999px; color: var(--ink-2); font-size: 14px; font-weight: 500; transition: background-color 0.15s ease, color 0.15s ease; }
+.nav a:hover { color: var(--ink); background: var(--fill); text-decoration: none; }
+.nav a[aria-current='page'] { color: var(--ink); font-weight: 600; background: var(--seg-on); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 1px rgba(0, 0, 0, 0.04); }
 .nav .badge { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--badge); color: var(--badge-ink); font-size: 11px; font-weight: 600; line-height: 18px; text-align: center; }
 .top .tools { margin-inline-start: auto; display: flex; align-items: center; gap: 8px; }
-@media (min-width: 900px) { .nav { display: flex; } }
+@media (min-width: 900px) {
+  .top { padding-top: 12px; }
+  .top .wrap { display: grid; grid-template-columns: 1fr auto 1fr; }
+  .brand { justify-self: start; }
+  .nav { display: flex; }
+  .top .tools { margin: 0; justify-self: end; }
+}
 
-/* The month's spend against the cap: always in sight, one tap from the budget. */
-.spend { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 4px; }
-.spend:hover { text-decoration: none; }
-.spend span { font-size: 13px; color: var(--ink-3); }
-.spend b { font-size: 14px; font-weight: 500; color: var(--ink); }
-.spend meter { width: 56px; }
-@media (max-width: 520px) { .spend span, .spend meter { display: none; } }
+/* The month's spend against the cap: a pill with a ring that fills as the month is spent, one tap from the budget. */
+.spend { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 14px 0 12px; border-radius: 999px; background: var(--fill); }
+.spend:hover { text-decoration: none; background: var(--fill-2); }
+.spend span { font-size: 13px; color: var(--ink-2); }
+.spend b { font-size: 14px; font-weight: 600; color: var(--ink); }
+.ring { width: 20px; height: 20px; flex: none; fill: none; stroke-width: 3; }
+.ring circle { stroke: var(--line-2); }
+.ring circle.v { stroke: var(--accent-fill); stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; }
+.ring.warn circle.v { stroke: var(--warn); }
+.ring.bad circle.v { stroke: var(--bad); }
+@media (max-width: 520px) { .spend span { display: none; } }
 
 /* ------------------------------------------------------------ the tab bar (phone): a floating glass bar, as on iOS */
 
@@ -619,7 +641,7 @@ body.login { min-height: 100vh; display: grid; place-items: center; padding: 24p
   *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
 }
 @media (prefers-reduced-transparency: reduce) {
-  .top, .tabbar, .actionbar, #toast, .strip a .n, .strip a .has, .card, .panel, .day, .list { backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .top .wrap, .tabbar, .actionbar, #toast, .strip a .n, .strip a .has, .card, .panel, .day, .list { backdrop-filter: none; -webkit-backdrop-filter: none; }
 }
 
 /* small utilities, so no page needs an inline style (the CSP forbids them) */

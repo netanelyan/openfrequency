@@ -3,6 +3,7 @@ import { waitingImages } from '../images/index.js';
 import { nowIso } from '../core/clock.js';
 import { audit, setSetting, step } from '../core/store.js';
 import { loadPost, checkPost, formatOfPost, igCaption, postDraft } from '../pipeline/build.js';
+import { lineDraft } from '../rules/overlay.js';
 import { kindName, kindOf } from '../formats/kinds.js';
 import { confirmDeleted, recordTakedown } from '../publish/takedown.js';
 import { renderPost } from '../render/render.js';
@@ -92,6 +93,8 @@ export async function edit(ctx, user, { id }, form) {
     item++;
     return { ...s, title: clean(form[`title_${item}`] ?? s.title, 80), body: clean(form[`body_${item}`] ?? s.body, 300) };
   });
+  // A line the owner left longer than the account's rule is broken in code, as a draft's would be.
+  lineDraft(draft, pack);
   draft.captionIg = igCaption(draft);
   const { problems, gate } = checkPost({ ...ctx, packs: ctx.packs }, pack, draft, post.facts, format);
   if (problems.length) throw new ActionError('הבדיקות עצרו את השינוי', 422, { problems: problems.map((p) => `${p.where}: ${p.msg}`), values: { ...form } });

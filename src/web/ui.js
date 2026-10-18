@@ -109,6 +109,9 @@ export function layout(ctx, body) {
   const s = ctx.spend || { usd: 0, cap: 0 };
   const cap = Number(s.cap) || 0;
   const spent = Number(s.usd) || 0;
+  // The ring fills with the month: orange from 70% of the cap, red from 90%, as the budget warnings do.
+  const used = cap ? Math.min(100, Math.round((spent / cap) * 100)) : 0;
+  const ring = `<svg class="ring${used >= 90 ? ' bad' : used >= 70 ? ' warn' : ''}" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8"/><circle class="v" cx="10" cy="10" r="8" pathLength="100" stroke-dasharray="${used} 100"/></svg>`;
   // The appearance follows the system setting: the site has no switch of its own.
   return `<!doctype html>
 <html lang="he" dir="rtl">
@@ -132,7 +135,7 @@ ${SPRITE}
   <a class="brand" href="/" aria-label="תדר, להיום">${mark()}<b>תדר</b></a>
   <nav class="nav" aria-label="ראשי">${nav}</nav>
   <div class="tools">
-    <a class="spend" href="/settings#budget" title="ההוצאה החודשית מתוך התקציב"><span>החודש</span><b class="num ltr">$${spent.toFixed(2)} / $${cap}</b><meter min="0" max="${cap || 1}" low="${(cap || 1) * 0.7}" high="${(cap || 1) * 0.9}" optimum="0" value="${Math.min(spent, cap || 1)}"></meter></a>
+    <a class="spend" href="/settings#budget" title="ההוצאה החודשית מתוך התקציב: ${used}%">${ring}<span>החודש</span><b class="num ltr">$${spent.toFixed(2)} / $${cap}</b></a>
   </div>
 </div></header>
 <main class="wrap" id="main">

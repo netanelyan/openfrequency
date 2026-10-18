@@ -14,6 +14,11 @@
   };
   if (toast?.dataset.flash) say(toast.dataset.flash);
 
+  // The navigation bar lifts once the page scrolls under it.
+  const lift = () => document.documentElement.classList.toggle('scrolled', window.scrollY > 8);
+  window.addEventListener('scroll', lift, { passive: true });
+  lift();
+
   // Two taps for anything that cannot be undone in one.
   document.addEventListener('click', (e) => {
     const b = e.target.closest('[data-confirm]');
