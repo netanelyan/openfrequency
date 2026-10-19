@@ -15,6 +15,8 @@ import { exportPost } from '../pipeline/export.js';
 import { imageCredit, waitingImages } from '../images/index.js';
 import { canRun, pauseAccount, publishErrorStreak } from '../autonomy/rails.js';
 import { isStrike, postBody, publishZernio, trendingSound, zernioConfigured } from './zernio.js';
+import { assignSound } from '../pipeline/sounds.js';
+import { notify } from '../notify/index.js';
 import { instagramConfigured, isRefusal, isThrottle, isTokenProblem, publishInstagram } from './instagram.js';
 
 // Publishing one approved post, through the rails, to each of its pack's
@@ -83,8 +85,26 @@ export function recheck(db, post, pack) {
   return problems;
 }
 
+/**
+ * How the pack's TikTok posts go out: 'direct', or 'draft-fallback' (zernio.tiktokMode): a draft the owner publishes
+ * in the app with a sound from the account's list, published directly an hour after the slot if they do not
+ * (src/publish/draft.js). Instagram is not touched by it.
+ */
+export const tiktokMode = (pack) => pack.meta.zernio?.tiktokMode || 'direct';
+
+/** A platform's caption as it goes out: TikTok the long one, Instagram the short one, then the credits and the tags. */
+export const captionOf = (db, post, platform) => [platform === 'instagram' && post.caption_ig ? post.caption_ig : post.caption, imageCredit(db, post), (post.hashtags || []).join(' ')].filter(Boolean).join('\n\n');
+
+/** The words of the notification that a TikTok draft is waiting: the account, the cover line, the sound. */
+export function draftNotice(pack, post, sound) {
+  return {
+    title: `${pack.meta.displayName}: טיוטה מחכה בטיקטוק`,
+    body: [oneLine(post.hook), sound ? `סאונד: ${sound.name} · ${sound.artist}${sound.stale ? ' (ישן, החליפו ברשימה)' : ''}` : 'אין סאונד ברשימה: הוסיפו בדף הסאונדים', 'אם לא תפרסמו תוך שעה, הפוסט יעלה אוטומטית עם מוזיקה מהספרייה.'].join('\n'),
+  };
+}
+
 /** Copy a post's slides to the public media folder Caddy serves; returns their URLs. */
-function publicUrls(post, platform) {
+export function publicUrls(post, platform) {
   const base = String(process.env.MEDIA_PUBLIC_BASE_URL || '').replace(/\/$/, '');
   if (!/^https:\/\//.test(base)) throw new PublishRefused('MEDIA_PUBLIC_BASE_URL is not an https address: Zernio and Instagram fetch slides by URL', 'no_media_url');
   const token = `${post.id}-${randomBytes(6).toString('hex')}`;
@@ -109,7 +129,7 @@ const RECENT_SOUNDS = 5;
  * null for TikTok's own pick. `zernio.sound: "auto"` in pack.json keeps TikTok's
  * pick; `zernio.soundCountry` names the chart (Israel's by default).
  */
-async function soundFor(db, pack, accountId) {
+export async function soundFor(db, pack, accountId) {
   if (pack.meta.zernio?.sound === 'auto' || !accountId) return null;
   const recent = db
     .all("SELECT publish_json FROM posts WHERE account_id = ? AND status = 'published' ORDER BY published_at DESC LIMIT ?", pack.id, RECENT_SOUNDS)
@@ -142,7 +162,7 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
   }
 
   // TikTok gets the long caption; Instagram the short one, which repeats the cover line.
-  const captionFor = (platform) => [platform === 'instagram' && post.caption_ig ? post.caption_ig : post.caption, imageCredit(db, post), (post.hashtags || []).join(' ')].filter(Boolean).join('\n\n');
+  const captionFor = (platform) => captionOf(db, post, platform);
   // Five hashtags at most, counted on the caption as it would go out: the post's own and any a caption picked up.
   for (const platform of pack.meta.platforms) {
     const n = hashtagsIn(captionFor(platform)).length;
@@ -153,17 +173,22 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
   const results = { ...(post.publish || {}) };
   const attempts = (Number(results._attempts) || 0) + 1;
   delete results._attempts;
-  const done = (r) => r && !r.error && (r.status === 'published' || r.status === 'written' || r.pending || r.zernioId || r.mediaId);
+  const done = (r) => r && !r.error && (r.status === 'published' || r.status === 'written' || r.pending || r.zernioId || r.mediaId || r.flow);
+  let drafted = null;
   let failed = null;
   const vias = {};
   for (const platform of pack.meta.platforms) {
     if (done(results[platform])) continue; // out already: never twice
     const via = publisherFor(pack, platform, { db });
     vias[platform] = via;
+    // Draft-fallback: TikTok's post goes to the app's inbox with a sound from the account's list named for it, and
+    // src/publish/draft.js watches for it. The draft's Zernio id is not the post's (nothing is out yet).
+    const asDraft = platform === 'tiktok' && tiktokMode(pack) === 'draft-fallback';
+    const flow = asDraft ? { state: 'waiting', sentAt: new Date(t).toISOString(), slotAt: post.slot_at || new Date(t).toISOString(), sound: assignSound(db, pack.id, { t }), remindedAt: null } : null;
     try {
       if (via === 'zernio') {
         const accountId = pack.meta.zernio?.accounts?.[platform];
-        results[platform] = await publishZernio({
+        const r = await publishZernio({
           platform,
           accountId,
           caption: captionFor(platform),
@@ -171,8 +196,13 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
           privacy: pack.meta.zernio?.tiktokPrivacy || 'SELF_ONLY',
           aiLabel: Boolean(post.ai_label),
           title: oneLine(post.hook),
-          sound: platform === 'tiktok' ? await soundFor(db, pack, accountId) : null,
+          sound: platform === 'tiktok' && !asDraft ? await soundFor(db, pack, accountId) : null,
+          asDraft,
         });
+        if (asDraft) {
+          const { zernioId, ...rest } = r;
+          results[platform] = { ...rest, draftId: zernioId, flow };
+        } else results[platform] = r;
       } else if (via === 'instagram') {
         results[platform] = await publishInstagram(db, pack, { caption: captionFor(platform), imageUrls: publicUrls(post, platform), aiLabel: Boolean(post.ai_label), priorCreationId: results[platform]?.creationId || null });
       } else {
@@ -183,15 +213,16 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
         const body =
           want === 'instagram'
             ? { graph: 'POST /{ig-user-id}/media for each slide (is_carousel_item), then media_type=CAROUSEL with children and caption, then POST /{ig-user-id}/media_publish', userId: pack.meta.instagram?.userId || '<instagram user id>', slides: urls, caption: `${captionFor(platform)}${post.ai_label ? '\n\n<AI line>' : ''}`.slice(0, 2200) }
-            : postBody({ platform, accountId: pack.meta.zernio?.accounts?.[platform] || '<account id>', caption: captionFor(platform), imageUrls: urls, privacy: pack.meta.zernio?.tiktokPrivacy || 'SELF_ONLY', aiLabel: Boolean(post.ai_label), title: oneLine(post.hook) });
+            : postBody({ platform, accountId: pack.meta.zernio?.accounts?.[platform] || '<account id>', caption: captionFor(platform), imageUrls: urls, privacy: pack.meta.zernio?.tiktokPrivacy || 'SELF_ONLY', aiLabel: Boolean(post.ai_label), title: oneLine(post.hook), asDraft });
         writeFileSync(path.join(dir, `${want === 'instagram' ? 'instagram' : 'zernio'}-request.${platform}.json`), `${JSON.stringify(body, null, 2)}\n`);
-        results[platform] = { via: 'dry', path: dir, status: 'written', wanted: want };
+        results[platform] = { via: 'dry', path: dir, status: 'written', wanted: want, ...(asDraft ? { draft: true, flow } : {}) };
       }
     } catch (e) {
       results[platform] = { ...(results[platform] || {}), via, error: String(e.message).slice(0, 300), code: e.code || null, creationId: e.creationId || results[platform]?.creationId || null };
       failed = e;
       break; // a platform that might have half-posted is never retried blind; stop here and report
     }
+    if (asDraft) drafted = flow;
   }
 
   // An Instagram throttle, or a container still processing, clears by itself: try
@@ -216,6 +247,14 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
     if (isStrike(failed) || isRefusal(failed)) pauseAccount(db, pack.id, 'strike', failed.message);
     else if (isTokenProblem(failed)) pauseAccount(db, pack.id, 'publish_errors', `האסימון של אינסטגרם פג או נפסל: ${failed.message}`);
     else if (publishErrorStreak(db, pack.id) >= Number(settings(db).publishErrorStreak || 3)) pauseAccount(db, pack.id, 'publish_errors', failed.message);
+  }
+  // The owner is told the draft is waiting, and which sound to add.
+  if (drafted) {
+    try {
+      await notify(ctx, { accountId: pack.id, postId, kind: 'draft', ...draftNotice(pack, post, drafted.sound), url: `/post/${postId}` });
+    } catch (e) {
+      ctx.log?.(`notify ${postId}: ${e.message}`);
+    }
   }
   const via = [...new Set(Object.values(vias))].join('+') || 'none';
   return { postId, ok, via, results, retry };

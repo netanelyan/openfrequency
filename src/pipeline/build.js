@@ -1176,8 +1176,9 @@ export async function sidePhotos(ctx, { pack, outline, postId }) {
   const about = outline.topic ? ` (the post is about: ${outline.topic})` : '';
   const out = {};
   for (const [key, query, side] of [['ca', outline.imageQuery, outline.subject?.a], ['cb', outline.imageQueryB, outline.subject?.b]]) {
-    const img = await findImage(ctx, { pack, query, postId, claim: `a portrait of ${side || query} for one half of the cover of a head-to-head${about}` }).catch((e) => (ctx.log?.(`image: ${e.message}`), null));
-    step(ctx.db, postId, 'image', img ? 'ok' : 'skipped', img ? { slide: key, query, provider: img.provider, license: img.license, author: img.author, source: img.source_url, safety: img.safety } : { slide: key, query });
+    const why = {};
+    const img = await findImage(ctx, { pack, query, postId, claim: `a portrait of ${side || query} for one half of the cover of a head-to-head${about}`, why }).catch((e) => (ctx.log?.(`image: ${e.message}`), null));
+    step(ctx.db, postId, 'image', img ? 'ok' : 'skipped', img ? { slide: key, query, provider: img.provider, license: img.license, author: img.author, source: img.source_url, safety: img.safety } : { slide: key, query, why });
     if (!img) return null;
     out[key] = img;
   }
@@ -1236,14 +1237,15 @@ export async function findPhotos(ctx, { pack, format, draft, outline, postId }) 
     const key = w.query.toLowerCase().trim();
     if (seen.has(key) || seen.size >= 4) continue;
     seen.add(key);
-    let img = await findImage(ctx, { pack, query: w.query, postId, claim: w.claim }).catch((e) => (ctx.log?.(`image: ${e.message}`), null));
+    const why = {};
+    let img = await findImage(ctx, { pack, query: w.query, postId, claim: w.claim, why }).catch((e) => (ctx.log?.(`image: ${e.message}`), null));
     // A cover whose query found nothing tries the post's own subject by name ("Haim Revivo" rather than "Revivo goal Spain 1998").
     const who = String(draft.subject?.answer || draft.subject?.a || '').trim();
     if (!img && w.idx === 0 && /[A-Za-z]/.test(who) && who.toLowerCase() !== key && !seen.has(who.toLowerCase())) {
       seen.add(who.toLowerCase());
-      img = await findImage(ctx, { pack, query: who, postId, claim: w.claim }).catch(() => null);
+      img = await findImage(ctx, { pack, query: who, postId, claim: w.claim, why }).catch(() => null);
     }
-    step(ctx.db, postId, 'image', img ? (img.safety === 'review' ? 'info' : 'ok') : 'skipped', img ? { slide: w.idx, query: w.query, provider: img.provider, license: img.license, author: img.author, source: img.source_url, safety: img.safety, match: j(img.match_json, null) } : { slide: w.idx, query: w.query, mode: ctx.mode });
+    step(ctx.db, postId, 'image', img ? (img.safety === 'review' ? 'info' : 'ok') : 'skipped', img ? { slide: w.idx, query: w.query, provider: img.provider, license: img.license, author: img.author, source: img.source_url, safety: img.safety, match: j(img.match_json, null) } : { slide: w.idx, query: w.query, mode: ctx.mode, why });
     if (img) out.set(w.idx, img);
   }
   // A cover still without its own photograph takes a portrait one of its slides found (the post's person, checked

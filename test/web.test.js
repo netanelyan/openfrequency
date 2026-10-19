@@ -241,3 +241,25 @@ test('a changed theme.json waits on the Accounts page until the owner applies it
     pack.theme.colors.accent = before;
   }
 });
+
+test('sounds are added per account, the service worker is served from the root, and a browser can ask for notifications', async () => {
+  const cookie = await login();
+  const csrf = await csrfOf(cookie);
+  let res = await post('/sounds/save', cookie, { _csrf: csrf, account: 'demo', name: 'Espresso', artist: 'Sabrina Carpenter', link: 'https://www.tiktok.com/music/Espresso-123' });
+  assert.equal(res.status, 200);
+  const page = await (await get('/sounds?account=demo', cookie)).text();
+  assert.match(page, /Espresso/);
+  assert.match(page, /טרי/);
+  res = await post('/sounds/save', cookie, { _csrf: csrf, account: 'demo', name: 'x', artist: 'y', link: 'https://evil.example/a' });
+  assert.equal(res.status, 422);
+  const sw = await get('/sw.js');
+  assert.equal(sw.status, 200, 'the service worker needs no session');
+  assert.equal(sw.headers.get('service-worker-allowed'), '/');
+  res = await post('/push/subscribe', cookie, { _csrf: csrf, endpoint: 'https://fcm.googleapis.com/fcm/send/test-browser' });
+  assert.equal(res.status, 200);
+  assert.equal(ctx.db.get('SELECT COUNT(*) AS n FROM push_subs').n, 1);
+  assert.match(await (await get('/settings', cookie)).text(), /data-push="[A-Za-z0-9_-]{80,}"/, 'the page carries the public key the browser subscribes with');
+  ctx.db.insert('notifications', { kind: 'draft', title: 'עציץ ושמש: טיוטה מחכה בטיקטוק', body: 'b', url: '/', created_at: new Date().toISOString() });
+  assert.equal((await get('/notifications/latest.json')).status, 303, 'what a notification says is behind the session');
+  assert.match((await (await get('/notifications/latest.json', cookie)).json()).title, /טיוטה מחכה/);
+});

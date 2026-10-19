@@ -50,7 +50,7 @@ test('no engagement endpoint is named anywhere in the code', () => {
   assert.deepEqual(hits, []);
 });
 
-test('the only writes are Claude, our own post on Zernio, publishing our own post on Instagram, and deleting it after a takedown', () => {
+test("the only writes are Claude, our own post on Zernio, publishing our own post on Instagram, deleting it after a takedown, and an empty push to the owner's browser", () => {
   assert.deepEqual(
     WRITE_RULES.map((r) => `${r.method} ${r.host} ${r.path.source}`),
     [
@@ -60,6 +60,10 @@ test('the only writes are Claude, our own post on Zernio, publishing our own pos
       'POST graph.facebook.com ^\\/v\\d+\\.\\d+\\/\\d+\\/(media|media_publish)$',
       'POST graph.instagram.com ^\\/v\\d+\\.\\d+\\/\\d+\\/(media|media_publish)$',
       'DELETE graph.facebook.com ^\\/v\\d+\\.\\d+\\/\\d+$',
+      'POST fcm.googleapis.com ^\\/(fcm\\/send|wp)\\/[A-Za-z0-9_:.-]+$',
+      'POST updates.push.services.mozilla.com ^\\/wpush\\/v[12]\\/[A-Za-z0-9_=-]+$',
+      'POST web.push.apple.com ^\\/[A-Za-z0-9_=-]+$',
+      'POST notify.windows.com ^\\/w\\/$',
     ]
   );
   // A write that reaches a social host is publishing on our own account through its official API, or

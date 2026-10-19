@@ -139,7 +139,7 @@ the crop aimed at the face. Otherwise the slide keeps its graphic.
 
 | Rule | Where it is enforced |
 |---|---|
-| 1. Official APIs only; no likes, follows, comments, DMs or logged-in reading | `src/core/net.js` is the only `fetch`. Its write allowlist is Claude, Zernio's create-post, Meta's two publishing endpoints, and deleting our own Instagram post after a takedown notice. It refuses Zernio's inbox and every Graph edge for comments, mentions, tags, messages, hashtags and other accounts by name. Tests scan the code for any other `fetch` |
+| 1. Official APIs only; no likes, follows, comments, DMs or logged-in reading | `src/core/net.js` is the only `fetch`. Its write allowlist is Claude, Zernio's create-post, Meta's two publishing endpoints, deleting our own Instagram post after a takedown notice, and an empty Web Push to the owner's own browser (no words in it; never Telegram, a social host). It refuses Zernio's inbox and every Graph edge for comments, mentions, tags, messages, hashtags and other accounts by name. Tests scan the code for any other `fetch` |
 | 2. Each account a distinct brand | `src/packs/validate.js`: no two packs share a template, a display face, a handle, a name or a palette too close to tell apart; a cross-promotion check on every post |
 | 3. Honest by construction | `src/verify/claims.js`: every quote verbatim in a stored document of that account's approved source, every number in its quotes, the render gate's token. `src/voice/honesty.js` refuses invented experience and fake badges or metrics |
 | 4. AI disclosure | TikTok's `video_made_with_ai` flag through Zernio; a caption line on Instagram |

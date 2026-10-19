@@ -14,6 +14,7 @@ import * as act from './actions.js';
 import { onboardingRoutes } from './onboarding.js';
 import { loadPost } from '../pipeline/build.js';
 import { lockedStyle } from '../render/style.js';
+import { latestNotification } from '../notify/index.js';
 
 // The website. It listens on 127.0.0.1 only; on the VPS, Caddy holds the
 // certificate and passes requests to it.
@@ -106,6 +107,9 @@ export function createHandler(ctx, { port, env = process.env, limiter = createLi
     ['POST', /^\/facts\/remove$/, (u, m, f) => act.removeFactAction(ctx, u, {}, f)],
     ['POST', /^\/rivals\/save$/, (u, m, f) => act.saveRivalAction(ctx, u, {}, f)],
     ['POST', /^\/rivals\/remove$/, (u, m, f) => act.removeRivalAction(ctx, u, {}, f)],
+    ['POST', /^\/sounds\/save$/, (u, m, f) => act.saveSoundAction(ctx, u, {}, f)],
+    ['POST', /^\/sounds\/remove$/, (u, m, f) => act.removeSoundAction(ctx, u, {}, f)],
+    ['POST', /^\/push\/subscribe$/, (u, m, f) => act.subscribePush(ctx, u, {}, f)],
     ...onboardingRoutes(ctx),
   ];
 
@@ -129,6 +133,8 @@ export function createHandler(ctx, { port, env = process.env, limiter = createLi
         if (p === '/static/manifest.webmanifest') return send(req, res, 200, readFileSync(path.join(STATIC, 'manifest.webmanifest')), 'application/manifest+json; charset=utf-8', { 'cache-control': 'public, max-age=86400' });
         if (p === '/static/fonts/Assistant.ttf') return send(req, res, 200, readFileSync(path.join(assetsDir, 'fonts', 'Assistant.ttf')), 'font/ttf', { 'cache-control': 'public, max-age=31536000, immutable' });
         if (p === '/healthz') return send(req, res, 200, 'ok', 'text/plain; charset=utf-8');
+        // The service worker, from the root so its scope is the whole site.
+        if (p === '/sw.js') return send(req, res, 200, readFileSync(path.join(STATIC, 'sw.js')), 'text/javascript; charset=utf-8', { 'cache-control': 'no-cache', 'service-worker-allowed': '/' });
       }
 
       // ---- login
@@ -202,6 +208,10 @@ export function createHandler(ctx, { port, env = process.env, limiter = createLi
               const cur = ctx.pack(form.account) || ctx.packs[0];
               return send(req, res, e.status, pages.factsPage({ ...pageCtx(), csrf }, { packs: ctx.packs, current: cur, topics: data.factsFor(ctx, cur), ...factDates(), form, problems: e.problems || [e.message] }));
             }
+            if (p === '/sounds/save') {
+              const cur = ctx.pack(form.account) || ctx.packs[0];
+              return send(req, res, e.status, pages.soundsPage({ ...pageCtx(), csrf }, { ...data.soundsFor(ctx, cur), packs: ctx.packs, form, problems: e.problems || [e.message] }));
+            }
             if (p === '/rivals/save') {
               const cur = ctx.pack(form.account) || ctx.packs[0];
               return send(req, res, e.status, pages.rivalsPage({ ...pageCtx(), csrf }, { ...data.rivalsFor(ctx, cur), packs: ctx.packs, form, problems: e.problems || [e.message] }));
@@ -256,6 +266,13 @@ export function createHandler(ctx, { port, env = process.env, limiter = createLi
         if (!cur) return page(pages.notFoundPage(pc), 404);
         return page(pages.factsPage(pc, { packs: ctx.packs, current: cur, topics: data.factsFor(ctx, cur), ...factDates() }));
       }
+      if (p === '/sounds') {
+        const cur = ctx.pack(url.searchParams.get('account')) || ctx.packs[0];
+        if (!cur) return page(pages.notFoundPage(pc), 404);
+        return page(pages.soundsPage(pc, { ...data.soundsFor(ctx, cur), packs: ctx.packs }));
+      }
+      // The service worker asks what to show for a push it was woken by.
+      if (p === '/notifications/latest.json') return json(req, res, 200, latestNotification(ctx.db) || {});
       if (p === '/rivals') {
         const cur = ctx.pack(url.searchParams.get('account')) || ctx.packs[0];
         if (!cur) return page(pages.notFoundPage(pc), 404);

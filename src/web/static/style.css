@@ -760,3 +760,9 @@ details.rivaledit > summary { cursor: pointer; min-height: 44px; display: flex; 
 .todo .ico.bad { color: var(--bad); }
 .tabbar a span { white-space: nowrap; }
 @media (max-width: 380px) { .tabbar a { font-size: 10px; } }
+
+.soundlist { overflow: hidden; }
+.row.sound .tx { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.row.sound { display: flex; align-items: center; gap: 10px; min-height: 60px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+.row.sound:last-child { border-bottom: 0; }
+.row.sound form { display: inline; }

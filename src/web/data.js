@@ -12,13 +12,15 @@ import { groupsOf, hookStats, mixOf, relative, postScore } from '../formats/rota
 import { hookPatterns, kindOf } from '../formats/kinds.js';
 import { takedowns } from '../publish/takedown.js';
 import { engineMode } from '../engine.js';
-import { publisherFor, wantedPublisher } from '../publish/index.js';
+import { publisherFor, tiktokMode, wantedPublisher } from '../publish/index.js';
 import { zernioConfigured } from '../publish/zernio.js';
 import { igConfig, instagramConfigured } from '../publish/instagram.js';
 import { getSetting } from '../core/store.js';
 import { resolveFormat } from '../trends/index.js';
 import { factProblems, factState, readTopics } from '../sources/facts.js';
 import { rivalsOf, timesBeside } from '../pipeline/rivals.js';
+import { SOUNDS, soundsOf, recentSoundIds } from '../pipeline/sounds.js';
+import { vapid } from '../notify/index.js';
 import path from 'node:path';
 
 // What each page shows, as plain queries. Pages never touch the database
@@ -71,6 +73,11 @@ export function today(ctx, t = now()) {
       scheduled: ids("SELECT id FROM posts WHERE account_id = ? AND status = 'approved' ORDER BY slot_at", id),
       blocked: ctx.db.all("SELECT id, hook, topic, reason, format_id, created_at FROM posts WHERE account_id = ? AND status = 'blocked' AND created_at >= ? ORDER BY created_at DESC", id, from),
       published: ctx.db.all("SELECT id, hook, published_at, publish_json FROM posts WHERE account_id = ? AND status = 'published' AND published_at >= ? ORDER BY published_at DESC", id, from),
+      // TikTok drafts of the last day and a half, each with where it stands (src/publish/draft.js); a duplicate stays
+      // on the page until it is a day old.
+      drafts: ctx.db
+        .all("SELECT id, hook, slot_at, published_at, publish_json FROM posts WHERE account_id = ? AND publish_json LIKE '%\"flow\"%' AND published_at >= ? ORDER BY published_at DESC", id, new Date(t - 36 * 3_600_000).toISOString())
+        .map((p) => ({ id: p.id, hook: p.hook, slotAt: p.slot_at || p.published_at, flow: j(p.publish_json, {}).tiktok?.flow || {} })),
     };
   });
   const summary = ctx.db.get('SELECT * FROM summaries WHERE account_id IS NULL ORDER BY day DESC LIMIT 1');
@@ -187,6 +194,11 @@ export function factsFor(ctx, pack) {
   }));
 }
 
+/** An account's sound list, how its TikTok posts go out, and which sounds its last drafts had. */
+export function soundsFor(ctx, pack) {
+  return { current: pack, sounds: soundsOf(ctx.db, pack.id), mode: tiktokMode(pack), recent: recentSoundIds(ctx.db, pack.id), limits: SOUNDS };
+}
+
 /** An account's rivals, and their posting hours beside the account's own slots. */
 export function rivalsFor(ctx, pack) {
   const rivals = rivalsOf(ctx.db, pack.id);
@@ -221,6 +233,7 @@ export function settingsData(ctx) {
     zernio: zernioConfigured(),
     liveSwitch: process.env.PUBLISH_MODE === 'live',
     users: ctx.db.all('SELECT id, name, role, created_at, last_login_at FROM users ORDER BY id'),
+    push: { key: vapid(ctx.db).publicKey, browsers: ctx.db.get('SELECT COUNT(*) AS n FROM push_subs WHERE failed < 5').n },
     audit: ctx.db.all('SELECT * FROM audit ORDER BY id DESC LIMIT 40').map((a) => ({ ...a, detail: j(a.detail_json, null) })),
   };
 }

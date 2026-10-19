@@ -1,5 +1,6 @@
 import { accDot, csrfField, dayHe, esc, icon, k, layout, markDots, MODE_HE, postButton, shortDate, stamp, statusChip, timeHe, usd, weekdayNarrow } from './ui.js';
 import { PAUSE_REASONS } from '../autonomy/rails.js';
+import { FALLBACK_MIN, FLOW_HE } from '../publish/draft.js';
 import { KINDS, MIX } from '../formats/kinds.js';
 import { BOXES, MEASURES, PRIORITY } from '../metrics/feedback.js';
 import { RIVALS } from '../pipeline/rivals.js';
@@ -161,6 +162,17 @@ const saidOf = (g) => [g.waiting.length && `${g.waiting.length} מחכים`, g.s
 /** What needs the owner, most urgent first: a takedown to delete by hand, a picture to look at, the posts waiting. */
 export function needsYou(d, max = 6) {
   const rows = [];
+  // A TikTok post that went out twice, or whose automatic post failed, comes first; then a draft waiting for you.
+  for (const g of d.groups) {
+    for (const x of g.drafts || []) {
+      if (['duplicate', 'failed', 'stopped'].includes(x.flow.state)) rows.push({ href: `/post/${x.id}`, ic: 'alert', bad: true, title: x.hook, sub: `${g.pack.meta.displayName} · טיקטוק: ${FLOW_HE[x.flow.state][0]}${x.flow.state === 'duplicate' ? ': מחקו אחד מהשניים' : ''}` });
+    }
+  }
+  for (const g of d.groups) {
+    for (const x of g.drafts || []) {
+      if (x.flow.state === 'waiting') rows.push({ href: `/post/${x.id}`, ic: 'clock', title: x.hook, sub: `${g.pack.meta.displayName} · טיוטה בטיקטוק${x.flow.sound ? ` · סאונד: ${x.flow.sound.name}` : ''} · עולה אוטומטית ב-${timeHe(new Date(Date.parse(x.slotAt) + FALLBACK_MIN * 60_000).toISOString())}` });
+    }
+  }
   for (const t of d.attention?.waitingDeletes || []) rows.push({ href: `/post/${t.post_id}`, ic: 'alert', bad: true, title: t.hook || t.post_id, sub: `הודעת הסרה: למחוק ידנית ב${t.waiting.map((w) => PLATFORM_HE[w.platform] || w.platform).join(' וב')}` });
   for (const im of d.attention?.images || []) rows.push({ href: `/post/${im.id}`, ic: 'alert', title: im.hook || im.id, sub: `תמונה מחכה לעין של אדם${im.screen?.why ? `: ${im.screen.why}` : ''}` });
   for (const g of d.groups) for (const p of g.waiting) rows.push({ href: `/posts#post-${p.id}`, acc: g.pack.id, title: p.hook, sub: `${g.pack.meta.displayName} · ${formatName(g.pack, p.format_id)} · ${p.slot_at ? timeHe(p.slot_at) : 'בלי שעה'}` });
@@ -169,6 +181,26 @@ export function needsYou(d, max = 6) {
 
 /** A short list of posts, one line each, every line a link. */
 const postLines = (rows) => `<div class="list todo">${rows.map((r) => `<a href="${esc(r.href)}">${r.acc ? accDot(r.acc) : `<span class="ico${r.bad ? ' bad' : ''}">${icon(r.ic)}</span>`}<span class="tx"><b>${esc(r.title)}</b><span class="muted small">${esc(r.sub)}</span></span><span class="go">${icon('chev')}</span></a>`).join('')}</div>`;
+
+/** Today's TikTok drafts, each with where it stands: waiting for you, published by you, by the fallback, twice. */
+function tiktokPanel(d) {
+  const rows = d.groups.flatMap((g) => (g.drafts || []).map((x) => ({ ...x, g })));
+  if (!rows.length) return '';
+  const chip = (st) => {
+    const [he, cls] = FLOW_HE[st] || [st, 'ghost'];
+    return `<span class="chip ${cls}">${esc(he)}</span>`;
+  };
+  const extra = (x) => {
+    const f = x.flow;
+    if (f.state === 'waiting') return `${f.sound ? `סאונד: ${f.sound.name} · ${f.sound.artist}` : 'בלי סאונד מהרשימה'} · עולה אוטומטית ב-${timeHe(new Date(Date.parse(x.slotAt) + FALLBACK_MIN * 60_000).toISOString())}`;
+    if (f.state === 'mine') return `פורסם ${f.foundAt ? timeHe(f.foundAt) : ''}`;
+    if (f.state === 'fallback') return `עם מוזיקה מהספרייה ב-${timeHe(f.fallback.at)} · מחקו את הטיוטה`;
+    if (f.state === 'duplicate') return 'הטיוטה פורסמה אחרי הפרסום האוטומטי: מחקו אחד';
+    return f.error || '';
+  };
+  return `<section class="panel home-panel" id="tiktok"><header><h2>טיוטות בטיקטוק</h2></header>
+<div class="list todo">${rows.map((x) => `<a href="/post/${esc(x.id)}">${accDot(x.g.pack.id)}<span class="tx"><b>${esc(x.hook)}</b><span class="muted small">${esc(extra(x))}</span></span>${chip(x.flow.state)}</a>`).join('')}</div></section>`;
+}
 
 export function todayPage(ctx, d) {
   const count = (k) => d.groups.reduce((n, g) => n + g[k].length, 0);
@@ -185,6 +217,7 @@ ${tile('/results#blocks', count('blocked'), 'נחסמו היום', count('blocke
 <section class="panel home-panel"><header><h2>צריך אותך</h2>${todo.total ? '<a class="end small" href="/posts">כל הפוסטים</a>' : ''}</header>
 ${todo.rows.length ? `${postLines(todo.rows)}${todo.more ? `<p class="small"><a href="/posts">ועוד ${todo.more}</a></p>` : ''}` : '<p class="muted">אין מה לאשר כרגע. הפוסטים הבאים ייכתבו בשעת הייצור היומית.</p>'}
 </section>
+${tiktokPanel(d)}
 <section class="panel home-panel"><header><h2>חשבונות</h2><a class="end small" href="/accounts">ניהול</a></header>
 <div class="lines">${d.groups.map((g) => `<a href="/posts#g-${esc(g.pack.id)}">${accDot(g.pack.id)}<span class="nm">${esc(g.pack.meta.displayName)}</span><span class="chip ghost">${esc(MODE_HE[g.acc?.mode || 'approve'][0])}</span><span class="end">${dotsOf(g)}<span class="sr">${esc(saidOf(g))}</span></span></a>`).join('')}</div>
 <div class="legend" aria-hidden="true"><span><span class="pulse"><i class="w"></i></span>מחכה לך</span><span><span class="pulse"><i class="s"></i></span>מתוזמן</span><span><span class="pulse"><i class="p"></i></span>פורסם</span><span><span class="pulse"><i class="b"></i></span>נחסם</span></div>
@@ -329,7 +362,7 @@ ${paused ? `<div class="paused${acc.paused_reason === 'kill' ? ' kill' : ''}">${
 <div class="week" aria-label="פוסטים שפורסמו בכל יום">${week.days.map((x) => `<span title="${esc(shortDate(x.at))}: ${x.n}"><i class="${h(x.n)}"></i>${esc(weekdayNarrow(x.at))}</span>`).join('')}</div></div>
 <dl class="kv"><dt>בתור</dt><dd>${week.counts.queued || 0} ממתינים · ${week.counts.approved || 0} מאושרים</dd><dt>נחסמו השבוע</dt><dd>${week.counts.blocked || 0}</dd><dt>פרסום</dt><dd>${publishers.map((x) => `${PLATFORM_HE[x.platform] || x.platform}: ${publisherHe(x)}`).join(' · ')}</dd>${style ? `<dt>סגנון</dt><dd><span class="ltr">${esc(style.theme.template)}/${esc(style.theme.variant || 'a')}</span> · נעול מ-${esc(shortDate(style.at))}</dd>` : ''}</dl>
 ${style?.pending ? `<div class="paused">${icon('alert')}<div><b>הסגנון בקובץ theme.json השתנה</b><div class="small">הפוסטים ממשיכים להצטייר בסגנון הנעול עד שתחילו את החדש. פוסטים שכבר צוירו נשארים בשלהם.</div></div>${postButton(ctx, `/accounts/${pack.id}/style`, 'החל את הסגנון החדש', { cls: 'btn sm' })}</div>` : ''}
-<div class="actions p0">${!paused ? postButton(ctx, `/accounts/${pack.id}/kill`, `${icon('power')}כבה את החשבון`, { cls: 'btn danger', confirm: 'בטוח? לחצו שוב לכיבוי' }) : ''}<a class="btn" href="/sources?account=${esc(pack.id)}">מקורות</a><a class="btn" href="/rivals?account=${esc(pack.id)}">מתחרים</a></div>
+<div class="actions p0">${!paused ? postButton(ctx, `/accounts/${pack.id}/kill`, `${icon('power')}כבה את החשבון`, { cls: 'btn danger', confirm: 'בטוח? לחצו שוב לכיבוי' }) : ''}<a class="btn" href="/sources?account=${esc(pack.id)}">מקורות</a><a class="btn" href="/rivals?account=${esc(pack.id)}">מתחרים</a><a class="btn" href="/sounds?account=${esc(pack.id)}">סאונדים</a></div>
 </article>`;
     })
     .join('')}</div>`;
@@ -500,6 +533,10 @@ export function settingsPage(ctx, d) {
 ${s.globalKill ? postButton(ctx, '/settings/kill', 'הפעל את המערכת מחדש', { cls: 'btn primary', fields: { on: '0' } }) : postButton(ctx, '/settings/kill', `${icon('power')}עצור הכל`, { cls: 'btn danger', fields: { on: '1' }, confirm: 'בטוח? לחצו שוב לעצירה' })}
 </section>
 ${budgetPanel(ctx, d)}
+<section class="panel"><header><h2>התראות בדפדפן</h2><span class="end">${d.push?.browsers ? `<span class="chip ok">${d.push.browsers === 1 ? 'דפדפן אחד' : `${d.push.browsers} דפדפנים`}</span>` : '<span class="chip ghost">כבוי</span>'}</span></header>
+<p class="muted">טיוטה בטיקטוק שמחכה לכם, תזכורת, פרסום אוטומטי ופוסט כפול. ההתראה עצמה ריקה: הדפדפן שואל את תדר מה להציג, כך שאף מילה מהפוסט לא עוברת דרך שירות ההתראות. בטלפון: הוסיפו את תדר למסך הבית קודם.</p>
+<form method="post" action="/push/subscribe" data-ajax="reload" data-push="${esc(d.push?.key || '')}">${csrfField(ctx)}<input type="hidden" name="endpoint" value=""><button class="btn" type="button" data-push-enable>${icon('spark')}הפעל התראות בדפדפן הזה</button></form>
+</section>
 <section class="panel"><header><h2>שעת ייצור יומית</h2></header><form method="post" action="/settings/generate-at" class="formgrid">${csrfField(ctx)}<label class="f">שעה (שעון ישראל)<input type="text" name="at" value="${esc(s.generateAt)}" pattern="[0-2][0-9]:[0-5][0-9]" dir="ltr"></label><button class="btn" type="submit">שמור</button></form></section>
 </div>
 <div>
@@ -623,4 +660,31 @@ ${rivals.length < RIVALS.max ? `<section class="panel"><header><h2>מתחרה ח
 ${adding ? `<div class="problems"><ul>${problems.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
 ${rivalForm(ctx, current, adding ? form : {})}</section>` : `<section class="panel"><header><h2>חמישה מתחרים</h2></header><p class="muted">זה המקסימום. כדי להוסיף אחר, הסירו אחד.</p></section>`}</div>`;
   return layout({ ...ctx, title: 'מתחרים', active: 'accounts' }, body);
+}
+
+/* ------------------------------------------------------------ sounds */
+
+/** An account's trending sounds for its TikTok drafts: the list, and the form to add one. */
+export function soundsPage(ctx, { packs, current, sounds, mode, recent, limits, form = {}, problems = [] }) {
+  const tabs = `<nav class="tabs" aria-label="חשבונות">${packs.map((p) => `<a href="/sounds?account=${esc(p.id)}"${p.id === current.id ? ' aria-current="true"' : ''}>${accDot(p.id)}${esc(p.meta.displayName)}</a>`).join('')}</nav>`;
+  const list = sounds.length
+    ? `<div class="panel p0 soundlist">${sounds
+        .map((s) => `<div class="row sound"><span class="tx"><b dir="auto">${esc(s.name)}</b><span class="muted small" dir="auto">${esc(s.artist)} · נוסף ${esc(agoHe(s.age))}${recent.includes(s.id) ? ' · היה באחת מ-5 הטיוטות האחרונות' : ''}</span></span>${s.stale ? '<span class="chip warn">ישן</span>' : '<span class="chip ok">טרי</span>'}${s.link ? `<a class="btn sm" href="${esc(s.link)}" target="_blank" rel="noopener noreferrer">${icon('ext')}בטיקטוק</a>` : ''}${postButton(ctx, '/sounds/remove', 'הסר', { cls: 'btn sm danger', confirm: 'להסיר?', fields: { account: current.id, id: s.id } })}</div>`)
+        .join('')}</div>`
+    : '<div class="empty"><b>עוד אין סאונדים לחשבון הזה</b>טיוטה בלי סאונד מהרשימה עדיין יוצאת, רק בלי הצעה איזה סאונד להוסיף.</div>';
+  const fewer = sounds.length < limits.min ? `<p class="small"><span class="chip warn">${sounds.length ? `עוד ${limits.min - sounds.length}` : `${limits.min} לפחות`}</span> כל טיוטה מקבלת סאונד שלא היה ב-${limits.recent} הטיוטות האחרונות, אז כדאי שיהיו כמה.</p>` : '';
+  const body = `<div class="head"><h1>סאונדים</h1><span class="sub">לטיוטות בטיקטוק</span></div>
+${tabs}
+<p class="lede">הסאונדים הוויראליים של טיקטוק לא נגישים לשום API, אז ${mode === 'draft-fallback' ? 'בחשבון הזה כל פוסט בטיקטוק יוצא כטיוטה' : 'כשהחשבון במצב טיוטה (<code class="ltr">zernio.tiktokMode: "draft-fallback"</code>) כל פוסט בטיקטוק יוצא כטיוטה'}, ואתם מוסיפים את הסאונד באפליקציה ומפרסמים. כל טיוטה מקבלת סאונד מהרשימה הזו, בלי לחזור על אחד מ-${limits.recent} האחרונות. סאונד שנוסף לפני ${limits.staleDays} ימים מסומן כישן: טרנד זז מהר. אם לא פרסמתם תוך שעה, הפוסט עולה לבד עם מוזיקה מהספרייה המסחרית.</p>
+${mode === 'draft-fallback' ? '' : '<p class="small"><span class="chip ghost">החשבון במצב ישיר</span> הרשימה נשמרת, ותשמש כשהחשבון יעבור למצב טיוטה.</p>'}
+${fewer}
+<div class="cols"><div>${list}</div>
+${sounds.length < limits.max ? `<section class="panel"><header><h2>סאונד חדש</h2><span class="end muted small">${sounds.length} מתוך ${limits.max}</span></header>
+${problems.length ? `<div class="problems"><ul>${problems.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
+<form method="post" action="/sounds/save" class="formgrid">${csrfField(ctx)}<input type="hidden" name="account" value="${esc(current.id)}">
+<label class="f">שם הסאונד<input type="text" name="name" required maxlength="${limits.chars}" dir="auto" value="${esc(form.name || '')}"></label>
+<label class="f">אמן<input type="text" name="artist" required maxlength="${limits.chars}" dir="auto" value="${esc(form.artist || '')}"></label>
+<label class="f">קישור <small>לא חובה: הסאונד בטיקטוק, כדי למצוא אותו מהר</small><input type="url" name="link" dir="ltr" placeholder="https://www.tiktok.com/music/..." value="${esc(form.link || '')}"></label>
+<button class="btn primary" type="submit">${icon('plus')}הוסף</button></form></section>` : `<section class="panel"><header><h2>${limits.max} סאונדים</h2></header><p class="muted">זה המקסימום. כדי להוסיף אחר, הסירו אחד ישן.</p></section>`}</div>`;
+  return layout({ ...ctx, title: 'סאונדים', active: 'accounts' }, body);
 }

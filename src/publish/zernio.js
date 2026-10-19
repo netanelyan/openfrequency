@@ -51,9 +51,10 @@ export class ZernioError extends Error {
 export const AI_CAPTION_LINE = 'התמונה בפוסט נוצרה בעזרת AI.';
 
 /** The request body for one platform. Pure, so the tests can read it. */
-export function postBody({ platform, accountId, caption, imageUrls, privacy = 'SELF_ONLY', aiLabel = false, title = '', aiAsDraft = true, sound = null }) {
+export function postBody({ platform, accountId, caption, imageUrls, privacy = 'SELF_ONLY', aiLabel = false, title = '', aiAsDraft = true, sound = null, asDraft = false }) {
   if (platform === 'tiktok') {
-    const draft = aiLabel && aiAsDraft;
+    // A draft goes to the TikTok app's inbox for the owner to publish: the AI label's way, and draft-fallback's.
+    const draft = asDraft || (aiLabel && aiAsDraft);
     const track = sound?.id && !draft;
     return {
       content: String(title).slice(0, 90),
@@ -69,7 +70,8 @@ export function postBody({ platform, accountId, caption, imageUrls, privacy = 'S
         ...(track ? { musicSoundInfo: { musicSoundId: String(sound.id) } } : {}),
         content_preview_confirmed: true,
         express_consent_given: true,
-        ...(aiLabel ? { video_made_with_ai: true, ...(draft ? { draft: true } : {}) } : {}),
+        ...(aiLabel ? { video_made_with_ai: true } : {}),
+        ...(draft ? { draft: true } : {}),
       },
       publishNow: true,
     };
@@ -88,14 +90,14 @@ function partOf(post, platform) {
 }
 
 /** Create one post on one platform and wait for it, up to timeoutMs. */
-export async function publishZernio({ platform, accountId, caption, imageUrls, privacy, aiLabel, title, aiAsDraft = true, sound = null }, { pollMs = 5000, timeoutMs = 180_000 } = {}) {
+export async function publishZernio({ platform, accountId, caption, imageUrls, privacy, aiLabel, title, aiAsDraft = true, sound = null, asDraft = false }, { pollMs = 5000, timeoutMs = 180_000 } = {}) {
   if (!zernioConfigured()) throw new ZernioError('ZERNIO_API_KEY is not set', { step: 'config', code: 'not_configured' });
   if (!accountId) throw new ZernioError(`no Zernio ${platform} account id in pack.json`, { step: 'config', code: 'no_account' });
   if (platform === 'tiktok' && (imageUrls.length < 2 || imageUrls.length > 35)) throw new ZernioError(`a TikTok photo post takes 2 to 35 images, this one has ${imageUrls.length}`, { step: 'config', code: 'card_images' });
   if (platform === 'instagram' && imageUrls.length > 10) throw new ZernioError(`an Instagram carousel takes at most 10 images, this one has ${imageUrls.length}`, { step: 'config', code: 'card_images' });
   let created;
   try {
-    created = await postJson(`${BASE()}/posts`, postBody({ platform, accountId, caption, imageUrls, privacy, aiLabel, title, aiAsDraft, sound }), { headers: auth(), timeoutMs: 30_000 });
+    created = await postJson(`${BASE()}/posts`, postBody({ platform, accountId, caption, imageUrls, privacy, aiLabel, title, aiAsDraft, sound, asDraft }), { headers: auth(), timeoutMs: 30_000 });
   } catch (e) {
     throw new ZernioError(e.message, { step: 'create', code: e.code, status: e.status, category: e.body?.error?.errorCategory || null });
   }
@@ -111,7 +113,7 @@ export async function publishZernio({ platform, accountId, caption, imageUrls, p
   if (part.status === 'failed' || part.status === 'cancelled') {
     throw new ZernioError(`${platform} refused the post: ${part.error || part.status}`, { step: 'status', code: part.category || part.status, category: part.category });
   }
-  const draft = Boolean(aiLabel && aiAsDraft && platform === 'tiktok');
+  const draft = Boolean((asDraft || (aiLabel && aiAsDraft)) && platform === 'tiktok');
   return { via: 'zernio', zernioId: id, postId: part.postId, url: part.url, status: part.status, pending: part.status !== 'published', draft, ...(platform === 'tiktok' && sound?.id && !draft ? { sound } : {}) };
 }
 
@@ -151,6 +153,40 @@ export async function trendingSound(accountId, { countryCode = 'IL', recent = []
   } catch {
     return null;
   }
+}
+
+/**
+ * The account's TikTok posts that were not sent through Zernio, published since `from`, as Zernio synced them from
+ * TikTok: [{ id, publishedAt, content, url }]. A draft the owner publishes in the app comes back this way, the same
+ * analytics read the metrics use (src/metrics/collect.js), filtered to source=external.
+ */
+export async function externalPosts(accountId, { from }) {
+  const q = new URLSearchParams({ accountId, platform: 'tiktok', source: 'external', fromDate: new Date(from).toISOString().slice(0, 10), sortBy: 'date', order: 'desc', limit: '50' });
+  const body = await getJson(`${BASE()}/analytics?${q}`, { headers: auth() });
+  const list = body?.posts || body?.data || (body?.post ? [body.post] : []);
+  return list.map((p) => {
+    const part = (p.platformAnalytics || []).find((x) => x.platform === 'tiktok') || {};
+    return { id: String(p.postId || p._id || part.platformPostId || ''), publishedAt: p.publishedAt || null, content: String(p.content || ''), url: p.platformPostUrl || part.platformPostUrl || null };
+  }).filter((p) => p.id && p.publishedAt);
+}
+
+const words = (s) => String(s || '').replace(/#\S+/g, ' ').replace(/[^\p{L}\p{N}]+/gu, ' ').trim().split(' ').filter((w) => w.length > 1);
+
+/**
+ * The external post that is this draft published, or null. Pure. It went out after the draft was sent, no one else
+ * claimed it, and its caption is ours: at least half the words of our caption's first line are in it (the owner may
+ * trim it, add a word, change the tags). With no caption to compare (TikTok returned none), the one post published
+ * since the draft was sent is it, when there is exactly one.
+ */
+export function matchDraft({ caption, sentAt }, posts, claimed = []) {
+  const since = Date.parse(sentAt) - 5 * 60_000;
+  const fresh = posts.filter((p) => Date.parse(p.publishedAt) >= since && !claimed.includes(p.id));
+  const ours = words(String(caption || '').split('\n').find((l) => l.trim()) || '');
+  const close = (p) => {
+    const theirs = new Set(words(p.content));
+    return ours.length && ours.filter((w) => theirs.has(w)).length >= Math.ceil(ours.length / 2);
+  };
+  return fresh.find(close) || (fresh.length === 1 && !words(fresh[0].content).length ? fresh[0] : null);
 }
 
 /** Our connected accounts on Zernio, for the check script: [{ id, platform, username, active }]. */

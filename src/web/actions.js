@@ -13,6 +13,8 @@ import { publishPost } from '../publish/index.js';
 import { MODES } from '../packs/validate.js';
 import { factProblems, readTopics, removeFact, saveFact } from '../sources/facts.js';
 import { removeRival, saveRival } from '../pipeline/rivals.js';
+import { removeSound, saveSound } from '../pipeline/sounds.js';
+import { subscribe } from '../notify/index.js';
 import { israelDate } from '../schedule/israel.js';
 import { DEFAULT_MONTHLY_USD } from '../budget/ledger.js';
 
@@ -293,6 +295,32 @@ export function removeRivalAction(ctx, user, _p, form) {
   if (!gone) throw new ActionError('אין מתחרה כזה', 404);
   audit(ctx.db, { actor: user.name, action: 'rival_removed', accountId: pack.id, detail: { handle: gone.handle, platform: gone.platform } });
   return { ok: true, message: `@${gone.handle} הוסר.`, redirect: `/rivals?account=${encodeURIComponent(pack.id)}` };
+}
+
+export function saveSoundAction(ctx, user, _p, form) {
+  const pack = ctx.pack(String(form.account || ''));
+  if (!pack) throw new ActionError('אין חשבון כזה', 404);
+  const r = saveSound(ctx.db, pack.id, form, { by: user.name });
+  if (r.problems) throw new ActionError('הסאונד לא נשמר', 422, { problems: r.problems, values: { ...form } });
+  audit(ctx.db, { actor: user.name, action: 'sound_added', accountId: pack.id, detail: { name: String(form.name || '').trim() } });
+  return { ok: true, message: 'נוסף. הטיוטה הבאה בטיקטוק תקבל סאונד מהרשימה.', redirect: `/sounds?account=${encodeURIComponent(pack.id)}` };
+}
+
+export function removeSoundAction(ctx, user, _p, form) {
+  const pack = ctx.pack(String(form.account || ''));
+  if (!pack) throw new ActionError('אין חשבון כזה', 404);
+  const gone = removeSound(ctx.db, pack.id, form.id);
+  if (!gone) throw new ActionError('אין סאונד כזה', 404);
+  audit(ctx.db, { actor: user.name, action: 'sound_removed', accountId: pack.id, detail: { name: gone.name } });
+  return { ok: true, message: `"${gone.name}" הוסר.`, redirect: `/sounds?account=${encodeURIComponent(pack.id)}` };
+}
+
+/** A browser asks for notifications: its push endpoint is kept. */
+export function subscribePush(ctx, user, _p, form) {
+  const r = subscribe(ctx.db, { endpoint: form.endpoint }, { userId: user.id ?? null });
+  if (!r.ok) throw new ActionError('הדפדפן לא החזיר כתובת התראות תקינה');
+  audit(ctx.db, { actor: user.name, action: 'push_subscribed', detail: { host: new URL(String(form.endpoint)).hostname } });
+  return { ok: true, message: 'ההתראות מופעלות בדפדפן הזה.' };
 }
 
 /** A takedown notice for a post: recorded, the post taken down, the account paused on the second in 90 days. */

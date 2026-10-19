@@ -1293,3 +1293,24 @@ engine can act on, and what changed:
   others came out at, never below 80%. An edit also used to draw a post again with
   only its cover photograph; it now keeps each slide's photograph, the ground and
   a head-to-head's two faces.
+
+- **TikTok can go out as a draft with the owner's sound, and directly an hour late
+  if it does not (2026-10-19, the owner's call).** TikTok's viral sounds reach no
+  API: Zernio lists only the Commercial Music Library. With `zernio.tiktokMode:
+  "draft-fallback"` in pack.json, a TikTok post goes to the app's inbox as a draft
+  at its slot, and the owner is told which sound to add: one from the account's
+  list (the Sounds page, three to five typed in by hand, stale after seven days,
+  none repeated within the last five drafts). At 30 minutes the owner is reminded
+  once; at 60 a draft still not out is published directly with a library track,
+  through every rail a post at its slot meets (Shabbat and a paused account wait,
+  the facts are checked again). The owner's post is found among the account's
+  posts that Zernio synced from TikTok (its analytics, source=external), matched
+  by caption. Never twice: the state is written before the direct publish, a send
+  whose answer was lost is not sent again, and a draft published after the
+  fallback is flagged as a duplicate on the home page, never deleted. Instagram is
+  unchanged. Notifications are Web Push to the owner's browser, empty (the
+  service worker reads the words from Teder behind the session); Telegram was
+  the other way, and its API is a social host the network door refuses writes
+  to. The push services join the write allowlist, each at its push path only.
+  Every image search that finds nothing now records why its candidates were
+  passed over, and `npm run images:check` reports it per account.

@@ -437,4 +437,42 @@ export const MIGRATIONS = [
   );
   CREATE INDEX rivals_account ON rivals(account_id);
   `,
+  `
+  -- The trending sounds the owner picked for an account's TikTok drafts, typed in
+  -- by hand (no API reaches TikTok's viral sounds): one is named with each draft.
+  CREATE TABLE sounds (
+    id            INTEGER PRIMARY KEY,
+    account_id    TEXT NOT NULL REFERENCES accounts(id),
+    name          TEXT NOT NULL,
+    artist        TEXT NOT NULL,
+    link          TEXT,
+    added_at      TEXT NOT NULL,
+    added_by      TEXT
+  );
+  CREATE INDEX sounds_account ON sounds(account_id);
+
+  -- What the engine told the owner (a draft to publish, a reminder, a fallback,
+  -- a duplicate), kept whether or not a browser was there to show it.
+  CREATE TABLE notifications (
+    id            INTEGER PRIMARY KEY,
+    account_id    TEXT,
+    post_id       TEXT,
+    kind          TEXT NOT NULL,
+    title         TEXT NOT NULL,
+    body          TEXT NOT NULL,
+    url           TEXT,
+    created_at    TEXT NOT NULL,
+    pushed        INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE INDEX notifications_at ON notifications(created_at);
+
+  -- The owner's browsers that asked for notifications (Web Push subscriptions).
+  CREATE TABLE push_subs (
+    id            INTEGER PRIMARY KEY,
+    endpoint      TEXT NOT NULL UNIQUE,
+    user_id       INTEGER,
+    created_at    TEXT NOT NULL,
+    failed        INTEGER NOT NULL DEFAULT 0
+  );
+  `,
 ];

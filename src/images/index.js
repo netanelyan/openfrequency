@@ -203,15 +203,21 @@ export function imageCredit(db, post) {
  * `mode` 'recorded' never touches the network and returns null: offline runs
  * render the theme's own ground instead of a photograph. A run that wants real
  * photographs with recorded drafts (the launch set) sets ctx.imagesLive.
+ * `why`, when given, counts what each candidate was passed over for ({ "does not name the person": 7, ... }): the
+ * post's image step keeps it, so an account whose posts come out without photographs can be told why
+ * (npm run images:check).
  */
-export async function findImage(ctx, { pack, query, postId = null, claim = '' }) {
+export async function findImage(ctx, { pack, query, postId = null, claim = '', why = null }) {
+  const miss = (k) => why && (why[k] = (why[k] || 0) + 1);
   if (!query || (ctx.mode === 'recorded' && !ctx.imagesLive)) return null;
   const blocked = blockedQuery(pack, query) || describes(query, ALWAYS_BLOCK);
   if (blocked) {
     ctx.log?.(`image query refused ("${blocked}"): ${query}`);
+    miss(`the query has a blocked word ("${blocked}")`);
     return null;
   }
   const order = (pack.meta.imagery?.providers || ['pexels', 'unsplash', 'commons']).map((id) => PROVIDERS[id]).filter((p) => p?.ready());
+  if (!order.length) miss('no photo library is ready (its key is missing)');
   const block = [...ALWAYS_BLOCK, ...(pack.rules?.imageQueryBlock || [])];
   for (const prov of order) {
     let found = [];
@@ -220,28 +226,41 @@ export async function findImage(ctx, { pack, query, postId = null, claim = '' })
       if (prov.id !== 'pack') record(ctx.db, { accountId: pack.id, postId, api: prov.id, usd: 0, tag: 'image-search' });
     } catch (e) {
       ctx.log?.(`${prov.id}: ${e.message}`);
+      miss(`${prov.id}: the search failed`);
       continue;
     }
+    if (!found.length) miss(`${prov.id}: no results`);
     // A query that names someone ("Holly Holm UFC") takes only a picture whose own title
     // names them too: a search can return a photo of somebody else from the same event.
     const names = namesOf(query);
     for (const c of found) {
-      if (describes(c.alt, block)) continue;
+      if (describes(c.alt, block)) {
+        miss('a blocked word in its description');
+        continue;
+      }
       // The name in the file's own title. A title that names nobody (a camera's "IMG_2041.jpg") may be named by its
       // description or categories; a title that names someone else may not: a photo titled for Mitsuyo Maeda, filed
       // under a category of Hélio Gracie, went on a Hélio Gracie cover.
-      if (names.length && !namesIn(String(c.providerId || ''), names) && (titleNamesSomeone(c.providerId) || !namesIn(`${c.alt || ''} ${c.categories || ''}`, names))) continue;
-      if (!c.license) continue;
+      if (names.length && !namesIn(String(c.providerId || ''), names) && (titleNamesSomeone(c.providerId) || !namesIn(`${c.alt || ''} ${c.categories || ''}`, names))) {
+        miss('its title does not name the person');
+        continue;
+      }
+      if (!c.license) {
+        miss('no licence');
+        continue;
+      }
       let bytes;
       try {
         bytes = c.file ? { buf: readFileSync(c.file), type: /\.png$/i.test(c.file) ? 'image/png' : 'image/jpeg' } : await getBytes(c.url);
       } catch {
+        miss('the download failed');
         continue;
       }
       // The screen: a picture with blood, an injury, a fighter down, a watermark, a belt or a weapon is never used.
       const screen = await screenImage(ctx, { pack, buf: bytes.buf, type: bytes.type, meta: `${c.providerId || ''} ${c.alt || ''} ${c.categories || ''}`, postId, query, claim });
       if (screen.safety === 'refused') {
         ctx.log?.(`image refused (${screen.why}): ${c.providerId}`);
+        miss(`the screen refused it: ${String(screen.why || '').slice(0, 80)}`);
         continue;
       }
       const match = { title: Boolean(names.length), model: screen.model ? { consistent: screen.model.consistent, mainSubject: screen.model.mainSubject } : null, claim: claim ? claim.slice(0, 200) : null };

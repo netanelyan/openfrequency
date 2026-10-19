@@ -8,8 +8,9 @@
 //   - WRITES (anything but GET) are allowed to exactly these endpoints: Claude's
 //     messages and batches endpoints, Zernio's create-post endpoint, Meta's two
 //     publishing endpoints for an Instagram account (create a media container,
-//     publish it), and deleting a post of ours after a takedown notice. Nothing
-//     else.
+//     publish it), deleting a post of ours after a takedown notice, and an empty
+//     Web Push to the owner's own browser through the browsers' push services
+//     (src/notify: it carries no words). Nothing else.
 //   - READS from a social platform are allowed only through the official read
 //     APIs listed below (YouTube Data API search/videos; Meta's Graph API for a
 //     container's status, our own account and media, their insights, the
@@ -62,6 +63,11 @@ export const WRITE_RULES = [
   { method: 'POST', host: 'graph.facebook.com', path: new RegExp(`^${V}\\/\\d+\\/(media|media_publish)$`), why: 'Instagram (Facebook Login): a media container on our own account, and publishing it' },
   { method: 'POST', host: 'graph.instagram.com', path: new RegExp(`^${V}\\/\\d+\\/(media|media_publish)$`), why: 'Instagram (Instagram Login): a media container on our own account, and publishing it' },
   { method: 'DELETE', host: 'graph.facebook.com', path: new RegExp(`^${V}\\/\\d+$`), why: 'Instagram (Facebook Login): deleting our own post after a takedown notice' },
+  // An empty Web Push to the owner's browser: the push service the browser itself named, at its push path.
+  { method: 'POST', host: 'fcm.googleapis.com', path: /^\/(fcm\/send|wp)\/[A-Za-z0-9_:.-]+$/, why: "Web Push (Chrome): wake the owner's browser" },
+  { method: 'POST', host: 'updates.push.services.mozilla.com', path: /^\/wpush\/v[12]\/[A-Za-z0-9_=-]+$/, why: "Web Push (Firefox): wake the owner's browser" },
+  { method: 'POST', host: 'web.push.apple.com', path: /^\/[A-Za-z0-9_=-]+$/, why: "Web Push (Safari): wake the owner's browser" },
+  { method: 'POST', host: 'notify.windows.com', sub: true, path: /^\/w\/$/, why: "Web Push (Edge): wake the owner's browser" },
 ];
 
 /** Reads that are allowed even though the host is special. */
@@ -103,7 +109,7 @@ export function assertAllowed(method, url) {
   if (asked) throw new NetError(`refused ${m} ${host}${u.pathname} (${asked}): the engine never reads comments, mentions, messages, hashtags or other accounts`, { code: 'refused' });
 
   if (m !== 'GET' && m !== 'HEAD') {
-    const rule = WRITE_RULES.find((r) => r.method === m && r.host === host && r.path.test(u.pathname));
+    const rule = WRITE_RULES.find((r) => r.method === m && (r.host === host || (r.sub && host.endsWith(`.${r.host}`))) && r.path.test(u.pathname));
     if (!rule) throw new NetError(`refused ${m} ${host}${u.pathname}: not on the write allowlist`, { code: 'refused' });
     return rule;
   }

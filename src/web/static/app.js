@@ -101,6 +101,25 @@
     }
   });
 
+  // Notifications in this browser: the service worker, the permission, the subscription, then the endpoint is kept.
+  document.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-push-enable]');
+    if (!btn) return;
+    const form = btn.closest('form[data-push]');
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return say('הדפדפן הזה לא תומך בהתראות. בטלפון: הוסיפו את תדר למסך הבית ונסו משם.', true);
+    try {
+      const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+      if ((await Notification.requestPermission()) !== 'granted') return say('ההתראות לא אושרו בדפדפן.', true);
+      const raw = atob(form.dataset.push.replace(/-/g, '+').replace(/_/g, '/'));
+      const key = Uint8Array.from(raw, (c) => c.charCodeAt(0));
+      const sub = (await reg.pushManager.getSubscription()) || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key }));
+      form.querySelector('[name=endpoint]').value = sub.endpoint;
+      form.requestSubmit();
+    } catch {
+      say('לא הצלחתי להפעיל התראות בדפדפן הזה.', true);
+    }
+  });
+
   // A segmented control submits as soon as it changes.
   document.querySelectorAll('form[data-autosubmit]').forEach((form) => {
     form.addEventListener('change', () => form.requestSubmit());

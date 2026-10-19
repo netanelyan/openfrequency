@@ -6,6 +6,7 @@ import { inRest } from '../schedule/shabbat.js';
 import { inWindows, slotsFor, postsOn } from '../schedule/slots.js';
 import { buildPost, PausedError } from '../pipeline/build.js';
 import { publishPost } from '../publish/index.js';
+import { watchDrafts } from '../publish/draft.js';
 import { REWRITE_AT } from '../voice/review.js';
 import { collectMetrics, learn } from '../metrics/collect.js';
 import { canRun, liftBudgetPauses, pauseAccount } from './rails.js';
@@ -275,6 +276,13 @@ export async function tick(ctx, { t = now() } = {}) {
         report.errors.push({ account: pack.id, post: p.id, step: 'publish', error: e.message });
       }
     }
+  }
+
+  // ---- 4a. TikTok drafts after their slot: the owner's post found, a reminder, the fallback, a duplicate
+  try {
+    report.drafts = await watchDrafts(ctx, { t });
+  } catch (e) {
+    report.errors.push({ step: 'drafts', error: e.message });
   }
 
   // ---- 5. metrics and learning, every few hours
