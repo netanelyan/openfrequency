@@ -475,4 +475,10 @@ export const MIGRATIONS = [
     failed        INTEGER NOT NULL DEFAULT 0
   );
   `,
+  `
+  -- An attributed fact: what someone said or reported (src/verify/claims.js),
+  -- named as the document names them (who) and as the slide writes it (who_he).
+  ALTER TABLE facts ADD COLUMN who TEXT;
+  ALTER TABLE facts ADD COLUMN who_he TEXT;
+  `,
 ];

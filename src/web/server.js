@@ -102,6 +102,7 @@ export function createHandler(ctx, { port, env = process.env, limiter = createLi
     ['POST', /^\/sources\/(\d+)\/approve$/, (u, m, f) => act.sourceStatus(ctx, u, { id: m[1] }, f, 'approved')],
     ['POST', /^\/sources\/(\d+)\/remove$/, (u, m, f) => act.sourceStatus(ctx, u, { id: m[1] }, f, 'removed')],
     ['POST', /^\/sources\/add$/, (u, m, f) => act.addSource(ctx, u, {}, f)],
+    ['POST', /^\/sources\/catalog$/, (u, m, f) => act.addCatalogSource(ctx, u, {}, f)],
     ['POST', /^\/facts\/add$/, (u, m, f) => act.addFact(ctx, u, {}, f)],
     ['POST', /^\/facts\/confirm$/, (u, m, f) => act.confirmFact(ctx, u, {}, f)],
     ['POST', /^\/facts\/remove$/, (u, m, f) => act.removeFactAction(ctx, u, {}, f)],

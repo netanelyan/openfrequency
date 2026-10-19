@@ -17,8 +17,8 @@ import { lockedStyle } from '../render/style.js';
 import { checkRules } from '../rules/check.js';
 import { lineDraft, oneLine, overlayProblems } from '../rules/overlay.js';
 import { MAX_HASHTAGS, captionProblems, hashtagProblems, storyCaption } from '../rules/caption.js';
-import { gate, numbersIn, verifyFact } from '../verify/claims.js';
-import { findImage } from '../images/index.js';
+import { ATTRIBUTED_MAX, gate, numbersIn, verifyFact } from '../verify/claims.js';
+import { findImage, MIN_SIDE } from '../images/index.js';
 import { normVisual, slideHasVisual, visualProblems, visualsOf, visualText } from '../render/visuals.js';
 import { renderPost } from '../render/render.js';
 import { israelDate } from '../schedule/israel.js';
@@ -623,11 +623,13 @@ export function planFrom(ctx, { pack, format, outline, cand, details = [] }) {
   const facts = [];
   for (const f of outline.facts || []) {
     const d = docOf.get(String(f.doc || '').trim()) || (cand.refs.length === 1 ? cand.refs[0] : null);
-    const row = { key: f.id, claim: f.claim, quote: f.quote, document_id: d?.id ?? null, source_id: d?.source_id ?? null };
+    const row = { key: f.id, claim: f.claim, quote: f.quote, document_id: d?.id ?? null, source_id: d?.source_id ?? null, ...whoOf(f) };
     const v = verifyFact(ctx.db, row, { accountId: pack.id, maxQuoteWords: pack.rules.maxQuoteWords || 40 });
     facts.push({ ...row, verified: v.ok, error: v.error });
   }
   facts.push(...details);
+  // Two voices at most: a third attributed fact is not one the post may stand on.
+  facts.filter((f) => f.verified && f.who).slice(ATTRIBUTED_MAX).forEach((f) => Object.assign(f, { verified: false, error: `a post carries ${ATTRIBUTED_MAX} attributed facts at most` }));
   const good = new Set(facts.filter((f) => f.verified).map((f) => f.key));
   const planned = (outline.items || []).map((it) => ({ ...it, facts: [...(it.facts || [])] }));
   for (const d of details) if (d.verified && d.item > 0 && planned[d.item - 1]) planned[d.item - 1].facts.push(d.key);
@@ -674,6 +676,9 @@ export function bothSides(item, facts, outline = {}) {
   return names(a, own) && names(b, own);
 }
 
+/** Who said or reported a fact, when it is attributed: { who, whoHe }, or nothing for a plain fact. */
+const whoOf = (f) => (String(f.who || '').trim() ? { who: String(f.who).trim(), whoHe: String(f.whoHe || '').trim() || String(f.who).trim() } : {});
+
 /** The words research looks for in a long article: the subject's names and the topic's own words. */
 export function subjectNames(outline) {
   const s = outline.subject || {};
@@ -718,7 +723,7 @@ export async function gatherDetails(ctx, { pack, format, outline, cand, ttl = '5
     while (taken.has(key)) key = `X${key}`;
     taken.add(key);
     const d = byRef.get(String(x.doc || '').trim());
-    const row = { key, claim: String(x.claim || ''), quote: String(x.quote || ''), document_id: d?.id ?? null, source_id: d?.source_id ?? null, detail: String(x.kind || 'detail').trim() || 'detail', item: Number.isInteger(x.item) ? x.item : 0 };
+    const row = { key, claim: String(x.claim || ''), quote: String(x.quote || ''), document_id: d?.id ?? null, source_id: d?.source_id ?? null, detail: String(x.kind || 'detail').trim() || 'detail', item: Number.isInteger(x.item) ? x.item : 0, ...whoOf(x) };
     const v = verifyFact(ctx.db, row, { accountId: pack.id, maxQuoteWords: pack.rules.maxQuoteWords || 40 });
     facts.push({ ...row, verified: v.ok, error: v.error });
   }
@@ -903,7 +908,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
 
     // ---- facts: verified against their stored documents before any slide is written (planFrom), stored here
     const { facts, good, items } = plan;
-    for (const f of facts) db.insert('facts', { post_id: postId, key: f.key, claim: f.claim, quote: f.quote, document_id: f.document_id, source_id: f.source_id, verified: f.verified ? 1 : 0, error: f.error, detail: f.detail || null });
+    for (const f of facts) db.insert('facts', { post_id: postId, key: f.key, claim: f.claim, quote: f.quote, document_id: f.document_id, source_id: f.source_id, verified: f.verified ? 1 : 0, error: f.error, detail: f.detail || null, who: f.who || null, who_he: f.whoHe || null });
     step(db, postId, 'facts', 'ok', { verified: good.size, refused: facts.filter((f) => !f.verified).map((f) => ({ key: f.key, error: f.error })), trimmed: plan.trimmed });
     const verifiedFacts = facts.filter((f) => f.verified);
 
@@ -1177,7 +1182,7 @@ export async function sidePhotos(ctx, { pack, outline, postId }) {
   const out = {};
   for (const [key, query, side] of [['ca', outline.imageQuery, outline.subject?.a], ['cb', outline.imageQueryB, outline.subject?.b]]) {
     const why = {};
-    const img = await findImage(ctx, { pack, query, postId, claim: `a portrait of ${side || query} for one half of the cover of a head-to-head${about}`, why }).catch((e) => (ctx.log?.(`image: ${e.message}`), null));
+    const img = await findImage(ctx, { pack, query, postId, claim: `a portrait of ${side || query} for one half of the cover of a head-to-head${about}`, why, minSide: MIN_SIDE.half }).catch((e) => (ctx.log?.(`image: ${e.message}`), null));
     step(ctx.db, postId, 'image', img ? 'ok' : 'skipped', img ? { slide: key, query, provider: img.provider, license: img.license, author: img.author, source: img.source_url, safety: img.safety } : { slide: key, query, why });
     if (!img) return null;
     out[key] = img;
@@ -1238,12 +1243,14 @@ export async function findPhotos(ctx, { pack, format, draft, outline, postId }) 
     if (seen.has(key) || seen.size >= 4) continue;
     seen.add(key);
     const why = {};
-    let img = await findImage(ctx, { pack, query: w.query, postId, claim: w.claim, why }).catch((e) => (ctx.log?.(`image: ${e.message}`), null));
+    // A cover fills the frame; a content slide's photograph sits in one (the last slide of a guess-who fills it too).
+    const minSide = w.idx === 0 || (photoOn === 'last' && w.idx === last) ? MIN_SIDE.cover : MIN_SIDE.framed;
+    let img = await findImage(ctx, { pack, query: w.query, postId, claim: w.claim, why, minSide }).catch((e) => (ctx.log?.(`image: ${e.message}`), null));
     // A cover whose query found nothing tries the post's own subject by name ("Haim Revivo" rather than "Revivo goal Spain 1998").
     const who = String(draft.subject?.answer || draft.subject?.a || '').trim();
     if (!img && w.idx === 0 && /[A-Za-z]/.test(who) && who.toLowerCase() !== key && !seen.has(who.toLowerCase())) {
       seen.add(who.toLowerCase());
-      img = await findImage(ctx, { pack, query: who, postId, claim: w.claim, why }).catch(() => null);
+      img = await findImage(ctx, { pack, query: who, postId, claim: w.claim, why, minSide }).catch(() => null);
     }
     step(ctx.db, postId, 'image', img ? (img.safety === 'review' ? 'info' : 'ok') : 'skipped', img ? { slide: w.idx, query: w.query, provider: img.provider, license: img.license, author: img.author, source: img.source_url, safety: img.safety, match: j(img.match_json, null) } : { slide: w.idx, query: w.query, mode: ctx.mode, why });
     if (img) out.set(w.idx, img);
@@ -1285,7 +1292,7 @@ export async function findPhotos(ctx, { pack, format, draft, outline, postId }) 
       // stadium night" and sat behind a football post.
       // A person in it reads as a stranger behind someone else's story: the scene is a place or a thing.
       const claim = `the blurred background of a post about ${outline.topic || pack.meta.displayName}: it must show ${query}, the sport or the setting of the post, never another sport, with no person as the main subject or standing out (an empty arena, a pitch, a cage, gloves, a desk)`;
-      const img = await findImage(ctx, { pack, query, postId, claim }).catch((e) => (ctx.log?.(`background: ${e.message}`), null));
+      const img = await findImage(ctx, { pack, query, postId, claim, minSide: MIN_SIDE.ground }).catch((e) => (ctx.log?.(`background: ${e.message}`), null));
       if (img) {
         out.set('bg', img);
         step(ctx.db, postId, 'image', 'ok', { slide: 'background', query });
@@ -1303,7 +1310,7 @@ export function loadPost(db, postId) {
   const slides = db.all('SELECT * FROM slides WHERE post_id = ? ORDER BY idx', postId).map((s) => ({ ...s, factKeys: j(s.fact_ids_json, []), files: j(s.files_json, {}), data: j(s.data_json, null) }));
   const facts = db
     .all('SELECT f.*, d.url AS doc_url, d.title AS doc_title, d.fetched_at AS doc_fetched_at, s.name AS source_name, s.url AS source_url, s.status AS source_status FROM facts f LEFT JOIN documents d ON d.id = f.document_id LEFT JOIN sources s ON s.id = f.source_id WHERE f.post_id = ? ORDER BY f.id', postId)
-    .map((f) => ({ ...f, verified: Boolean(f.verified) }));
+    .map((f) => ({ ...f, verified: Boolean(f.verified), whoHe: f.who_he || null }));
   return { ...post, hashtags: j(post.hashtags_json, []), checks: j(post.checks_json, {}), media: j(post.media_json, {}), publish: j(post.publish_json, {}), data: j(post.data_json, {}), slides, facts };
 }
 

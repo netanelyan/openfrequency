@@ -10,6 +10,7 @@ import { kindName, ranksOf } from '../formats/kinds.js';
 import { slideHasVisual } from './visuals.js';
 import { focusOf } from '../images/safety.js';
 import { overlayOf } from '../rules/overlay.js';
+import { fillsCover } from '../images/size.js';
 
 // Slides to JPEG, through headless Chromium, because Hebrew needs real
 // bidirectional layout and shaping and the browser is the thing that has it.
@@ -486,7 +487,9 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
       slide.tease = Boolean(tease);
       slide.hasVisual = s.kind === 'item' && slideHasVisual(slide);
       const file = path.join(outDir, `${size}-${String(i + 1).padStart(2, '0')}.jpg`);
-      const look = { photo: full ? uri.get(i) : tease ? uri.get(slides.length - 1) : null, photoPos: full ? focus.get(i) : null, blur: tease, split, splitPos: split ? [focus.get('ca'), focus.get('cb')] : null, bg: bgFor(i) };
+      // A cover photograph smaller than FULL_BLEED_MIN is framed over its own blurred copy, never stretched to fill.
+      const framed = full && s.kind === 'cover' && !fillsCover(readFileSync(byIdx.get(i).file));
+      const look = { photo: full ? uri.get(i) : tease ? uri.get(slides.length - 1) : null, photoPos: full ? focus.get(i) : null, blur: tease, split, splitPos: split ? [focus.get('ca'), focus.get('cb')] : null, bg: bgFor(i), framed };
       drawn.push({ i, s, slide, look, file, ratio: await drawSlide({ i, s, slide, look, file, size }) });
       out[size].push(file);
     }

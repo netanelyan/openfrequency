@@ -10,6 +10,7 @@ import { htmlToText, labelTables, mainHtml, titleOf } from './text.js';
 import { packsDir } from '../core/paths.js';
 import { parseCsv } from './csv.js';
 import { factDocuments, factsDir } from './facts.js';
+import { robotsAllows } from './robots.js';
 
 // Sources, behind one interface: read(source) -> [{ url, title, text, publishedAt, key? }].
 //
@@ -30,6 +31,13 @@ import { factDocuments, factsDir } from './facts.js';
 //
 // The recorded implementation reads <pack>/recordings/documents/*.json instead,
 // so the pipeline runs offline on documents that were really fetched once.
+//
+// A feed or a page is read only where its site's robots.txt lets this engine in, and lets Claude in too
+// (robots.js): an item whose article sits on a page Claude is told to stay out of is dropped, feed text and all.
+//
+// hints.prefer, a pattern, puts a feed's long reads first ("interview", "feature", "ראיון"): a feed of match
+// reports and transfer rumours gives the writer little to tell, and the items that match go to the top before the
+// first few are taken.
 //
 // Every document is stored with its full text and a hash. That stored text is
 // what every quote is checked against, then and later, so a post can be
@@ -62,10 +70,12 @@ export function liveSources() {
       const hints = cfg.hints || {};
       const forDay = (text) => (hints.onlyDay ? onlyDay(text, day || israelDate(now()), hints.onlyDay) : text);
       if (src.type === 'rss') {
+        await mayRead(src.url);
         const { body } = await getText(src.url, { accept: 'application/rss+xml,application/atom+xml,application/xml,text/xml;q=0.9,*/*;q=0.8' });
-        const items = parseFeed(body).slice(0, hints.max || 6);
+        const items = preferred(parseFeed(body), hints.prefer).slice(0, hints.max || 6);
         const out = [];
         for (const it of items) {
+          if (it.url && !(await robotsAllows(it.url)).ok) continue;
           let text = it.text;
           if (text.length < (hints.minFeedChars || 800) && hints.fetchItems !== false) {
             try {
@@ -80,6 +90,7 @@ export function liveSources() {
         return out;
       }
       if (src.type === 'web') {
+        await mayRead(src.url);
         // Some old pages are Latin-1 (RSSSF): hints.encoding reads them as written.
         const page = await getText(src.url, { encoding: hints.encoding || null });
         const docs = [{ url: page.finalUrl, title: titleOf(page.body), text: forDay(labelTables(htmlToText(mainHtml(page.body, hints.selector)))).slice(0, maxOf(hints)), publishedAt: null }];
@@ -87,6 +98,7 @@ export function liveSources() {
           const re = new RegExp(hints.follow.pattern, 'i');
           const links = [...new Set([...page.body.matchAll(/href=["']([^"']+)["']/gi)].map((m) => new URL(m[1], page.finalUrl).href).filter((u) => re.test(u)))];
           for (const url of links.slice(0, hints.follow.max || 5)) {
+            if (!(await robotsAllows(url)).ok) continue;
             try {
               const p = await getText(url, { encoding: hints.encoding || null });
               docs.push({ url: p.finalUrl, title: titleOf(p.body), text: forDay(htmlToText(mainHtml(p.body, hints.selector))).slice(0, MAX_TEXT), publishedAt: null });
@@ -101,6 +113,20 @@ export function liveSources() {
       throw new Error(`unknown source type ${src.type}`);
     },
   };
+}
+
+/** A source's own address, refused when its robots.txt keeps this engine or Claude out: the source shows why. */
+async function mayRead(url) {
+  const r = await robotsAllows(url);
+  if (!r.ok) throw new Error(r.why);
+}
+
+/** A feed's items with the ones its pattern names first, in their order, then the rest. Pure. */
+export function preferred(items, pattern) {
+  if (!pattern) return items;
+  const re = new RegExp(pattern, 'i');
+  const hit = (it) => re.test(`${it.title || ''} ${it.url || ''} ${String(it.text || '').slice(0, 400)}`);
+  return [...items.filter(hit), ...items.filter((it) => !hit(it))];
 }
 
 /** A query's {MONTH} and {DAY}: the post's day, so a birthday query asks about the day the post goes out. */

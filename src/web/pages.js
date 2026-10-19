@@ -1,6 +1,7 @@
 import { accDot, csrfField, dayHe, esc, icon, k, layout, markDots, MODE_HE, postButton, shortDate, stamp, statusChip, timeHe, usd, weekdayNarrow } from './ui.js';
 import { PAUSE_REASONS } from '../autonomy/rails.js';
 import { FALLBACK_MIN, FLOW_HE } from '../publish/draft.js';
+import { CATALOG } from '../sources/catalog.js';
 import { KINDS, MIX } from '../formats/kinds.js';
 import { BOXES, MEASURES, PRIORITY } from '../metrics/feedback.js';
 import { RIVALS } from '../pipeline/rivals.js';
@@ -483,8 +484,22 @@ ${problems.length ? `<div class="problems"><ul>${problems.map((p) => `<li>${esc(
 <label class="f">כתובת <small>https בלבד</small><input type="url" name="url" required dir="ltr" value="${esc(form.url || '')}"></label>
 <label class="f">סוג<select name="type"><option value="rss">פיד (RSS/Atom)</option><option value="web">דף</option><option value="api">API (JSON)</option></select></label>
 <label class="f">למה סומכים עליו? <small>יופיע ליד כל עובדה ממנו</small><textarea name="why" required minlength="10">${esc(form.why || '')}</textarea></label>
-<button class="btn primary" type="submit">${icon('plus')}הוסף כמקור מאושר</button></form></section></div>`;
+<button class="btn primary" type="submit">${icon('plus')}הוסף כמקור מאושר</button></form></section></div>
+${catalogPanel(ctx, current, sources)}`;
   return layout({ ...ctx, title: 'מקורות', active: 'sources' }, body);
+}
+
+/** Outlets to add in one tap, per niche, and the ones asked for that cannot be read, with why. */
+function catalogPanel(ctx, current, sources) {
+  const have = new Set(sources.filter((s) => s.status === 'approved').map((s) => s.url));
+  const niche = ([key, n]) => `<details class="facts"><summary>${esc(n.name)} <span class="chip ghost">${n.sources.length}</span><span class="chev">${icon('chev')}</span></summary>
+<ul class="factlist">${n.sources
+    .map((s) => `<li><b dir="auto">${esc(s.name)}</b> <span class="chip ghost">${s.lang === 'he' ? 'עברית' : 'אנגלית'}</span> ${have.has(s.url) ? '<span class="chip ok">כבר מקור</span>' : postButton(ctx, '/sources/catalog', `${icon('plus')}הוסף`, { cls: 'btn sm', fields: { account: current.id, niche: key, id: s.id } })}<div class="muted small" dir="auto">${esc(s.why)}</div></li>`)
+    .join('')}</ul>
+${n.refused.length ? `<p class="muted small">לא ניתנים לקריאה: ${n.refused.map(([name, why]) => `${esc(name)} (${esc(why)})`).join(' · ')}</p>` : ''}</details>`;
+  return `<section class="panel mt16"><header><h2>מקורות מוכנים לפי נישה</h2></header>
+<p class="muted">פידים שנבדקו: האתר מרשה בקובץ robots.txt שלו גם לנו וגם ל-Claude לקרוא, כי כל מה שמקור אומר נכתב מחדש על ידי Claude. הבדיקה רצה שוב בכל קריאה. כתבות ארוכות וראיונות נקראים ראשונים.</p>
+${Object.entries(CATALOG).map(niche).join('')}</section>`;
 }
 
 /* ------------------------------------------------------------ settings */

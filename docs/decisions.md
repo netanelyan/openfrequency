@@ -1314,3 +1314,30 @@ engine can act on, and what changed:
   to. The push services join the write allowlist, each at its push path only.
   Every image search that finds nothing now records why its candidates were
   passed over, and `npm run images:check` reports it per account.
+
+- **Wider sources, read only where the site lets Claude in; what someone said is a
+  fact of its own kind (2026-10-19, the owner's call).** The posts were dry, so each
+  niche now has outlets to add in one tap (the Sources page, `src/sources/catalog.js`),
+  long reads first (`hints.prefer` puts interviews and features before match reports).
+  Every feed and page is read only where its site's robots.txt lets this engine in
+  and lets Claude's agents in too (`src/sources/robots.js`), since everything a
+  source says is drafted by Claude: checked on 2026-10-19, The Athletic, the BBC, the
+  Guardian, ESPN, ONE, MMA Fighting, MMA Junkie and TechCrunch all tell Anthropic's
+  agents to stay out, and are not read; Sport5, Calcalist and CTech publish no feed.
+  The check runs at every read, for every account's feeds and pages. A new fact
+  kind, ATTRIBUTED (`fact.who`), is what someone said or reported: its quote is
+  verified word for word as always, then the document must name them and a word of
+  saying or reporting within 300 characters of it (or be the outlet reporting it);
+  the slide that states it names them and says they said it ("לפי X", "X סיפר"),
+  never as plain fact; and a post carries two at most, refused at the plan and at
+  the gate.
+
+- **A photograph's size floor depends on where it goes (2026-10-19).** The fight
+  account's posts went out with almost no faces: of its last 10 posts, 1 had a
+  photograph. Run live on the server, its searches for Kamaru Usman, Merab
+  Dvalishvili and Islam Makhachev found Commons files of 387 to 862 pixels a side,
+  many of them PNG crops, and the one floor for every photograph (a JPEG of 800
+  pixels) threw them all out before anything looked at them. Now a cover takes 600
+  pixels, a framed slide or half a head-to-head 450, the blurred ground behind the
+  slides 400, and a PNG photograph counts (never one described as a screenshot).
+  The name in the title, the licence and the screen decide as before.

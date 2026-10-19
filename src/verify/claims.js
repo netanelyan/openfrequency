@@ -17,6 +17,13 @@ import { israelDate } from '../schedule/israel.js';
 //      fact rather than a copied paragraph (HARD RULE 5, copyright)
 //   4. every number in the claim appears in the quote
 //
+// An ATTRIBUTED fact (fact.who) is what someone said or reported, not what is so: a fighter's own account, a
+// manager's claim, an outlet's report. It is verified like any fact, and then the document must show that it is
+// theirs: their name and a word of saying or reporting ("said", "told", "according to", "סיפר", "לפי") stand within
+// ATTRIBUTION_REACH characters of the quote, or the source itself is the one reporting it ("לפי Sherdog" from
+// Sherdog). On a slide it is never stated as plain fact: the slide names them and says they said it. A post
+// carries ATTRIBUTED_MAX of them at most: it stands on facts, and lets a few voices speak.
+//
 // Then the gate, before rendering: every content slide states at least one
 // verified fact, and every number on any slide, the cover or the caption appears
 // in a quote the post cites. "Verified" means traceable: if the source is wrong
@@ -162,6 +169,21 @@ export function numbersIn(text, { words = false, hebrew = false } = {}) {
 const wordCount = (s) => normalise(s).split(' ').filter(Boolean).length;
 
 export const MIN_QUOTE_WORDS = 4;
+export const ATTRIBUTED_MAX = 2;
+export const ATTRIBUTION_REACH = 300;
+
+// Words of saying and reporting, in a document (any language it is in, normalised) and on a slide (Hebrew).
+const SAID_DOC = /\b(said|says|saying|told|tells|according|reported|reports|reporting|claimed|claims|revealed|reveals|admitted|admits|insisted|insists|wrote|writes|added|explained|explains|stated|tweeted|posted|announced|confirmed|recalled|recalls|believes|argued|argues)\b|(?<![\p{L}])[ושה]?(אמר|אמרה|סיפר|סיפרה|לדברי|לפי|טען|טענה|דיווח|דיווחה|דווח|כתב|כתבה|הודה|הודתה|חשף|חשפה|הוסיף|הוסיפה|ציין|ציינה|הסביר|הסבירה|מסר|מסרה|הודיע|הודיעה)(?![\p{L}])/u;
+const SAID_SLIDE = /(?<![\p{L}])[ו]?(לפי|לדברי|לדבריו|לדבריה|לטענת|לטענתו|לטענתה|אמר|אמרה|אומר|אומרת|סיפר|סיפרה|מספר|מספרת|טען|טענה|טוען|טוענת|דיווח|דיווחה|דווח|מדווח|כתב|כתבה|הודה|הודתה|חשף|חשפה|ציין|ציינה|הוסיף|הוסיפה|הסביר|הסבירה|מסר|מסרה|הודיע|הודיעה|העיד|העידה|התלונן|התלוננה|נזכר|נזכרה)(?![\p{L}])/u;
+
+const nameParts = (s) => normalise(s).split(' ').filter((w) => w.length >= 3 || /^\p{Lu}{2}$/u.test(w));
+
+/** Whether a slide names who said an attributed fact and says that they said it. Pure. */
+export function attributes(text, { who = '', whoHe = '' } = {}) {
+  const t = normalise(text);
+  const names = [...nameParts(whoHe), ...nameParts(who)];
+  return names.some((n) => t.includes(n)) && SAID_SLIDE.test(String(text || ''));
+}
 
 /**
  * Verify one fact against the database. Returns { ok, error }.
@@ -171,7 +193,7 @@ export function verifyFact(db, fact, { accountId, maxQuoteWords = 40 } = {}) {
   const fail = (error) => ({ ok: false, error });
   if (!fact?.document_id) return fail('no source document');
   const doc = db.get(
-    `SELECT d.text, d.url, d.expires_at, s.account_id, s.status, s.name FROM documents d JOIN sources s ON s.id = d.source_id WHERE d.id = ?`,
+    `SELECT d.text, d.url, d.expires_at, s.account_id, s.status, s.name, s.url AS source_url FROM documents d JOIN sources s ON s.id = d.source_id WHERE d.id = ?`,
     fact.document_id
   );
   if (!doc) return fail('the source document is not stored');
@@ -190,6 +212,28 @@ export function verifyFact(db, fact, { accountId, maxQuoteWords = 40 } = {}) {
   const missing = [...numbersIn(fact.claim, { hebrew: true })].filter((x) => !inQuote.has(x));
   if (missing.length) return fail(`the claim states ${missing.join(', ')}, which the quote does not`);
   if (!String(fact.claim || '').trim()) return fail('no claim');
+  // An attributed fact is theirs only where the document says so.
+  const who = String(fact.who || '').trim();
+  if (who) {
+    const names = nameParts(who);
+    if (!names.length) return fail('attributed, but to no one by name');
+    const host = (u) => {
+      try {
+        return normalise(new URL(u).hostname.replace(/^www\./, ''));
+      } catch {
+        return '';
+      }
+    };
+    const outlet = `${normalise(doc.name)} ${host(doc.url)} ${host(doc.source_url)}`;
+    if (!names.some((n) => outlet.includes(n))) {
+      const text = normalise(doc.text);
+      const q = normalise(quote);
+      const at = text.indexOf(q);
+      const near = text.slice(Math.max(0, at - ATTRIBUTION_REACH), at + q.length + ATTRIBUTION_REACH);
+      if (!names.some((n) => near.split(' ').includes(n))) return fail(`attributed to ${who}, but the document does not name them beside the quote`);
+      if (!SAID_DOC.test(near)) return fail(`attributed to ${who}, but nothing beside the quote says they said or reported it`);
+    }
+  }
   return { ok: true, error: null };
 }
 
@@ -209,6 +253,7 @@ export function gate({ slides, facts, caption = '', hook = '', sub = '', extra =
   // The post's own structure (how many slides, a top 10) is not a claim.
   const own = structure || new Set([String(items.length)]);
 
+  const attributed = new Set();
   items.forEach((s, i) => {
     const where = `slide ${i + 1}`;
     const keys = s.factKeys || [];
@@ -227,7 +272,15 @@ export function gate({ slides, facts, caption = '', hook = '', sub = '', extra =
     for (const x of numbersIn(`${s.title} ${s.body} ${s.a || ''} ${s.b || ''}`, { hebrew: true })) if (!nums.has(x)) problems.push(`${where}: the number ${x} is not in the quotes it cites`);
     // A slide's graphic says its numbers too: a bar drawn at 120 is a claim of 120.
     for (const x of numbersIn(visualText(s.visual), { hebrew: true })) if (!nums.has(x)) problems.push(`${where}: the visual's number ${x} is not in the quotes the slide cites`);
+    // What someone said is said as theirs: the slide names them and that they said it, never as plain fact.
+    for (const f of cited) {
+      if (!f?.verified || !String(f.who || '').trim()) continue;
+      attributed.add(f.key);
+      const name = f.whoHe || f.who;
+      if (!attributes(`${s.title} ${s.body} ${s.a || ''} ${s.b || ''}`, f)) problems.push(`${where}: "${f.key}" is what ${name} said or reported: the slide names them and says so ("לפי ${name}", "${name} סיפר"), never as plain fact`);
+    }
   });
+  if (attributed.size > ATTRIBUTED_MAX) problems.push(`the slides state ${attributed.size} attributed facts (${[...attributed].join(', ')}): ${ATTRIBUTED_MAX} at most, the rest of the post stands on facts`);
   for (const [where, text] of [
     ['the cover', `${hook} ${sub} ${(extra.keywords || []).join(' ')} ${extra.subject?.date || ''} ${visualText(extra.coverVisual)}`],
     ['the caption', `${caption} ${extra.captionIg || ''}`],

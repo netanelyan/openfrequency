@@ -126,6 +126,10 @@ body.has-bg .frame{z-index:2}
 body.has-bg .frame{text-shadow:0 2px 12px rgba(var(--bg-rgb),.95),0 0 3px rgba(var(--bg-rgb),.9)}
 body.has-photo .frame{text-shadow:0 2px 14px rgba(0,0,0,.7),0 0 3px rgba(0,0,0,.55)}
 .cta,.cta *,.end-handle,.end-handle *,.opinion,.duel .vs-dot{text-shadow:none}
+/* A cover photograph too small to fill the slide (src/images/size.js): in a frame, over its own copy blurred to fill. */
+.photo.fill{filter:blur(32px) saturate(1.15);transform:scale(1.2)}
+.cframe{position:absolute;left:var(--pl);right:var(--pr);top:19%;aspect-ratio:4/5;border-radius:var(--radius);overflow:hidden;box-shadow:0 24px 70px rgba(0,0,0,.5),0 0 0 2px rgba(255,255,255,.18)}
+.cframe img{width:100%;height:100%;object-fit:cover;object-position:50% 25%;display:block}
 .split{position:absolute;inset:0;display:flex;gap:6px;background:var(--bg)}
 .split .half{flex:1;min-width:0;height:100%;object-fit:cover;object-position:50% 22%}
 body.no-handle .tag,body.no-handle .who,body.no-handle .kick,body.no-handle .stamp,body.no-handle .band{visibility:hidden}
@@ -138,7 +142,7 @@ body.no-handle .tag,body.no-handle .who,body.no-handle .kick,body.no-handle .sta
 const HEADLINE_CSS = '.hook,.title,.rtitle,.k-closer h2,.versus,.answer,.myth-text,.meme .punch,.vs .val,.q,.count,.cnt,.head .n{font-family:var(--headline)}';
 
 /** The whole page for one slide. `parts` is what a template returns. */
-export function page({ theme, size, slide, parts, photo, photoPos = null, blur = false, bg = null, split = null, splitPos = null, overlay = OVERLAY }) {
+export function page({ theme, size, slide, parts, photo, photoPos = null, blur = false, bg = null, split = null, splitPos = null, overlay = OVERLAY, framed = false }) {
   const zone = { ...OVERLAY.safeZone, ...(overlay?.safeZone || {}) };
   const outline = Number(overlay?.outline ?? OVERLAY.outline);
   const at = (pos) => (pos ? ` style="object-position:${esc(pos)}"` : '');
@@ -158,7 +162,8 @@ ${VISUAL_CSS}
 ${HEADLINE_CSS}
 </style></head>
 <body class="t-${theme.template} v-${theme.variant || 'a'} k-${slide.kind} s-${size}${photo || split ? ' has-photo' : ''}${backdrop ? ' has-bg' : ''}${slide.noHandle ? ' no-handle' : ''}${slide.hasVisual ? ' has-vis' : ''}${parts.bodyClass ? ` ${parts.bodyClass}` : ''}"${parts.bodyStyle ? ` style="${esc(parts.bodyStyle)}"` : ''} data-zone-top="${zone.top}" data-zone-bottom="${zone.bottom}" data-outline="${outline}">
-${photo ? `<img class="photo${blur ? ' blur' : ''}" src="${photo}"${blur ? '' : at(photoPos)} alt=""><div class="scrim" data-scrim></div>` : ''}
+${photo && framed ? `<img class="photo fill" src="${photo}" alt=""><div class="cframe"><img src="${photo}"${at(photoPos)} alt=""></div><div class="scrim" data-scrim></div>` : ''}
+${photo && !framed ? `<img class="photo${blur ? ' blur' : ''}" src="${photo}"${blur ? '' : at(photoPos)} alt=""><div class="scrim" data-scrim></div>` : ''}
 ${split ? `<div class="split"><img class="half" src="${split[0]}"${at(splitPos?.[0])} alt=""><img class="half" src="${split[1]}"${at(splitPos?.[1])} alt=""></div><div class="scrim" data-scrim></div>` : ''}
 ${backdrop ? `<img class="bgphoto" src="${bg}" alt=""><div class="bgveil"${theme.options?.backgroundVeil != null ? ` style="--bg-veil:${Number(theme.options.backgroundVeil)}"` : ''}></div>` : ''}
 ${parts.html}

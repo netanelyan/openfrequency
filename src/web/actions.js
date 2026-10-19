@@ -15,6 +15,8 @@ import { factProblems, readTopics, removeFact, saveFact } from '../sources/facts
 import { removeRival, saveRival } from '../pipeline/rivals.js';
 import { removeSound, saveSound } from '../pipeline/sounds.js';
 import { subscribe } from '../notify/index.js';
+import { catalogSource } from '../sources/catalog.js';
+import { robotsAllows } from '../sources/robots.js';
 import { israelDate } from '../schedule/israel.js';
 import { DEFAULT_MONTHLY_USD } from '../budget/ledger.js';
 
@@ -225,6 +227,27 @@ export function addSource(ctx, user, _p, form) {
   audit(ctx.db, { actor: user.name, action: 'source_added', accountId: account, detail: { url } });
   return { ok: true, message: 'המקור נוסף ואושר.', redirect: `/sources?account=${encodeURIComponent(account)}` };
 }
+
+/**
+ * An outlet from the catalog (src/sources/catalog.js), added to an account's approved sources: its site's robots.txt
+ * is asked again first, so one that has since told Claude to stay out is refused here. `ctx.robotsAllows` replaces
+ * the network for the tests.
+ */
+export async function addCatalogSource(ctx, user, _p, form) {
+  const account = String(form.account || '');
+  if (!ctx.pack(account)) throw new ActionError('אין חשבון כזה', 404);
+  const src = catalogSource(String(form.niche || ''), String(form.id || ''));
+  if (!src) throw new ActionError('אין מקור כזה ברשימה', 404);
+  const robots = await (ctx.robotsAllows || robotsAllows)(src.url);
+  if (!robots.ok) throw new ActionError(`${src.name} לא נוסף: ${robots.why}`, 422);
+  const have = ctx.db.get('SELECT id, status FROM sources WHERE account_id = ? AND url = ?', account, src.url);
+  if (have?.status === 'approved') return { ok: true, message: `${src.name} כבר מקור מאושר.`, redirect: `/sources?account=${encodeURIComponent(account)}` };
+  if (have) ctx.db.update('sources', have.id, { status: 'approved', approved_at: nowIso(), last_error: null });
+  else ctx.db.insert('sources', { account_id: account, key: `catalog-${src.id}`, type: src.type, url: src.url, name: src.name, why: src.why, lang: src.lang, status: 'approved', origin: 'manual', approved_at: nowIso(), config_json: { hints: src.hints }, created_at: nowIso() });
+  audit(ctx.db, { actor: user.name, action: 'source_added', accountId: account, detail: { url: src.url, catalog: `${form.niche}/${src.id}` } });
+  return { ok: true, message: `${src.name} נוסף ואושר.`, redirect: `/sources?account=${encodeURIComponent(account)}` };
+}
+
 
 // ---- hand-checked facts (src/sources/facts.js), written into the pack's facts/ folder
 

@@ -42,8 +42,8 @@ export const OUTLINE_SCHEMA = {
       type: 'array',
       items: {
         type: 'object',
-        properties: { id: { type: 'string' }, claim: { type: 'string' }, quote: { type: 'string' }, doc: { type: 'string' } },
-        required: ['id', 'claim', 'quote', 'doc'],
+        properties: { id: { type: 'string' }, claim: { type: 'string' }, quote: { type: 'string' }, doc: { type: 'string' }, who: { type: 'string' }, whoHe: { type: 'string' } },
+        required: ['id', 'claim', 'quote', 'doc', 'who', 'whoHe'],
         additionalProperties: false,
       },
     },
@@ -71,8 +71,8 @@ export const DETAILS_SCHEMA = {
       type: 'array',
       items: {
         type: 'object',
-        properties: { id: { type: 'string' }, kind: { type: 'string' }, claim: { type: 'string' }, quote: { type: 'string' }, doc: { type: 'string' }, item: { type: 'integer' } },
-        required: ['id', 'kind', 'claim', 'quote', 'doc', 'item'],
+        properties: { id: { type: 'string' }, kind: { type: 'string' }, claim: { type: 'string' }, quote: { type: 'string' }, doc: { type: 'string' }, item: { type: 'integer' }, who: { type: 'string' }, whoHe: { type: 'string' } },
+        required: ['id', 'kind', 'claim', 'quote', 'doc', 'item', 'who', 'whoHe'],
         additionalProperties: false,
       },
     },
@@ -263,6 +263,7 @@ Facts:
 - Never state anything the documents do not say. Never add a number that is not in the quote. A date is a number too: a claim that says when something happened or changed needs a quote that contains that date, or it leaves the date out.
 - Prefer facts that are specific, surprising and new to most people over general statements.
 - A vendor's forecast or guidance, and the numbers of a demo, an example or a sample run, are claims, not results: the claim says whose forecast or which demo it is, and a post never stands on them.
+- An ATTRIBUTED fact is what someone said or reported, not what is so: a fighter's own account of a fight, a manager's claim, an investor's version, an outlet's report of a rumour. Give it who: the person or outlet as the document names them ("Dana White", "Sherdog"), and whoHe: how a Hebrew slide writes their name ("דנה וייט"). Its quote is their words, or the document's report of them, and the document must say beside the quote that they said or reported it. The slide that states it names them and says so ("לפי דנה וייט", "וייט סיפר"), never as plain fact. Two at most in a post: the rest stands on facts. A plain fact has who and whoHe "".
 - The angle. A story every fan of the niche already knows (the most famous final, upset or goal) is no post told the usual way: tell it through a detail from the documents most of them have never heard, and lead with that detail (the cover and the first slide). If the documents hold no such detail, prefer usable=false.
 
 Items: the content slides in order, each { role, point: what the slide says in a few Hebrew words, facts: the fact ids it states }. The roles follow the kind's shape (THE SHAPES). Every item states at least one fact, except the roles the shape says carry none.
@@ -325,6 +326,7 @@ The request gives one post's topic, its plan, the facts it already has, and more
 - after: what happened or what people said afterwards
 - number: one number that tells the story (a score, a crowd, a price, a count)
 Each detail: { id: X1, X2..., kind: one of the six above, claim: the detail in plain spoken Hebrew (it may translate the quote, never add to it, and keeps what each word belongs to: "the first manager of an English team" is not "the first English manager"), quote: copied character for character from ONE document, 4 to {maxQuote} words, every number the claim states included, doc: that document's id, item: the number of the plan's slide it belongs on (1, 2...), or 0 }. A slide of the plan that has no fact yet needs its details most: give it at least one, or it is dropped.
+A quote detail is usually ATTRIBUTED: give who (the person as the document names them) and whoHe (their name as a Hebrew slide writes it); every other detail has who and whoHe "". The document must say beside the quote that they said it, and the post carries two attributed facts at most.
 Only details about this post's own subject, 3 to 8 of them, none that repeats a fact the post already has. A detail a document does not state is never written: when the documents hold fewer than 3 such details, return the ones they hold, and the engine leaves the topic for another.`,
 };
 
@@ -452,7 +454,7 @@ export function slidesUser({ format, n, outline, facts, edits = [], problems = [
     `TOPIC: ${outline.topic}`,
     !legacy && outline.subject ? `SUBJECT: ${Object.entries(outline.subject).filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`).join(', ') || '(none)'}` : '',
     'FACTS (state only these; cite their ids):',
-    ...facts.map((f) => `- ${f.key}${f.detail ? ` (detail: ${f.detail})` : ''}: ${f.claim}  [quote: "${f.quote}"]`),
+    ...facts.map((f) => `- ${f.key}${f.detail ? ` (detail: ${f.detail})` : ''}${f.who ? ` (ATTRIBUTED to ${f.whoHe || f.who}: the slide says "לפי ${f.whoHe || f.who}" or "${f.whoHe || f.who} סיפר", never as plain fact)` : ''}: ${f.claim}  [quote: "${f.quote}"]`),
     facts.some((f) => f.detail) ? `DETAILS: the facts marked "detail" are the specific moments, words and numbers a fan keeps. Put at least ${Math.min(3, facts.filter((f) => f.detail).length)} of them on the slides, each on the slide it belongs to, cited by its id: they are what makes this post worth finishing.` : '',
     'OUTLINE:',
     ...outline.items.map((it, i) => `${i + 1}. ${legacy ? '' : `${it.role || 'item'}: `}${it.point} (facts: ${(it.facts || []).join(', ') || 'none'})`),
@@ -473,7 +475,7 @@ export function rewriteUser({ flagged, facts }) {
   const limits = (l) => (l ? `; at most ${l.maxChars} characters${l.sentences ? ` and ${l.sentences} sentences` : ''}` : '');
   return [
     'FACTS THE POST STANDS ON (each with its id and what the source says):',
-    ...facts.map((f) => `- ${f.key ? `${f.key}: ` : ''}${f.claim}${f.quote ? ` (source: "${f.quote}")` : ''}`),
+    ...facts.map((f) => `- ${f.key ? `${f.key}: ` : ''}${f.claim}${f.quote ? ` (source: "${f.quote}")` : ''}${f.who ? ` (ATTRIBUTED to ${f.whoHe || f.who}: a text stating it names them and that they said it)` : ''}`),
     '',
     'FLAGGED TEXTS (every number in a text must be in the source words of the facts it may use):',
     ...flagged.map((x) =>
@@ -502,7 +504,7 @@ export function repairUser({ format, topic, facts, targets, pack = null }) {
     `TOPIC: ${topic}`,
     linesRule(pack),
     'FACTS THE POST MAY CITE (each with its id and the words of its source):',
-    ...facts.map((f) => `- ${f.key}: ${f.claim}  [quote: "${f.quote}"]`),
+    ...facts.map((f) => `- ${f.key}${f.who ? ` (ATTRIBUTED to ${f.whoHe || f.who}: name them and that they said it)` : ''}: ${f.claim}  [quote: "${f.quote}"]`),
     '',
     'REFUSED TEXTS:',
     ...targets.map((t) =>

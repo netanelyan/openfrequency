@@ -7,7 +7,8 @@ import { nowIso } from '../core/clock.js';
 import { ensureDir, mediaDir } from '../core/paths.js';
 import { record } from '../budget/ledger.js';
 import { blockedQuery } from '../rules/check.js';
-import { screenImage } from './safety.js';
+import { flatten, screenImage } from './safety.js';
+import { imageSize } from './size.js';
 
 // HARD RULE 5: images only from licensed libraries, with the licence stored per
 // image. Pexels and Unsplash (commercial use, their own licences) and Wikimedia
@@ -45,10 +46,28 @@ const describes = (text, words) => {
   return words.find((w) => t.includes(` ${String(w).toLowerCase()} `)) || null;
 };
 
+/**
+ * The size a photograph must have on its shorter side, by where it goes: the cover fills the frame, a content
+ * slide's photograph sits in a frame, one side of a head-to-head fills half the cover, and the ground behind the
+ * slides is blurred. One floor of 800 pixels for all of them threw out nearly every photograph of today's fighters:
+ * Commons keeps them at 387 to 862 pixels (Kamaru Usman, Merab Dvalishvili, Islam Makhachev), and the fight
+ * account's posts went out with no face on them.
+ */
+export const MIN_SIDE = { cover: 600, framed: 450, half: 450, ground: 400 };
+
+/**
+ * Whether a Commons file can be used: a photograph (a JPEG, or a PNG that is no screenshot) with a licence on the
+ * allowlist and a name to credit, at least `minSide` pixels on its shorter side. Pure.
+ */
+export function commonsUsable(c, minSide = MIN_SIDE.cover) {
+  const photo = c.mime === 'image/jpeg' || (c.mime === 'image/png' && !/screen ?shot|screen capture/i.test(`${c.providerId || ''} ${c.alt || ''}`));
+  return Boolean(c.url) && photo && Math.min(...c.original) >= minSide && commonsLicenseOk(c.license) && Boolean(c.author || !needsCredit(c.license));
+}
+
 const commons = {
   id: 'commons',
   ready: () => true,
-  async search(query, { n = 20 } = {}) {
+  async search(query, { n = 20, minSide = MIN_SIDE.cover } = {}) {
     const params = new URLSearchParams({
       action: 'query', format: 'json', formatversion: '2', generator: 'search', gsrsearch: `${query} filetype:bitmap`, gsrnamespace: '6', gsrlimit: String(n),
       prop: 'imageinfo|categories', iiprop: 'url|size|extmetadata|mime', iiurlwidth: '1440', clshow: '!hidden', cllimit: 'max',
@@ -78,9 +97,9 @@ const commons = {
       })
       // The sharpest first: a blurry candid was picked over a portrait because it came first.
       .sort((a, b) => Math.min(...b.original) - Math.min(...a.original))
-      // A license that requires attribution is usable only with a name to attribute. And a
-      // photograph, not a still from a video or a screenshot: a JPEG at least 800 pixels a side.
-      .filter((c) => c.url && c.mime === 'image/jpeg' && Math.min(...c.original) >= 800 && commonsLicenseOk(c.license) && (c.author || !needsCredit(c.license)));
+      // A license that requires attribution is usable only with a name to attribute; a photograph big enough for
+      // where it goes (MIN_SIDE).
+      .filter((c) => commonsUsable(c, minSide));
   },
 };
 
@@ -207,7 +226,7 @@ export function imageCredit(db, post) {
  * post's image step keeps it, so an account whose posts come out without photographs can be told why
  * (npm run images:check).
  */
-export async function findImage(ctx, { pack, query, postId = null, claim = '', why = null }) {
+export async function findImage(ctx, { pack, query, postId = null, claim = '', why = null, minSide = MIN_SIDE.cover }) {
   const miss = (k) => why && (why[k] = (why[k] || 0) + 1);
   if (!query || (ctx.mode === 'recorded' && !ctx.imagesLive)) return null;
   const blocked = blockedQuery(pack, query) || describes(query, ALWAYS_BLOCK);
@@ -222,7 +241,7 @@ export async function findImage(ctx, { pack, query, postId = null, claim = '', w
   for (const prov of order) {
     let found = [];
     try {
-      found = await prov.search(query, { pack });
+      found = await prov.search(query, { pack, minSide });
       if (prov.id !== 'pack') record(ctx.db, { accountId: pack.id, postId, api: prov.id, usd: 0, tag: 'image-search' });
     } catch (e) {
       ctx.log?.(`${prov.id}: ${e.message}`);
@@ -255,6 +274,15 @@ export async function findImage(ctx, { pack, query, postId = null, claim = '', w
       } catch {
         miss('the download failed');
         continue;
+      }
+      // A see-through PNG is flattened onto the account's ground first: what is screened is what is stored and drawn.
+      if (imageSize(bytes.buf)?.alpha) {
+        try {
+          bytes = { buf: await flatten(bytes.buf, pack.theme?.colors?.bg), type: 'image/jpeg' };
+        } catch {
+          miss('a see-through PNG could not be flattened');
+          continue;
+        }
       }
       // The screen: a picture with blood, an injury, a fighter down, a watermark, a belt or a weapon is never used.
       const screen = await screenImage(ctx, { pack, buf: bytes.buf, type: bytes.type, meta: `${c.providerId || ''} ${c.alt || ''} ${c.categories || ''}`, postId, query, claim });

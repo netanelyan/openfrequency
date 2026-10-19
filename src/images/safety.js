@@ -35,6 +35,31 @@ export function refusingWord(text, extra = []) {
   return [...REFUSE_WORDS, ...extra].find((w) => t.includes(` ${String(w).toLowerCase()} `)) || null;
 }
 
+/** A see-through PNG drawn onto a solid colour, as a JPEG, through the render browser's canvas (nothing is fetched). */
+export async function flatten(buf, ground = '#111111') {
+  const browser = await getBrowser();
+  const context = await browser.newContext({ viewport: { width: 200, height: 200 } });
+  await context.route('**/*', (route) => route.abort());
+  const tab = await context.newPage();
+  try {
+    await tab.setContent(`<img id="i" src="data:image/png;base64,${buf.toString('base64')}">`, { waitUntil: 'load' });
+    const data = await tab.evaluate((color) => {
+      const img = document.getElementById('i');
+      const c = document.createElement('canvas');
+      c.width = img.naturalWidth;
+      c.height = img.naturalHeight;
+      const g = c.getContext('2d');
+      g.fillStyle = color;
+      g.fillRect(0, 0, c.width, c.height);
+      g.drawImage(img, 0, 0);
+      return c.toDataURL('image/jpeg', 0.92).split(',')[1];
+    }, /^#[0-9a-f]{6}$/i.test(ground) ? ground : '#111111');
+    return Buffer.from(data, 'base64');
+  } finally {
+    await context.close().catch(() => {});
+  }
+}
+
 /**
  * The share of deep, saturated red pixels in an image, through the render
  * browser's canvas (nothing is fetched: the image is inlined).
