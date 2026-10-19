@@ -2,9 +2,9 @@ import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { contentRange, kindProblems, KINDS, ranksOf, shapeProblems, structureNumbers } from '../src/formats/kinds.js';
-import { buildPost, candidatesOf, gateDraft, hashtagsFor, keepItems, loadPost, mentionsDay, needsSides, sourceLabel, textsOf } from '../src/pipeline/build.js';
-import { outlineUser } from '../src/pipeline/prompts.js';
+import { contentRange, kindProblems, KINDS, rankAmount, ranksOf, shapeProblems, structureNumbers } from '../src/formats/kinds.js';
+import { bothSides, buildPost, candidatesOf, gateDraft, hashtagsFor, keepItems, loadPost, mentionsDay, needsSides, sourceLabel, textsOf } from '../src/pipeline/build.js';
+import { outlineUser, slidesUser } from '../src/pipeline/prompts.js';
 import { reviewUser } from '../src/voice/review.js';
 import { tokenOf } from '../src/verify/claims.js';
 import { closeBrowser, renderPost, slidePlaces } from '../src/render/render.js';
@@ -295,4 +295,51 @@ test('a ranking of amounts in millions and billions is ordered by the amount, no
   assert.ok(!kindProblems({ kind: 'ranking' }, ok).some((m) => /order/.test(m)), 'five deals that rise from 450 million to 32 billion');
   const wrong = post(['6.5 מיליארד', '650 מיליון', '14.8 מיליארד', '1,200 מיליון', '32 מיליארד']);
   assert.ok(kindProblems({ kind: 'ranking' }, wrong).some((m) => /order/.test(m)), '1,200 million is less than 14.8 billion');
+});
+
+test("a ranked amount is read with its scale wherever the graphic wrote it, so 8,200 million ranks above 25 million", () => {
+  const g = (value, sub = '', title = '', label = 'שווי') => ({ role: 'rank', title: 'x', body: 'שורה.', visual: { type: 'stat', title, items: [{ label, value, value2: '', sub }] } });
+  assert.equal(rankAmount(g('8,200', 'מיליון דולר')), 8.2e9, 'the scale in the line under the number');
+  assert.equal(rankAmount(g('25 מיליון')), 25e6);
+  assert.equal(rankAmount(g('$8.2B')), 8.2e9);
+  assert.equal(rankAmount(g('8,200', '', 'שווי במיליוני דולרים')), 8.2e9, 'the scale once, in the graphic\'s title');
+  assert.equal(rankAmount(g('40', '', 'Plan B')), 40, 'a letter without its dollar sign or brackets is not read as a scale');
+  assert.equal(rankAmount(g('40', '', 'Valuation ($B)')), 40e9);
+  assert.equal(rankAmount(g('14', 'ניצחונות')), 14, 'a count with no scale stays a count');
+  assert.equal(rankAmount({ role: 'rank', title: 'x', body: '6.5 מיליארד דולר.', visual: null }), 6.5e9);
+  // The AI companies: 25 million, 300 million, 1.5 billion, 8,200 million, 80 billion rise from 5th to 1st.
+  const post = { hook: 'h', sub: '', subject: {}, slides: [g('25 מיליון'), g('300 מיליון'), g('1.5 מיליארד'), g('8,200', 'מיליון $'), g('80 מיליארד')] };
+  assert.ok(!kindProblems({ kind: 'ranking' }, post).some((m) => /order/.test(m)));
+  post.slides[3] = g('8,200', 'דולר');
+  assert.ok(kindProblems({ kind: 'ranking' }, post).some((m) => /order/.test(m)), 'a bare 8,200 dollars still breaks the order');
+});
+
+test('the writer of a ranking is told the rank-slide rules before anything else', () => {
+  const outline = { topic: 't', items: [{ role: 'rank', point: 'p', facts: [] }] };
+  const user = slidesUser({ format: fmt('ranking'), n: 5, outline, facts: [], pack: null });
+  const lines = user.split('\n');
+  assert.match(lines[1], /^RANK SLIDES: .*"stat" visual whose value is that number.*same unit/);
+  const plain = slidesUser({ format: fmt('ranking'), n: 5, outline, facts: [], pack: { theme: { visuals: ['bars'] } } });
+  assert.match(plain, /RANK SLIDES: .*in its body/);
+  assert.doesNotMatch(plain, /"stat" visual/, 'an account without the stat graphic is not told to draw one');
+  assert.doesNotMatch(slidesUser({ format: fmt('head-to-head'), n: 3, outline, facts: [], pack: null }), /RANK SLIDES/);
+});
+
+test('a head-to-head stat needs a value for each side in its quotes, and the outline is told so first', () => {
+  const f = (key, quote, verified = true) => ({ key, quote, verified });
+  const outline = { subject: { a: 'אוליביירה', b: 'חביב' }, imageQuery: 'Charles Oliveira', imageQueryB: 'Khabib Nurmagomedov' };
+  // The Oliveira against Khabib post: its documents held Oliveira's numbers and never Khabib's.
+  const oneSide = [f('f1', 'Oliveira holds the record for most submission wins in UFC history, with 16.'), f('f2', 'Charles Oliveira is 34-10 with one no contest.'), f('f3', 'Khabib Nurmagomedov retired unbeaten.', false)];
+  assert.equal(bothSides({ facts: ['f1'] }, oneSide, outline), false, 'the documents never name Khabib in a verified quote');
+  assert.equal(bothSides({ facts: ['f1', 'f2'] }, oneSide, outline), false);
+  const both = [...oneSide, f('f4', 'Khabib Nurmagomedov retired with a record of 29-0.'), f('f5', 'Khabib defended the belt three times.')];
+  assert.equal(bothSides({ facts: ['f2', 'f4'] }, both, outline), true, 'two records, one a side');
+  assert.equal(bothSides({ facts: ['f1'] }, both, outline), false, "Oliveira's submissions alone");
+  assert.equal(bothSides({ facts: ['f1', 'f5'] }, both, outline), true);
+  // Names the quotes do not use (Hebrew names over English quotes) cannot tell: the stat stands.
+  const herbs = [f('f1', 'mint likes soil that stays moist, and basil wants the top 2 cm of soil to dry before watering')];
+  assert.equal(bothSides({ facts: ['f1'] }, herbs, { subject: { a: 'נענע', b: 'בזיליקום' } }), true);
+  const user = outlineUser(fmt('head-to-head'), [{ ref: 'D1', title: 't', url: 'u', text: 'x' }]);
+  assert.match(user, /BOTH SIDES: .*at least 3 of the same stats.*"usable": false/);
+  assert.doesNotMatch(outlineUser(fmt('ranking'), [{ ref: 'D1', title: 't', url: 'u', text: 'x' }]), /BOTH SIDES/);
 });

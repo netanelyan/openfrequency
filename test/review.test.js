@@ -41,9 +41,11 @@ test('a text scored 4 or more is rewritten, and the rewrite is kept when it pass
   try {
     keepOnly(path.join(home, 'packs', 'demo'), ['basil-containers']);
     const calls = [];
+    let reviews = 0;
     const ctx = withReviewer(
       home,
-      () => ({ reviews: [{ index: 0, botScore: 7, tells: ['too polished'], factProblem: '' }] }),
+      // The first look flags the cover; the second reads the rewrite as a person's.
+      () => ({ reviews: [{ index: 0, botScore: reviews++ ? 2 : 7, tells: ['too polished'], factProblem: '' }] }),
       () => ({ rewrites: [{ index: 0, text: 'בזיליקום במרפסת: 5 דברים שהוא צריך מכם!' }] }),
       calls
     );
@@ -52,6 +54,8 @@ test('a text scored 4 or more is rewritten, and the rewrite is kept when it pass
     const post = loadPost(ctx.db, res.postId);
     assert.equal(post.hook, 'בזיליקום במרפסת: 5 דברים\nשהוא צריך מכם.', 'the rewrite is kept, its exclamation mark fixed and its line broken in code');
     assert.equal(post.checks.rewrites.length, 1);
+    assert.equal(post.review_score, 2, 'the score is the rewrite measured again, not 3 put down unread');
+    assert.deepEqual(calls.filter((c) => c.task === 'review').length, 2, 'the rewritten text is scored again');
     assert.equal(post.checks.reviewer, 'claude');
     assert.equal(calls.find((c) => c.task === 'review').model, 'claude-sonnet-5-5', 'the review runs on Sonnet: Haiku was measured and missed what it is for');
     assert.equal(calls.find((c) => c.task === 'rewrite').model, 'claude-sonnet-5-5', 'the rewrite on the drafting model');
@@ -119,4 +123,25 @@ test('a generic closing question is dropped in code, and a question already in t
   assert.equal(joinCaption('הבזיליקום אוהב שמש.', 'איזה צמח הכי קשה לכם לשמור בחיים?'), 'הבזיליקום אוהב שמש. איזה צמח הכי קשה לכם לשמור בחיים?');
   // A caption with no full stop of its own does not run into the question.
   assert.equal(joinCaption('Air Canada ניסתה להתנער ממנו', 'הייתם סומכים על צ׳טבוט?'), 'Air Canada ניסתה להתנער ממנו. הייתם סומכים על צ׳טבוט?');
+});
+
+test('a rewritten text is scored again as it now reads, and one that still reads as a bot blocks the post', async () => {
+  const { home, cleanup } = tempHome();
+  try {
+    keepOnly(path.join(home, 'packs', 'demo'), ['basil-containers']);
+    const seen = [];
+    const ctx = withReviewer(
+      home,
+      (req) => (seen.push(req.user), { reviews: [{ index: 0, botScore: 7, tells: ['too polished'], factProblem: '' }] }),
+      () => ({ rewrites: [{ index: 0, text: 'בזיליקום במרפסת: 5 דברים שהוא צריך מכם' }] })
+    );
+    const res = await buildPost(ctx, { pack: ctx.pack('demo'), formatKey: 'care-guide' });
+    assert.equal(seen.length, 2);
+    assert.match(seen[1], /^\[0\] \(cover[^)]*\) בזיליקום במרפסת: 5 דברים/m, 'the second look reads the rewrite alone');
+    assert.equal(res.status, 'blocked');
+    assert.equal(res.kind, 'voice');
+    assert.match(res.reason, /נשמע כמו בוט \(7\/10\) גם אחרי שכתוב/);
+  } finally {
+    cleanup();
+  }
 });

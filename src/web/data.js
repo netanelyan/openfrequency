@@ -152,7 +152,31 @@ export function results(ctx, t = now()) {
   });
   // The morning's feedback: each account's latest report and what became of its plans.
   const feedback = latestFeedback(ctx.db, ctx.packs);
-  return { posts, scored, winners, losers, formats, medians, demo, trends, learning, feedback };
+  return { posts, scored, winners, losers, formats, medians, demo, trends, learning, feedback, blocks: blockRates(ctx, t) };
+}
+
+/**
+ * Which checks stop posts: of the posts drafted in the last 30 days, how many each check blocked, and how many
+ * first drafts failed it (the repair and the redraft mend most of those). A block with no checks recorded (one
+ * before they were, or one that is not a check's: no source, no photograph, the reviewer) counts under its kind.
+ */
+export function blockRates(ctx, t = now()) {
+  const since = new Date(t - 30 * DAY).toISOString();
+  const posts = ctx.db.all("SELECT id, account_id, status FROM posts WHERE created_at >= ? AND sample = 0 AND status NOT IN ('drafting')", since);
+  const rows = new Map();
+  const row = (check) => rows.get(check) || rows.set(check, { check, blocked: 0, firstFail: 0 }).get(check);
+  let blocked = 0;
+  for (const p of posts) {
+    const steps = ctx.db.all("SELECT step, detail_json FROM steps WHERE post_id = ? AND step IN ('slides', 'blocked') ORDER BY id", p.id).map((x) => ({ step: x.step, d: j(x.detail_json, {}) }));
+    const first = steps.find((x) => x.step === 'slides');
+    for (const c of first?.d.checks || []) row(c).firstFail++;
+    const b = p.status === 'blocked' ? steps.filter((x) => x.step === 'blocked').pop() : null;
+    if (!b) continue;
+    blocked++;
+    for (const c of b.d.checks?.length ? b.d.checks : [`kind:${b.d.kind || 'other'}`]) row(c).blocked++;
+  }
+  const list = [...rows.values()].sort((a, b) => b.blocked - a.blocked || b.firstFail - a.firstFail);
+  return { total: posts.length, blocked, rows: list };
 }
 
 /** A pack's hand-checked facts, each with its state today and anything wrong with it. */

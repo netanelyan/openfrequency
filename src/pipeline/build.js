@@ -22,7 +22,8 @@ import { normVisual, slideHasVisual, visualProblems, visualsOf, visualText } fro
 import { renderPost } from '../render/render.js';
 import { israelDate } from '../schedule/israel.js';
 import { upcoming } from '../schedule/events.js';
-import { detailsPrompt, detailsUser, outlinePrompt, outlineUser, rewritePrompt, rewriteUser, slidesPrompt, slidesUser, visualsNeeded } from './prompts.js';
+import { detailsPrompt, detailsUser, outlinePrompt, outlineUser, repairPrompt, repairUser, rewritePrompt, rewriteUser, slidesPrompt, slidesUser, visualsNeeded } from './prompts.js';
+import { REPAIR_ATTEMPTS, applyRepair, repairPlan } from './repair.js';
 import { nicheForOutline, nicheForSlides, rivalsOf } from './rivals.js';
 import { aboutSubject, research } from '../sources/research.js';
 
@@ -307,6 +308,18 @@ export function checkPost(ctx, pack, draft, facts, format = null) {
 const say = (p) => `${p.where}: ${p.msg}`;
 
 /**
+ * The check a problem failed, by a name that stays put across wordings, for the block rates on the Results page:
+ * the fact gate, the format's shape and its parts (the graphics, the details), each caption and length limit, and
+ * each voice tell, law, honesty and account rule by its own id.
+ */
+export function checkOf(p) {
+  if (p.code === 'verify') return 'facts';
+  if (p.code === 'shape') return p.where === 'visual' ? 'visuals' : p.where === 'details' ? 'details' : 'shape';
+  return p.code || 'other';
+}
+const checksOf = (problems) => [...new Set(problems.map(checkOf))];
+
+/**
  * The caption and its closing question, once, and never a generic one. A model
  * that already ended the caption with the question would otherwise ask it twice
  * ("ידעתם? ידעתם?"), and a generic engagement line ("ידעתם את זה?") is the most
@@ -379,8 +392,8 @@ export function fixDraft(draft) {
 }
 
 /** Output room per call. The ceiling reserved for a call is priced on this, so it is no bigger than the answer needs. */
-export const MAX_TOKENS = { outline: 10_000, slides: 8_000, rewrite: 6_000 };
-export const EFFORT = { outline: 'medium', slides: 'medium', rewrite: 'medium' };
+export const MAX_TOKENS = { outline: 10_000, slides: 8_000, rewrite: 6_000, repair: 4_000 };
+export const EFFORT = { outline: 'medium', slides: 'medium', rewrite: 'medium', repair: 'medium' };
 
 /**
  * The content items the outline planned, kept to those that still stand after
@@ -440,6 +453,15 @@ export function draftFromAnswer(ctx, pack, { format, answer: d, outline, items, 
   draft.captionIg = igCaption(draft);
   // What code can fix, code fixes: no model call for a stray exclamation mark.
   const fixes = [...fixDraft(draft), ...lineDraft(draft, pack), ...citeNumbers(draft, facts)];
+  const checked = checkDraft(ctx, pack, { draft, format, facts, items, attempt });
+  return { draft, checked, fixes };
+}
+
+/**
+ * Every check on a written draft: checkPost, and what the slides owe the plan (its details, its roles in order).
+ * Returns { problems, gate }.
+ */
+export function checkDraft(ctx, pack, { draft, format, facts, items, attempt = 0 }) {
   const checked = checkPost(ctx, pack, draft, facts, format);
   // The details the research found are what makes a post worth finishing: at least three of them on the slides.
   const details = facts.filter((f) => f.verified && f.detail).map((f) => f.key);
@@ -452,8 +474,85 @@ export function draftFromAnswer(ctx, pack, { format, answer: d, outline, items, 
   }
   // The slides follow the outline's plan: the same roles, in order.
   const roles = draft.slides.filter((s) => s.kind === 'item').map((s) => s.role).join(',');
-  if (!legacy && roles !== items.map((it) => it.role).join(',')) checked.problems.unshift({ where: 'shape', code: 'shape', msg: `the slides must follow the outline's roles in order (${items.map((it) => it.role).join(', ')})` });
-  return { draft, checked, fixes };
+  if (kindName(format) !== 'list' && roles !== items.map((it) => it.role).join(',')) checked.problems.unshift({ where: 'shape', code: 'shape', msg: `the slides must follow the outline's roles in order (${items.map((it) => it.role).join(', ')})` });
+  return checked;
+}
+
+// Which limits a repaired text is told, by target.
+const TARGET_KIND = { cover: 'cover', 'cover line 2': 'sub', caption: 'captionLong', 'caption short': 'captionShort' };
+
+/** One target as the repair call is shown it: its text now, its role, its limits and the checks it failed. */
+function repairTarget(draft, pack, target, problems) {
+  const s = /^slide \d+$/.test(target) ? draft.slides[Number(target.slice(6))] : null;
+  const text = target === 'keywords' ? (draft.keywords || []).join(', ') : { cover: draft.hook, 'cover line 2': draft.sub, caption: draft.caption, 'caption short': draft.captionShort }[target];
+  return {
+    target, role: s?.role, problems: problems.map((p) => p.msg),
+    limits: TARGET_KIND[target] ? limitsFor(TARGET_KIND[target], pack) : s ? limitsFor('slideBody', pack) : null,
+    now: s ? { title: s.title, body: s.body, a: s.a || '', b: s.b || '', facts: s.factKeys || [] } : { text: text || '' },
+  };
+}
+
+/**
+ * The refused texts of a draft, mended in at most REPAIR_ATTEMPTS small calls (src/pipeline/repair.js). A repair
+ * is kept only when it clears at least one check and adds none. Returns { draft, checked, rounds }: the draft as
+ * far as it was mended, its checks, and what each round did. A draft with a problem no repair can reach is
+ * returned as it is, without a call.
+ */
+export async function repairDraft(ctx, pack, { draft, checked, format, facts, items, outline, attempt = 0, ttl = '5m', meta = {} }) {
+  const rounds = [];
+  const verified = facts.filter((f) => f.verified);
+  const sp = repairPrompt(pack, { ttl });
+  const lastTry = new Map();
+  for (let round = 1; round <= REPAIR_ATTEMPTS && checked.problems.length; round++) {
+    const plan = repairPlan(draft, checked.problems);
+    if (!plan.targets.size || plan.stuck.length) break;
+    const targets = [...plan.targets].map(([t, ps]) => ({ ...repairTarget(draft, pack, t, ps), ...(lastTry.get(t) || {}) }));
+    let res;
+    try {
+      res = await askJson(ctx, {
+        task: 'repair', role: 'rewrite', system: sp.system, user: repairUser({ format, topic: outline.topic, facts: verified, targets, pack }), schema: sp.schema,
+        effort: EFFORT.repair, maxTokens: MAX_TOKENS.repair, meta: { ...meta, attempt: attempt + round + 1 },
+      });
+    } catch (e) {
+      if (e instanceof NoRecording) break;
+      throw e;
+    }
+    const kept = [];
+    const refused = [];
+    lastTry.clear();
+    for (const r of res.data.repairs || []) {
+      const ps = plan.targets.get(r.target);
+      if (!ps || kept.some((k) => k.target === r.target)) continue;
+      const answer = /^slide /.test(r.target) ? { title: r.title, body: r.body, a: r.a, b: r.b, facts: r.facts } : r.text;
+      const refuse = (why) => {
+        refused.push({ target: r.target, why });
+        lastTry.set(r.target, { last: answer, refused: why });
+      };
+      // A number the gate refused is removed or cited, never another number: the code holds the repair to it.
+      const made = applyRepair(draft, r.target, r, { facts, factLock: ps.some((p) => p.code === 'verify') });
+      if (made.refused) {
+        refuse([made.refused]);
+        continue;
+      }
+      lineDraft(made.draft, pack);
+      citeNumbers(made.draft, facts);
+      made.draft.captionIg = igCaption(made.draft);
+      const next = checkDraft(ctx, pack, { draft: made.draft, format, facts, items, attempt });
+      const before = new Set(checked.problems.map(say));
+      const after = new Set(next.problems.map(say));
+      const added = [...after].filter((p) => !before.has(p));
+      const cleared = [...before].filter((p) => !after.has(p));
+      if (added.length || !cleared.length) {
+        refuse(added.length ? added : ['it cleared none of the checks']);
+        continue;
+      }
+      draft = made.draft;
+      checked = next;
+      kept.push({ target: r.target, cleared });
+    }
+    rounds.push({ round, targets: targets.map((t) => t.target), kept, refused, left: checked.problems.map(say), usd: res.usd });
+  }
+  return { draft, checked, rounds };
 }
 
 /**
@@ -535,15 +634,43 @@ export function planFrom(ctx, { pack, format, outline, cand, details = [] }) {
   // the slides call writes it around that detail, where dropping it broke the post's shape.
   const spare = details.filter((d) => d.verified && !planned.some((it) => it.facts.includes(d.key)));
   for (const it of planned) if (!it.facts.some((k) => good.has(k)) && !factFree(format, it.role) && spare.length) it.facts.push(spare.shift().key);
-  const fitted = fitShape(format, keepItems(format, planned, good));
+  // A head-to-head stat is two values, one a side, from the quotes: the Oliveira against Khabib post was planned on
+  // documents that held Oliveira's numbers alone, and every draft of it was refused. A stat whose quotes hold one
+  // side (bothSides) is no stat, and a matchup left with fewer than the kind's stats is not this format's post.
+  const oneSided = kindName(format) === 'head-to-head' ? planned.filter((it) => it.role === 'stat' && !bothSides(it, facts, outline)) : [];
+  const fitted = fitShape(format, keepItems(format, planned.filter((it) => !oneSided.includes(it)), good));
   const items = fitted.items;
   outline.items = planned;
   const shape = kindName(format) === 'list' ? (items.length < format.items[0] ? [`only ${items.length}`] : []) : shapeProblems(format, items.map((it) => it.role));
   if (shape.length || !good.size) {
-    const why = kindName(format) === 'list' ? `רק ${items.length} פריטים עם עובדה מאומתת, הפורמט צריך ${format.items[0]}` : `אחרי בדיקת העובדות הפוסט לא שומר על הצורה של ${kindOf(format).name}: ${shape.join('; ') || 'אין עובדות מאומתות'}`;
+    const why =
+      kindName(format) === 'list'
+        ? `רק ${items.length} פריטים עם עובדה מאומתת, הפורמט צריך ${format.items[0]}`
+        : `אחרי בדיקת העובדות הפוסט לא שומר על הצורה של ${kindOf(format).name}: ${shape.join('; ') || 'אין עובדות מאומתות'}${oneSided.length ? ` (${oneSided.length === 1 ? 'השוואה אחת' : `${oneSided.length} השוואות`} בלי ערך לשני הצדדים במסמכים)` : ''}`;
     return { why, facts };
   }
-  return { facts, good, items, trimmed: fitted.trimmed };
+  return { facts, good, items, trimmed: [...oneSided.map((it) => `${it.role}: ${it.point} (one side only)`), ...fitted.trimmed] };
+}
+
+/**
+ * Whether a head-to-head stat's quotes give it a value for each side. A side is known by its names (subject.a and
+ * imageQuery, subject.b and imageQueryB). When the post's verified quotes name one side and never the other, the
+ * documents hold one side only and no stat stands; when they name both, each stat's own quotes name both. When
+ * they name neither (Hebrew names over English quotes), the names cannot tell, and the stat stands.
+ */
+export function bothSides(item, facts, outline = {}) {
+  const namesOf = (...xs) => [...new Set(xs.join(' ').toLowerCase().split(/[^\p{L}\p{N}'-]+/u).filter((w) => w.length >= 3))];
+  const a = namesOf(outline.subject?.a || '', outline.imageQuery || '');
+  const b = namesOf(outline.subject?.b || '', outline.imageQueryB || '');
+  const verified = facts.filter((f) => f.verified);
+  const names = (side, quotes) => side.some((w) => quotes.some((q) => q.includes(w)));
+  const all = verified.map((f) => String(f.quote || '').toLowerCase());
+  const seenA = names(a, all);
+  const seenB = names(b, all);
+  if (!seenA && !seenB) return true;
+  if (!seenA || !seenB) return false;
+  const own = verified.filter((f) => (item.facts || []).includes(f.key)).map((f) => String(f.quote || '').toLowerCase());
+  return names(a, own) && names(b, own);
 }
 
 /** The words research looks for in a long article: the subject's names and the topic's own words. */
@@ -814,8 +941,11 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
       const made = draftFromAnswer(pctx, pack, { format, answer: res.data, outline, items, facts, closer, hook, cta, attempt });
       draft = made.draft;
       checked = made.checked;
-      step(db, postId, attempt ? 'redraft' : 'slides', checked.problems.length ? 'failed' : 'ok', { problems: checked.problems.map(say), fixed: made.fixes }, res.usd);
+      step(db, postId, attempt ? 'redraft' : 'slides', checked.problems.length ? 'failed' : 'ok', { problems: checked.problems.map(say), checks: checksOf(checked.problems), fixed: made.fixes }, res.usd);
       if (!checked.problems.length) break;
+      // Problems that each belong to one text are mended there (the repair, below), not by drafting the post again.
+      const rp = repairPlan(draft, checked.problems);
+      if (rp.targets.size && !rp.stuck.length) break;
       lastProblems = checked.problems;
       lastAnswer = res.data;
     }
@@ -829,12 +959,21 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
       checked = checkPost(pctx, pack, draft, facts, format);
       step(db, postId, 'visual', checked.problems.length ? 'failed' : 'ok', { dropped: [...bad], problems: checked.problems.map(say) });
     }
+    // ---- the repair: each refused text mended where it failed, with the checks' own words, before the post is blocked
+    let repairs = 0;
+    if (checked.problems.length) {
+      const fixed = await repairDraft(pctx, pack, { draft, checked, format, facts, items, outline, attempt: 1, ttl, meta: { recordingsDir: pack.recordingsDir, docKey: cand.key, format: format.base || format.id } });
+      for (const r of fixed.rounds) step(db, postId, 'repair', r.left.length ? 'failed' : 'ok', { round: r.round, targets: r.targets, kept: r.kept, refused: r.refused, problems: r.left }, r.usd);
+      repairs = fixed.rounds.length;
+      draft = fixed.draft;
+      checked = fixed.checked;
+    }
     if (checked.problems.length) {
       // The law and honesty come first in the reason, then the facts, then the shape, then the voice.
       const rank = (p) => (/^(compliance|honesty|brand|rule)/.test(p.code) ? 0 : p.code === 'verify' ? 1 : /^(shape|caption|keywords|length|overlay)$/.test(p.code) ? 2 : 3);
       const sorted = checked.problems.slice().sort((a, b) => rank(a) - rank(b));
       const kind = rank(sorted[0]) === 0 ? 'rules' : rank(sorted[0]) === 1 ? 'fact_check' : rank(sorted[0]) === 2 ? 'shape' : 'voice';
-      return block(kind, sorted.slice(0, 3).map(say).join(' · '), { problems: sorted.map(say) });
+      return block(kind, `${sorted.slice(0, 3).map(say).join(' · ')}${repairs ? ` (${repairs === 1 ? 'אחרי תיקון אחד' : `אחרי ${repairs} תיקונים`})` : ''}`, { problems: sorted.map(say), checks: checksOf(sorted), repairs });
     }
 
     // ---- the second look: does it sound like a bot, and does any text say more
@@ -940,10 +1079,26 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
       draft.slides[v.idx].visual = null;
       dropped.push({ where: v.where, why: v.factProblem });
     }
-    const scores = review.reviews.map((r) => (r.rewritten ? Math.min(r.botScore, REWRITE_AT - 1) : r.botScore));
+    // A rewritten text is scored again, as it now reads. It used to be put down as REWRITE_AT - 1 unread, so every
+    // approved post with one rewrite showed 3/10: a number nobody measured. A rescore that fails keeps that floor,
+    // and the step says so.
+    const redone = review.reviews.map((r, i) => (r.rewritten ? i : -1)).filter((i) => i >= 0);
+    let rescored = null;
+    if (redone.length) {
+      const now = textsOf(draft);
+      try {
+        const again = await reviewTexts(pctx, { pack, texts: redone.map((i) => now[i]), facts: verifiedFacts });
+        redone.forEach((i, k) => (review.reviews[i].after = again.reviews[k]));
+        rescored = redone.map((i) => ({ where: now[i].where, before: review.reviews[i].botScore, after: review.reviews[i].after.botScore, tells: review.reviews[i].after.tells }));
+      } catch (e) {
+        if (e instanceof BudgetError) throw e;
+        rescored = { error: String(e.message).slice(0, 200) };
+      }
+    }
+    const scores = review.reviews.map((r) => (r.after ? r.after.botScore : r.rewritten ? Math.min(r.botScore, REWRITE_AT - 1) : r.botScore));
     const worst = Math.max(0, ...scores);
     const unfixed = review.reviews.map((r, i) => ({ ...r, where: texts[i].where })).filter((r) => r.factProblem && !r.rewritten);
-    step(db, postId, 'review', worst >= BLOCK_AT || unfixed.length ? 'failed' : 'ok', { reviewer: review.reviewer, worst, scores: texts.map((t, i) => ({ where: t.where, score: review.reviews[i].botScore, tells: review.reviews[i].tells, factProblem: review.reviews[i].factProblem || undefined })), rewrites: applied, visualsDropped: dropped });
+    step(db, postId, 'review', worst >= BLOCK_AT || unfixed.length ? 'failed' : 'ok', { reviewer: review.reviewer, worst, scores: texts.map((t, i) => ({ where: t.where, score: review.reviews[i].botScore, tells: review.reviews[i].tells, factProblem: review.reviews[i].factProblem || undefined })), rewrites: applied, ...(rescored ? { rescored } : {}), visualsDropped: dropped });
     if (unfixed.length) return block('review', `הבודק מצא משפט שאומר יותר מהעובדות: ${unfixed.slice(0, 2).map((r) => `${r.where}: ${r.factProblem}`).join(' · ')}`);
     if (worst >= BLOCK_AT) return block('voice', `נשמע כמו בוט (${worst}/10)${applied.length ? ' גם אחרי שכתוב' : ''}`);
 

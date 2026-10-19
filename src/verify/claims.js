@@ -37,28 +37,112 @@ export function normalise(s) {
     .trim();
 }
 
-const WORDS = {
-  zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12,
-  thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19, twenty: 20, thirty: 30,
-  forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90, hundred: 100, thousand: 1000, million: 1e6, billion: 1e9,
+// Numbers written in words, read as the digits they mean before anything is compared: "עשרים ושלושה" is 23
+// and "twenty-three" is 23, not a 20 and a 3 that no quote holds. A run of number words is one number: tens
+// and units joined by "ו" or "and", a teen ("שלוש עשרה", "אחד עשר"), hundreds and thousands ("מאה ושבעים
+// וחמישה", "שלושת אלפים", "one hundred and seventy-five").
+//
+// Each word is [value, type]: 'n' adds itself, 'x' multiplies what came before it (hundred, אלף, million),
+// 'p' is a plural multiplier that means nothing without a number before it ("מאות אוהדים" is hundreds of
+// fans, not 100), 'a' is a whole number only on its own ("פעמיים", "twice").
+const EN_WORDS = {
+  zero: [0, 'n'], one: [1, 'n'], two: [2, 'n'], three: [3, 'n'], four: [4, 'n'], five: [5, 'n'], six: [6, 'n'], seven: [7, 'n'], eight: [8, 'n'], nine: [9, 'n'],
+  ten: [10, 'n'], eleven: [11, 'n'], twelve: [12, 'n'], thirteen: [13, 'n'], fourteen: [14, 'n'], fifteen: [15, 'n'], sixteen: [16, 'n'], seventeen: [17, 'n'], eighteen: [18, 'n'], nineteen: [19, 'n'],
+  twenty: [20, 'n'], thirty: [30, 'n'], forty: [40, 'n'], fifty: [50, 'n'], sixty: [60, 'n'], seventy: [70, 'n'], eighty: [80, 'n'], ninety: [90, 'n'],
+  hundred: [100, 'x'], thousand: [1000, 'x'], million: [1e6, 'x'], billion: [1e9, 'x'], twice: [2, 'a'],
 };
 const ORDINALS = { third: 3, fourth: 4, fifth: 5, sixth: 6, seventh: 7, eighth: 8, ninth: 9, tenth: 10, eleventh: 11, twelfth: 12, thirteenth: 13, fourteenth: 14, fifteenth: 15, sixteenth: 16, seventeenth: 17, eighteenth: 18, nineteenth: 19, twentieth: 20 };
-const WORD_RE = new RegExp(`\\b(${[...Object.keys(WORDS), ...Object.keys(ORDINALS)].join('|')})\\b`, 'gi');
 
-// Hebrew counting words, three and up. One and two (אחד, שני, שתי) are left out on
-// purpose: "אחד הצמחים" and "יום שני" are not numbers, and a guard that refuses
-// correct Hebrew is a broken guard. Up to two prefix letters are allowed ("ובשלושת").
-const HE_NUM = {
-  שלוש: 3, שלושה: 3, שלושת: 3, ארבע: 4, ארבעה: 4, ארבעת: 4, חמש: 5, חמישה: 5, חמשת: 5, שש: 6, שישה: 6, ששת: 6,
-  שבע: 7, שבעה: 7, שבעת: 7, שמונה: 8, שמונת: 8, תשע: 9, תשעה: 9, תשעת: 9, עשר: 10, עשרה: 10, עשרת: 10,
-  עשרים: 20, שלושים: 30, ארבעים: 40, חמישים: 50, שישים: 60, שבעים: 70, שמונים: 80, תשעים: 90,
+// One and two (אחד, שני, שתי) count only inside a longer number: on their own, "אחד הצמחים" and "יום שני"
+// are not numbers, and a guard that refuses correct Hebrew is a broken guard.
+const HE_WORDS = {
+  אחד: [1, 'n'], אחת: [1, 'n'], שניים: [2, 'n'], שנים: [2, 'n'], שני: [2, 'n'], שתיים: [2, 'n'], שתים: [2, 'n'], שתי: [2, 'n'],
+  שלוש: [3, 'n'], שלושה: [3, 'n'], שלושת: [3, 'n'], ארבע: [4, 'n'], ארבעה: [4, 'n'], ארבעת: [4, 'n'], חמש: [5, 'n'], חמישה: [5, 'n'], חמשת: [5, 'n'],
+  שש: [6, 'n'], שישה: [6, 'n'], ששת: [6, 'n'], שבע: [7, 'n'], שבעה: [7, 'n'], שבעת: [7, 'n'], שמונה: [8, 'n'], שמונת: [8, 'n'], תשע: [9, 'n'], תשעה: [9, 'n'], תשעת: [9, 'n'],
+  עשר: [10, 'n'], עשרה: [10, 'n'], עשרת: [10, 'n'],
+  עשרים: [20, 'n'], שלושים: [30, 'n'], ארבעים: [40, 'n'], חמישים: [50, 'n'], שישים: [60, 'n'], שבעים: [70, 'n'], שמונים: [80, 'n'], תשעים: [90, 'n'],
+  מאה: [100, 'n'], מאת: [100, 'n'], מאתיים: [200, 'n'], מאות: [100, 'p'],
+  אלף: [1000, 'x'], אלפים: [1000, 'p'], אלפיים: [2000, 'n'], מיליון: [1e6, 'x'], מליון: [1e6, 'x'], מיליונים: [1e6, 'p'], מיליארד: [1e9, 'x'], מיליארדים: [1e9, 'p'],
+  פעמיים: [2, 'a'],
 };
-const HE_RE = new RegExp(`(?<![\\p{L}])[ובלהמש]{0,2}(${Object.keys(HE_NUM).sort((a, b) => b.length - a.length).join('|')})(?![\\p{L}])`, 'gu');
+const HE_ALT = Object.keys(HE_WORDS).sort((a, b) => b.length - a.length).join('|');
+// The first word of a run may carry up to two prefix letters ("ובשלושת"); a later one only "ו".
+const HE_RUN = new RegExp(`(?<![\\p{L}])[ובלהמש]{0,2}(?:${HE_ALT})(?![\\p{L}])(?:\\s+ו?(?:${HE_ALT})(?![\\p{L}]))*`, 'gu');
+const HE_TOKEN = new RegExp(`(?:^|\\s+)[ובלהמש]{0,2}(${HE_ALT})(?![\\p{L}])`, 'gu');
+const EN_ALT = Object.keys(EN_WORDS).join('|');
+const EN_RUN = new RegExp(`\\b(?:${EN_ALT})\\b(?:(?:\\s+and\\s+|[\\s-]+)(?:${EN_ALT})\\b)*`, 'gi');
+const ORD_RE = new RegExp(`\\b(${Object.keys(ORDINALS).join('|')})\\b`, 'gi');
 
 /**
- * The numbers a text states, normalised: "1,000" and "1000" are the same number.
- * words: also English number words and ordinals ("five", "fourteenth"), for quotes.
- * hebrew: also Hebrew counting words ("חמש", "שלושה"), for slide text.
+ * The numbers one run of number words states. A word that cannot continue the number before it starts the next one:
+ * "עשרים ושלושים" is twenty and thirty, not fifty. `small`: a one or a two on its own counts (English); in Hebrew it
+ * counts only inside a longer number, so "ארבע שנים" (four years) is 4, not a 4 and a 2.
+ */
+function runValues(words, { small = true } = {}) {
+  const out = [];
+  let total = 0;
+  let current = 0;
+  let open = 0;
+  const close = () => {
+    if (open && (small || open > 1 || total + current > 2)) out.push(total + current);
+    total = 0;
+    current = 0;
+    open = 0;
+  };
+  for (const [v, type] of words) {
+    if (type === 'a') {
+      close();
+      if (words.length === 1) out.push(v);
+      continue;
+    }
+    if (type === 'n') {
+      const fits = v < 10 ? current % 10 === 0 : v === 10 ? current < 10 || current % 100 === 0 : v < 100 ? current % 100 === 0 : current % 1000 === 0;
+      if (open && !fits) close();
+      current += v;
+      open++;
+      continue;
+    } else if (type === 'p' && !current) {
+      // "מאות אוהדים": hundreds of fans, no number.
+      close();
+      continue;
+    } else if (v === 100) current = (current || 1) * 100;
+    else {
+      // A thousand and up close a group: "שלושת אלפים ומאתיים".
+      total += (current || 1) * v;
+      current = 0;
+    }
+    open++;
+  }
+  close();
+  return out;
+}
+
+/** The numbers a text writes in words, as values in the order they appear: Hebrew (`hebrew`) and English (`english`). */
+export function numberWords(text, { hebrew = false, english = false } = {}) {
+  const s = String(text || '');
+  const out = [];
+  if (hebrew) {
+    for (const m of s.matchAll(HE_RUN)) {
+      const words = [...m[0].matchAll(HE_TOKEN)].map((t) => HE_WORDS[t[1]]);
+      // "באר שבע" is a city, not the number seven; "המאה ה-20" is a century, not 100.
+      if (words.length === 1 && /שבע$/.test(m[0]) && /באר\s*$/.test(s.slice(0, m.index))) continue;
+      if (words.length === 1 && /מאה$/.test(m[0]) && /^\s*ה[-־]?(?:\d|[א-ת])/.test(s.slice(m.index + m[0].length))) continue;
+      // One or two alone states no number ("אחד הצמחים", "יום שני", "ארבע שנים").
+      for (const v of runValues(words, { small: false })) out.push([m.index, v]);
+    }
+  }
+  if (english) {
+    for (const m of s.matchAll(EN_RUN)) for (const v of runValues(m[0].toLowerCase().split(/\s+and\s+|[\s-]+/).filter(Boolean).map((w) => EN_WORDS[w]))) out.push([m.index, v]);
+    for (const m of s.matchAll(ORD_RE)) out.push([m.index, ORDINALS[m[1].toLowerCase()]]);
+  }
+  return out.sort((x, y) => x[0] - y[0]).map(([, v]) => v);
+}
+
+/**
+ * The numbers a text states, normalised: "1,000" and "1000" are the same number, and so are "עשרים ושלושה",
+ * "twenty-three" and "23".
+ * words: also English number words and ordinals ("five", "twenty-three", "fourteenth"), for quotes.
+ * hebrew: also Hebrew number words ("חמש", "עשרים ושלושה", "שלושת אלפים"), for slide text and quotes.
  */
 export function numbersIn(text, { words = false, hebrew = false } = {}) {
   // Digits inside a name that starts with a Latin letter are part of the name, not a number:
@@ -69,9 +153,9 @@ export function numbersIn(text, { words = false, hebrew = false } = {}) {
     const n = Number(m[0].replace(/,/g, ''));
     if (Number.isFinite(n)) out.add(String(n));
   }
-  if (words) for (const m of s.matchAll(WORD_RE)) out.add(String(WORDS[m[1].toLowerCase()] ?? ORDINALS[m[1].toLowerCase()]));
-  // "באר שבע" is a city, not the number seven.
-  if (hebrew) for (const m of s.matchAll(HE_RE)) if (!(m[1] === 'שבע' && /באר\s*$/.test(s.slice(0, m.index)))) out.add(String(HE_NUM[m[1]]));
+  // A multiplier word right after digits ("25 מיליון", "3 thousand") is those digits' unit, not a number of its own.
+  const rest = s.replace(/(\d)\s*[-־]?\s*(?:מיליון|מליון|מיליארד|אלף|million|billion|thousand|hundred)(?![\p{L}])/giu, '$1');
+  for (const v of numberWords(rest, { hebrew, english: words })) out.add(String(v));
   return out;
 }
 

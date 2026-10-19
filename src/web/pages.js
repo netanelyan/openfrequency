@@ -16,6 +16,24 @@ const STEP_HE = {
   format: 'פורמט', topic: 'בחירת נושא', outline: 'מתווה ועובדות', facts: 'אימות עובדות', slides: 'כתיבת שקפים', redraft: 'כתיבה מחדש', rewrite: 'שכתוב מה שנשמע כמו בוט', review: 'בדיקת "נשמע כמו בוט"', verify: 'שער העובדות',
   image: 'תמונה', render: 'רינדור', queue: 'לתור', publish: 'פרסום', blocked: 'נחסם', error: 'שגיאה', edit: 'עריכה', subject: 'נושא השבוע', takedown: 'הודעת הסרה',
 };
+// The checks on the Results page's block rates, by the names src/pipeline/build.js checkOf gives them.
+const CHECK_HE = {
+  facts: 'שער העובדות: מספר שלא בציטוט', shape: 'צורת הפורמט', visuals: 'גרפיקות', details: 'פרטים מהמחקר', caption: 'כיתוב (אורך, חסר)', keywords: 'מילות מפתח', length: 'אורך כותרת או שקף', overlay: 'טקסט על התמונה',
+  'voice:banned': 'קול: מילה אסורה', 'voice:phrase': 'קול: ביטוי של בוט', 'voice:register': 'קול: משלב', 'voice:structure': 'קול: מבנה', 'voice:length': 'קול: אורך ומשפטים', 'voice:language': 'קול: שפה', 'voice:url': 'קול: קישור', 'voice:artefact': 'קול: שארית של מודל', 'voice:empty': 'טקסט ריק',
+  'kind:no_source': 'אין מסמך שמחזיק פוסט', 'kind:no_photo': 'אין תמונה של שני הצדדים', 'kind:fact_check': 'עובדות שלא אומתו (בתכנון)', 'kind:voice': 'נשמע כמו בוט (ציון הבודק)', 'kind:review': 'הבודק: יותר מהעובדות', 'kind:budget': 'תקציב', 'kind:shape': 'צורת הפורמט', 'kind:rules': 'חוק או כלל של החשבון',
+};
+const checkHe = (c) => CHECK_HE[c] || (/^compliance:/.test(c) ? `חוק: ${c.slice(11)}` : /^rule:/.test(c) ? `כלל של החשבון: ${c.slice(5)}` : /^honesty:/.test(c) ? `כנות: ${c.slice(8)}` : c);
+
+/** Which checks stop posts: the top ten, blocked and failed first, as shares of the posts drafted. */
+export function blocksPanel(b) {
+  if (!b?.total) return '';
+  const pct = (n) => `${Math.round((n / b.total) * 100)}%`;
+  const rows = b.rows.filter((r) => r.blocked || r.firstFail).slice(0, 10);
+  return `<section class="panel"><header><h2>מה חוסם פוסטים</h2><span class="end muted small">${b.blocked} מתוך ${b.total} פוסטים נחסמו (${pct(b.blocked)}) ב-30 הימים האחרונים</span></header>
+${rows.length ? `<table class="table stack"><thead><tr><th>בדיקה</th><th>חסמה</th><th>מהפוסטים</th><th>נכשלה בטיוטה הראשונה</th></tr></thead><tbody>${rows.map((r) => `<tr><td data-k="">${esc(checkHe(r.check))}</td><td class="n" data-k="חסמה">${r.blocked}</td><td class="n" data-k="מהפוסטים">${pct(r.blocked)}</td><td class="n" data-k="טיוטה ראשונה">${r.firstFail ? `${r.firstFail} (${pct(r.firstFail)})` : '–'}</td></tr>`).join('')}</tbody></table>
+<p class="muted small">פוסט שנחסם בכמה בדיקות נספר בכל אחת. "נכשלה בטיוטה הראשונה": לפני התיקון והכתיבה מחדש, שמצילים חלק מהם.</p>` : '<p class="muted">אף פוסט לא נחסם.</p>'}</section>`;
+}
+
 const ROLE_NAME = {
   beat: 'בנייה', payoff: 'הסוף', then: 'אז', turn: 'התפנית', now: 'היום', context: 'רקע', moment: 'הרגע', after: 'אחרי', clue: 'רמז', reveal: 'התשובה',
   stat: 'נתון', verdict: 'השורה התחתונה', ranks: 'מקומות 10 עד 6', rank: 'מקום', layer: 'שכבה', case: 'נימוק', ask: 'השאלה', myth: 'מיתוס', fact: 'עובדה', joke: 'בדיחה', truth: 'בלי צחוק',
@@ -348,6 +366,7 @@ export function resultsPage(ctx, d) {
   const body = `<div class="head"><h1>תוצאות</h1><span class="sub">30 הימים האחרונים</span></div>
 ${d.demo ? `<div class="banner info">${icon('alert')}<div><b>נתוני הדגמה בדויים.</b><p>המספרים בדף הזה נזרעו לחשבון הדמו כדי להראות איך הדף נראה. מספרים אמיתיים מגיעים רק מ-Zernio, 72 שעות אחרי פרסום.</p></div></div>` : ''}
 <p class="lede">כל פוסט נמדד 72 שעות אחרי שעלה, מול החציון של אותה פלטפורמה: בטיקטוק שיתופים ולייקים לצפייה (טיקטוק לא מדווחת שמירות), באינסטגרם שמירות לחשיפה (reach). 70% מהפוסטים בפורמטים מוכחים, 30% בניסיונות, ופורמט נושר אחרי 3 תוצאות ברצף מתחת ל-70% מהחציון.</p>
+${blocksPanel(d.blocks)}
 ${feedbackPanels(d.feedback || [])}
 ${(d.learning || []).filter((l) => l.share != null).map((l) => `<section class="panel"><header>${accDot(l.pack.id)}<h2>${esc(l.pack.meta.displayName)}: בידור מול מספרים</h2></header>
 <p>עכשיו <b class="num">${Math.round(l.share * 100)}%</b> מהפוסטים בפורמטים של בידור (סיפור, נחשו מי, קרחון...) ו-<b class="num">${Math.round((1 - l.share) * 100)}%</b> בפורמטים של מספרים (ראש בראש, דירוג).${l.recent ? ` מתוך ${l.recent} הפוסטים האחרונים, ${l.recentEnt} היו בידור.` : ''}</p>

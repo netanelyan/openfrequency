@@ -4,7 +4,7 @@ import { BEAT, MAX_HASHTAGS, STORY } from '../rules/caption.js';
 import { CONNECTIVES, FILLER, FORMAL, LIMITS, limitsFor } from '../voice/tells.js';
 import { focusText } from '../sources/text.js';
 import { contentRange, groupOf, hookPatterns, kindName, kindOf, shapesPrompt } from '../formats/kinds.js';
-import { VISUAL_SCHEMA, visualsPrompt } from '../render/visuals.js';
+import { VISUAL_SCHEMA, visualsOf, visualsPrompt } from '../render/visuals.js';
 
 // The drafting calls' prompts and schemas, built from the pack.
 //
@@ -131,6 +131,24 @@ export const REWRITE_SCHEMA = {
     },
   },
   required: ['rewrites'],
+  additionalProperties: false,
+};
+
+// A repair answers for each text it was given: a slide in its fields, any other text in "text"; "" where unused.
+export const REPAIR_SCHEMA = {
+  type: 'object',
+  properties: {
+    repairs: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: { target: { type: 'string' }, text: { type: 'string' }, title: { type: 'string' }, body: { type: 'string' }, a: { type: 'string' }, b: { type: 'string' }, facts: { type: 'array', items: { type: 'string' } } },
+        required: ['target', 'text', 'title', 'body', 'a', 'b', 'facts'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['repairs'],
   additionalProperties: false,
 };
 
@@ -282,6 +300,19 @@ const REWRITE_TASK = {
 A reader flagged some texts of a post: as sounding like a bot (and said what gave each away), or as saying more than the post's facts support (a FACT PROBLEM). Rewrite each flagged text so a person would have written it, in the account's voice: natural spoken Hebrew, plural address, no exclamation marks, no long dashes. Where there is a FACT PROBLEM, say only what the facts support: drop or soften the part that goes beyond them. Keep every fact and every number that is supported; add none; keep about the same length. A TikTok caption ("caption") is a story in four lines, hook, problem, discovery and result: rewrite it as four lines again, one beat a line. Return { index, text } for each flagged text you were given, using its index. A flagged "visual" is a slide's graphic, given as its data (JSON): return it corrected as the same JSON in "text", every name and number from the facts its slide may use, or "" to drop it.`,
 };
 
+const REPAIR_TASK = {
+  cache: '5m',
+  text: `TASK: REPAIR WHAT THE CHECKS REFUSED.
+
+The code checks refused some texts of one post. The request gives each of those texts (its target), what it may use, and the checks' exact messages. Rewrite only those texts so that every message is answered, and keep the rest of each text: its point, its facts, the account's voice, the line breaks the LINES rule asks for. The other texts of the post are not yours to change.
+- A slide (target "slide N"): return title, body, a and b (a stat slide's two values, "" otherwise) and facts: the ids of the facts the slide states.
+- The cover ("cover"), the line under it ("cover line 2") and the Instagram caption ("caption short"): return the text in "text".
+- The TikTok caption ("caption"): "text" holds four lines, hook, problem, discovery and result, one a line, the closing question at the end of the last.
+- The keywords ("keywords"): "text", separated by commas, at least one in Hebrew and one in English letters.
+A NUMBER THE QUOTES DO NOT HOLD is repaired one of two ways, never a third: remove the number, or cite (in facts) a listed fact whose quote holds it. Never a new fact, a new source or a different number: the code refuses a repair that states a number its text did not, or that cites an id that is not listed.
+Return one repair for each target, with the target exactly as given, and "" in the fields it does not use.`,
+};
+
 const DETAILS_TASK = {
   cache: '5m',
   text: `TASK: FIND THE DETAILS.
@@ -299,7 +330,7 @@ Only details about this post's own subject, 3 to 8 of them, none that repeats a 
 
 export function detailsPrompt(pack, { ttl = '5m' } = {}) {
   const maxQ = pack.rules.maxQuoteWords || 40;
-  return { system: [packBlock(pack, { ttl }), { ...DETAILS_TASK, text: DETAILS_TASK.text.replace('{maxQuote}', maxQ) }], schema: DETAILS_SCHEMA };
+  return { system: [packBlock(pack, { ttl }), { ...DETAILS_TASK, cache: ttl, text: DETAILS_TASK.text.replace('{maxQuote}', maxQ) }], schema: DETAILS_SCHEMA };
 }
 
 /** The details call's user turn: the post so far, then the research documents. */
@@ -321,7 +352,14 @@ export function detailsUser({ format, outline, facts, docs, maxChars = 12000 }) 
 
 export function outlinePrompt(pack, { ttl = '5m' } = {}) {
   const maxQ = pack.rules.maxQuoteWords || 40;
-  return { system: [packBlock(pack, { ttl }), { ...OUTLINE_TASK, text: OUTLINE_TASK.text.replace('{maxQuote}', maxQ) }], schema: OUTLINE_SCHEMA };
+  return { system: [packBlock(pack, { ttl }), { ...OUTLINE_TASK, cache: ttl, text: OUTLINE_TASK.text.replace('{maxQuote}', maxQ) }], schema: OUTLINE_SCHEMA };
+}
+
+/** A ranking's rank slides, as the writer is told them before anything else. */
+export function rankRules(pack) {
+  // An account without the "stat" graphic draws no number big: its places say the number in the body alone.
+  const stat = visualsOf(pack).includes('stat');
+  return `RANK SLIDES: every "rank" slide, number 1's included, states the number that ranks its place${stat ? ' and shows it as its graphic: a "stat" visual whose value is that number' : ' in its body'}, with its scale written next to it ("25 מיליון", "8.2 מיליארד $"), never a year or another figure. Every place uses the same measure and the same unit, written the same way.${stat ? ' The body says the same number and one short line.' : ''} The places go from 5th to 1st in the order of that number, and no slide writes a place number: the design draws it.`;
 }
 
 /** What the request says about the format: its id, name and kind, and the size of the post. */
@@ -343,6 +381,8 @@ export function outlineUser(format, docs, { avoid = [], faceless = [], maxChars 
     day ? `TODAY: ${day}.` : '',
     day && kindName(format) === 'on-this-day' ? `THE POST GOES OUT ON: ${day}. Pick a moment that happened on this day and month in an earlier year.` : '',
     subject ? `SUBJECT: ${subject}. The post is about this.` : '',
+    // A matchup the documents hold one side of was planned anyway (Oliveira against Khabib), and every draft was refused.
+    kindName(format) === 'head-to-head' ? `BOTH SIDES: choose two sides only when the documents give a value for each of them on at least ${kindOf(format).segments.find(([r]) => r === 'stat')[1]} of the same stats; each stat cites the facts whose quotes hold both values. Documents that give one side's numbers and not the other's are "usable": false, with that as the reason.` : '',
     // An undated page (an encyclopedia article) passes the date filter; the story inside it may still be years old.
     maxAgeDays && day && kindName(format) !== 'on-this-day'
       ? `FRESHNESS: this account's news ages fast. The post's story happened within ${maxAgeDays} days before TODAY, or it is a lasting how-to or price that is current now; an older launch, raise or failure is background at most, never the story.`
@@ -358,7 +398,7 @@ export function outlineUser(format, docs, { avoid = [], faceless = [], maxChars 
 }
 
 export function slidesPrompt(pack, { ttl = '5m' } = {}) {
-  return { system: [packBlock(pack, { ttl }), SLIDES_TASK], schema: SLIDES_SCHEMA };
+  return { system: [packBlock(pack, { ttl }), { ...SLIDES_TASK, cache: ttl }], schema: SLIDES_SCHEMA };
 }
 
 /** How many content slides need a visual, so that with the cover at least half of the slides have one. */
@@ -396,6 +436,9 @@ export function slidesUser({ format, n, outline, facts, edits = [], problems = [
   const end = pack?.meta?.endSlide?.title;
   return [
     `${formatHead(format, n)}`,
+    // Said first, not left to the format's paragraph: rankings were refused for a place without its graphic, and
+    // ordered wrong when one place wrote "8,200" over "מיליון דולר" and the next "25 מיליון".
+    kindName(format) === 'ranking' ? rankRules(pack) : '',
     day ? `TODAY: ${day}.` : '',
     hook ? `COVER PATTERN: [${hook.id}] ${hook.pattern}${hook.examples?.length ? ` (e.g. ${hook.examples.map((x) => `"${x}"`).join(', ')})` : ''}` : '',
     format.trend ? `Cover lines that fit this post: ${format.hooks.join(' / ')}` : '',
@@ -423,7 +466,7 @@ export function slidesUser({ format, n, outline, facts, edits = [], problems = [
 }
 
 export function rewritePrompt(pack, { ttl = '5m' } = {}) {
-  return { system: [packBlock(pack, { ttl }), REWRITE_TASK], schema: REWRITE_SCHEMA };
+  return { system: [packBlock(pack, { ttl }), { ...REWRITE_TASK, cache: ttl }], schema: REWRITE_SCHEMA };
 }
 
 export function rewriteUser({ flagged, facts }) {
@@ -442,6 +485,39 @@ export function rewriteUser({ flagged, facts }) {
         .join('\n')
     ),
   ].join('\n');
+}
+
+export function repairPrompt(pack, { ttl = '5m' } = {}) {
+  return { system: [packBlock(pack, { ttl }), { ...REPAIR_TASK, cache: ttl }], schema: REPAIR_SCHEMA };
+}
+
+/**
+ * The repair's user turn: the facts the post may cite, then each refused text with the checks' messages.
+ * targets: [{ target, now: { text } | { title, body, a, b, facts }, problems: [msg], limits, last, refused }].
+ */
+export function repairUser({ format, topic, facts, targets, pack = null }) {
+  const lim = (l) => (l ? ` (at most ${l.maxChars} characters${l.sentences ? ` and ${l.sentences} sentences` : ''})` : '');
+  return [
+    formatHead(format),
+    `TOPIC: ${topic}`,
+    linesRule(pack),
+    'FACTS THE POST MAY CITE (each with its id and the words of its source):',
+    ...facts.map((f) => `- ${f.key}: ${f.claim}  [quote: "${f.quote}"]`),
+    '',
+    'REFUSED TEXTS:',
+    ...targets.map((t) =>
+      [
+        `[${t.target}]${t.role ? ` role: ${t.role}` : ''}${lim(t.limits)}`,
+        ...('text' in t.now ? [`  now: ${JSON.stringify(t.now.text)}`] : [`  now: title ${JSON.stringify(t.now.title)}, body ${JSON.stringify(t.now.body)}${t.now.a || t.now.b ? `, a ${JSON.stringify(t.now.a)}, b ${JSON.stringify(t.now.b)}` : ''}, facts ${(t.now.facts || []).join(', ') || 'none'}`]),
+        `  REFUSED BY THE CHECKS: ${t.problems.join(' · ')}`,
+        t.last ? `  your last repair: ${JSON.stringify(t.last)}\n  REFUSED AGAIN: ${t.refused.join(' · ')}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n')
+    ),
+  ]
+    .filter((x) => x !== '')
+    .join('\n');
 }
 
 /** The kind's own instructions, for tests and tools that show one. */

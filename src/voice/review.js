@@ -92,7 +92,7 @@ export const reviewUser = (pack, texts, facts = []) =>
  */
 export async function reviewTexts(ctx, { pack, texts, facts = [] }) {
   if (ctx.llm.kind !== 'claude') return { reviewer: 'heuristic', reviews: heuristicReview(texts, pack) };
-  const { data } = await askJson(ctx, { task: 'review', role: 'review', system: REVIEW_SYSTEM, user: reviewUser(pack, texts, facts), schema: REVIEW_SCHEMA, effort: 'low', maxTokens: 4000, tag: 'review' });
+  const { data } = await askJson(ctx, { task: 'review', role: 'review', system: [{ text: REVIEW_SYSTEM, cache: ctx.llm.batch ? '1h' : '5m' }], user: reviewUser(pack, texts, facts), schema: REVIEW_SCHEMA, effort: 'low', maxTokens: 4000, tag: 'review' });
   return {
     reviewer: 'claude',
     reviews: texts.map((_, i) => {

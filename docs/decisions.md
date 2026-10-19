@@ -1234,3 +1234,45 @@ engine can act on, and what changed:
   publisher counts the tags on each caption as it would go out and refuses more than
   five before anything leaves. An older recorded answer with one `caption` text is
   still read, and refused by the check unless it is four lines.
+
+- **A refused draft is repaired where it failed before it is blocked, and numbers
+  written in words are compared as digits (2026-10-19, the owner's call).** Six
+  of about ten daily drafts on the live accounts were blocked, most of them one
+  text short: a slide over its length, a caption in one paragraph, a number its
+  slide forgot to cite. The old answer was a redraft of the whole post, which
+  fixed that text and broke another about as often. Now each refused check is
+  traced to the text it is about (`src/pipeline/repair.js`), and the writer is
+  sent only those texts with the checks' exact messages, in a small call on the
+  account's cached prefix: at most two calls, each reserved against the caps like
+  any other. A repair is kept only when it clears a check and adds none. The law,
+  honesty and the account's rules are never repaired, and a problem no single text
+  owns (slides out of order, too few details) still gets the redraft. A number
+  the fact gate refused is repaired by removing it or citing one of the post's
+  verified facts whose quote holds it; the code refuses a repair that states any
+  other new number or cites an id that is not a verified fact, so a repair can
+  never bring in a source. The gate itself now reads "עשרים ושלושה",
+  "מאה שבעים וחמישה" and "twenty-three" as 23 and 175 on both sides of the
+  comparison: before, a compound number was a 20 and a 3 that no quote held, and
+  a correct slide was blocked. The task blocks and the review now take the 1-hour
+  cache in a batch, like the account's block.
+
+- **A ranking is ordered by its amounts, a head-to-head needs both sides in its
+  quotes, the bot score is measured after a rewrite, and Results shows what blocks
+  (2026-10-19, the owner's call).** The AI companies ranking compared 8,200 against
+  25,000,000: one place wrote "8,200" as its graphic and "מיליון דולר" in the line
+  under it. A place's number is now read with its scale wherever the graphic
+  writes it (after the number, the line under it, its label, its title,
+  `rankAmount`), and the writer of a ranking is told the rank-slide rules first:
+  the ranked number as the graphic, one measure, one unit. The Oliveira against
+  Khabib post was planned on documents that never named Khabib in a verified
+  quote; the outline is now told a matchup needs values for both sides, and the
+  plan drops a stat whose quotes do not name both (`bothSides`). A matchup left
+  with fewer than three stats goes to the next topic before a slide is written.
+  When the side names cannot be matched to the quotes at all (Hebrew names over
+  English quotes), the check passes, since it cannot tell. The "נשמע כמו בוט"
+  score was 3/10 on every approved post because a rewritten text was never read
+  again: it was set to one under the rewrite line. A rewritten text is now scored
+  again in one small review call, the post keeps the measured number, and one that
+  still scores 6 or more is blocked as before. Every failed check is recorded by
+  a stable name (`checkOf`), and Results shows, for the last 30 days, how many
+  posts each check blocked and how many first drafts failed it.

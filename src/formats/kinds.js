@@ -255,21 +255,8 @@ export function kindProblems(format, post) {
     const ranks = content.find((s) => s.role === 'ranks');
     if (ranks && linesOfBody(ranks.body).length !== 5) out.push('the "ranks" slide holds places 10 to 6: exactly five lines in its body');
     // The order follows the number: a win streak of 14 went out at number 1 above one of 16. The number that ranks a
-    // slide is its graphic's value, or its first number that is not a year; it must rise (or fall) from 5th to 1st.
-    const rankNum = (s) => {
-      const v = s.visual?.items?.[0]?.value;
-      // The body before the title: a title can be a name with a number in it ("UFC 229").
-      // A graphic's value can be words around its number ("כ-10 ימים").
-      const from = [...(v != null ? numbersIn(String(v), { hebrew: true }) : []), ...numbersIn(String(s.body || ''), { hebrew: true }), ...numbersIn(String(s.title || ''), { hebrew: true })];
-      const n = from.map((x) => Number(String(x).replace(/,/g, ''))).find((x) => Number.isFinite(x) && !(x >= 1900 && x <= 2100));
-      if (n == null) return null;
-      // "650 מיליון" and "6.5 מיליארד" are ranked as amounts, not as 650 and 6.5.
-      const text = [v, s.body, s.title].filter((x) => x != null).join(' ');
-      const plain = text.replace(/(\d),(?=\d{3})/g, '$1');
-      const unit = new RegExp(`(?<![\\d.])${String(n).replace('.', '\\.')}\\s*(טריליון|מיליארד|מיליון|אלף|trillion|billion|million|thousand|[TBMK](?![a-z]))`, 'i').exec(plain)?.[1]?.toLowerCase();
-      const SCALE = { טריליון: 1e12, trillion: 1e12, t: 1e12, מיליארד: 1e9, billion: 1e9, b: 1e9, מיליון: 1e6, million: 1e6, m: 1e6, אלף: 1e3, thousand: 1e3, k: 1e3 };
-      return n * (SCALE[unit] || 1);
-    };
+    // slide (rankAmount, below) must rise (or fall) from 5th to 1st.
+    const rankNum = rankAmount;
     // A year is not the number that ranks a place: number 1 of the World Cup's scorers went out with "2022 and 2026"
     // and no goal count, under four places that showed theirs.
     const drawn = content.some((s) => s.role === 'rank' && s.visual?.items?.[0]?.value != null);
@@ -322,6 +309,45 @@ export function structureNumbers(format, content) {
   if (name === 'iceberg') out.add(String(content.length));
   if (name === 'do-dont') out.add(String(content.filter((s) => s.role === 'rule').length));
   return out;
+}
+
+// The scale words a ranked amount is written with, in the forms a slide uses them: after the number ("25 מיליון",
+// "$8.2B") or once for the whole graphic ("במיליוני דולרים", "in millions").
+const SCALE = { טריליון: 1e12, טריליוני: 1e12, טריליונים: 1e12, trillion: 1e12, trillions: 1e12, t: 1e12, מיליארד: 1e9, מיליארדי: 1e9, מיליארדים: 1e9, billion: 1e9, billions: 1e9, bn: 1e9, b: 1e9, מיליון: 1e6, מיליוני: 1e6, מיליונים: 1e6, million: 1e6, millions: 1e6, m: 1e6, אלף: 1e3, אלפי: 1e3, אלפים: 1e3, thousand: 1e3, thousands: 1e3, k: 1e3 };
+const SCALE_WORD = 'טריליונים|טריליוני|טריליון|מיליארדים|מיליארדי|מיליארד|מיליונים|מיליוני|מיליון|אלפים|אלפי|אלף|trillions?|billions?|millions?|thousands?|bn';
+const scaleOf = (w) => SCALE[String(w || '').toLowerCase()] || 1;
+
+/**
+ * The number a ranking's place is ranked by, as one amount: its graphic's value, or its first number that is not
+ * a year, times the scale it is written in. The scale is read where the slide put it: right after the number, or,
+ * for a graphic's value, once in the graphic's line under it, its label or its title. The AI companies ranking
+ * compared a graphic of "8,200" (its line under it: "מיליון דולר") against "25 מיליון", as 8,200 against 25,000,000.
+ */
+export function rankAmount(s) {
+  const v = s.visual?.items?.[0]?.value;
+  // The body before the title: a title can be a name with a number in it ("UFC 229").
+  // A graphic's value can be words around its number ("כ-10 ימים").
+  // "פעמיים" (twice) is a claim the gate checks, never the number a place is ranked by.
+  const said = (t) => [...numbersIn(String(t).replace(/(?<![\p{L}])[ובלהמש]{0,2}פעמיים(?![\p{L}])/gu, ''), { hebrew: true })];
+  const plainNum = (x) => Number(String(x).replace(/,/g, ''));
+  const notYear = (x) => Number.isFinite(x) && !(x >= 1900 && x <= 2100);
+  const pick = (t) => said(t).map(plainNum).find(notYear);
+  const plain = (t) => String(t ?? '').replace(/(\d),(?=\d{3})/g, '$1');
+  const after = (n, t) => new RegExp(`(?<![\\d.])${String(n).replace('.', '\\.')}\\s*(${SCALE_WORD}|[TBMK](?![a-z]))`, 'i').exec(plain(t))?.[1];
+  const alone = (t) => new RegExp(`(?<![\\p{L}])(?:[ובלהמש]{0,2}|in\\s+)(${SCALE_WORD})(?![\\p{L}])|\\(([TBMK])\\)|[$€£₪]([TBMK])(?![a-z])`, 'iu').exec(String(t ?? ''))?.slice(1).find(Boolean);
+  if (v != null) {
+    const n = pick(v);
+    if (n != null) {
+      const it = s.visual.items[0];
+      const unit = after(n, v) || alone(it.sub) || alone(it.label) || alone(s.visual.title);
+      return Number((n * scaleOf(unit)).toPrecision(12));
+    }
+  }
+  for (const t of [s.body || '', s.title || '']) {
+    const n = pick(t);
+    if (n != null) return Number((n * scaleOf(after(n, t))).toPrecision(12));
+  }
+  return null;
 }
 
 /** The rank the design draws on each content slide of a ranking: 10..6 on the group slide, then 5..1. */
