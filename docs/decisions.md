@@ -1322,8 +1322,8 @@ engine can act on, and what changed:
   Every feed and page is read only where its site's robots.txt lets this engine in
   and lets Claude's agents in too (`src/sources/robots.js`), since everything a
   source says is drafted by Claude: checked on 2026-10-19, The Athletic, the BBC, the
-  Guardian, ESPN, ONE, MMA Fighting, MMA Junkie and TechCrunch all tell Anthropic's
-  agents to stay out, and are not read; Sport5, Calcalist and CTech publish no feed.
+  Guardian, ESPN, ONE, TechCrunch and the two largest fight-news sites all tell
+  Anthropic's agents to stay out, and are not read (src/sources/catalog.js names them); Sport5, Calcalist and CTech publish no feed.
   The check runs at every read, for every account's feeds and pages. A new fact
   kind, ATTRIBUTED (`fact.who`), is what someone said or reported: its quote is
   verified word for word as always, then the document must name them and a word of
