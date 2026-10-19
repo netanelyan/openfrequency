@@ -119,9 +119,13 @@ the cover patterns and the calls to action.
 
 Every post has 5 to 8 slides, one idea a slide, keywords in Hebrew and English for
 TikTok's search, a TikTok caption and a short Instagram one led by the cover line.
-By default the TikTok caption is long (200 characters and up, for search); an account
-can ask for short, catchy captions and a short line under the cover instead
-(`writing` in `pack.json`).
+The TikTok caption tells the post as a story in four lines: the hook, the problem,
+the discovery and the result, with the closing question at its end
+(`src/rules/caption.js`). By default it is long (200 characters and up, for search);
+an account can ask for short, catchy captions and a short line under the cover
+instead (`writing` in `pack.json`), and still gets the four lines. No caption holds a
+hashtag: the engine adds the post's own, five at most, and the publisher refuses a
+caption with more.
 
 **Pictures.** The engine draws its graphics from data the model writes on a slide: a
 timeline, stat bars, a head-to-head card, one big number, a calendar page, a pitch
@@ -398,7 +402,7 @@ src/llm         Claude (official SDK, through the network door), the CLI backend
 src/budget      the monthly ledger, reservations, the month's plan
 src/voice       Hebrew tells, honesty, the reviewer
 src/verify      facts against stored documents, the render gate
-src/rules       pack rules, cross-promotion, investment-advice compliance, the text on a slide
+src/rules       pack rules, cross-promotion, investment-advice compliance, the text on a slide, the caption's story and hashtags
 src/images      licensed photographs and the image screen
 src/render      fonts, templates and their variants, the graphics, Chromium
 src/pipeline    one post from topic to queue, the rivals typed in by hand; export to disk

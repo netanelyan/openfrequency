@@ -3,7 +3,7 @@ import path from 'node:path';
 import { examplesDir, packsDir } from '../core/paths.js';
 import { nowIso } from '../core/clock.js';
 import { setSetting } from '../core/store.js';
-import { validateAll, validatePack, voiceExamples } from './validate.js';
+import { packWarnings, validateAll, validatePack, voiceExamples } from './validate.js';
 import { factsSource } from '../sources/facts.js';
 
 // Packs are folders of configuration. The engine reads them from $OF_HOME/packs;
@@ -49,11 +49,21 @@ export function readPack(dir) {
   return pack;
 }
 
-/** Read and validate one pack folder, or throw a PackError listing every problem. */
-export function loadPack(dir) {
+const warned = new Set();
+
+/**
+ * Read and validate one pack folder, or throw a PackError listing every problem.
+ * What the engine overrides is kept on pack.warnings and printed once per process.
+ */
+export function loadPack(dir, { warn = (m) => console.warn(m) } = {}) {
   const pack = readPack(dir);
   const problems = validatePack(pack);
   if (problems.length) throw new PackError(`pack "${pack.dirName}" is not valid`, problems);
+  pack.warnings = packWarnings(pack);
+  for (const m of pack.warnings) if (!warned.has(m)) {
+    warned.add(m);
+    warn(`warning: ${m}`);
+  }
   return pack;
 }
 
@@ -70,7 +80,7 @@ export function packDirs(dir = packsDir()) {
 
 /** All packs in the private folder, each valid and the set distinct. */
 export function loadAll({ dir = packsDir(), extra = [] } = {}) {
-  const packs = [...packDirs(dir).map(loadPack), ...extra];
+  const packs = [...packDirs(dir).map((d) => loadPack(d)), ...extra];
   const problems = validateAll(packs);
   if (problems.length) throw new PackError('the packs are not distinct brands', problems);
   return packs;

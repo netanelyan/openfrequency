@@ -5,6 +5,8 @@ import { isTemplate, TEMPLATES } from '../render/templates/registry.js';
 import { COMPLIANCE, FINANCIAL, isCompliance } from '../rules/compliance.js';
 import { ctasOf, hookPatterns, isKind, KINDS, MIX } from '../formats/kinds.js';
 import { overlayConfigProblems } from '../rules/overlay.js';
+import { MAX_HASHTAGS } from '../rules/caption.js';
+import { FLOOR } from '../voice/tells.js';
 
 // What a pack must be, checked in code. Every problem is one line of English the
 // website and the CLI can print. An empty list means the pack is valid.
@@ -12,6 +14,8 @@ import { overlayConfigProblems } from '../rules/overlay.js';
 // Two levels:
 //   validatePack(pack)   one pack on its own: shape, colours, contrast, compliance
 //   validateAll(packs)   the set: HARD RULE 2, each account a distinct brand
+//
+// packWarnings(pack) is a third list: what the engine changed on its own and the owner should know.
 
 export const MODES = ['approve', 'digest', 'auto'];
 export const PLATFORMS = ['tiktok', 'instagram'];
@@ -135,6 +139,8 @@ export function validatePack(pack) {
       p.push(`${where}: a ${f.kind} post ends with a call to action: list ctas [{ kind: save|comment|send, text }] on the format or the file`);
     }
     for (const c of f.ctas || []) if (typeof c === 'object' && c && !['save', 'comment', 'send'].includes(c.kind)) p.push(`${where}: cta kind "${c.kind}" must be save, comment or send`);
+    // A post carries five hashtags at most (src/rules/caption.js), and the format's own come first.
+    if (f.hashtags != null && !(Array.isArray(f.hashtags) && f.hashtags.length <= MAX_HASHTAGS && f.hashtags.every((t) => /^#[\p{L}\p{N}_]+$/u.test(t)))) p.push(`${where}: hashtags is a list of at most ${MAX_HASHTAGS} tags like #מילה`);
   }
   if (formats.mix != null) {
     const e = Number(formats.mix?.entertaining);
@@ -188,6 +194,22 @@ export function validatePack(pack) {
   if (bad.length < 3) p.push('voice.md: at least 3 bad example lines under a "## שורות רעות" heading');
 
   return p;
+}
+
+/**
+ * What the pack asks for that the engine overrides, one line each. Not a reason to refuse the pack:
+ * a caption limit below the floor (src/voice/tells.js) is raised so the four-line story still fits.
+ */
+export function packWarnings(pack) {
+  const w = [];
+  const id = pack?.meta?.id || pack?.dirName || '?';
+  for (const [kind, floor] of Object.entries(FLOOR)) {
+    for (const [k, min] of Object.entries(floor)) {
+      const v = pack?.meta?.writing?.[kind]?.[k];
+      if (Number.isFinite(v) && v < min) w.push(`pack "${id}": writing.${kind}.${k} ${v} is raised to ${min}, the room TikTok's four-line story needs`);
+    }
+  }
+  return w;
 }
 
 /** The example lines in voice.md, by heading. */

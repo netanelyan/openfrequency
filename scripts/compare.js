@@ -37,6 +37,7 @@ import { Db } from '../src/db/index.js';
 import { loadAll, loadPack, resolvePackDir } from '../src/packs/load.js';
 import { verifyFact } from '../src/verify/claims.js';
 import { checkPost, fixDraft, joinCaption, textsOf } from '../src/pipeline/build.js';
+import { storyCaption } from '../src/rules/caption.js';
 import { outlinePrompt, outlineUser, rewritePrompt, rewriteUser, slidesPrompt, slidesUser } from '../src/pipeline/prompts.js';
 import { REVIEW_SCHEMA, REVIEW_SYSTEM, reviewUser, REWRITE_AT, BLOCK_AT } from '../src/voice/review.js';
 import { estimateTokens } from '../src/llm/index.js';
@@ -116,7 +117,7 @@ function draftOf(d, format, { engine = false } = {}) {
   return {
     hook: String(d.hook || '').trim(),
     sub: String(d.sub || '').trim(),
-    caption: engine ? joinCaption(d.caption, d.question) : [String(d.caption || '').trim(), String(d.question || '').trim()].filter(Boolean).join(' '),
+    caption: engine ? joinCaption(d.story ? storyCaption(d.story) : d.caption, d.question) : [String(d.caption || '').trim(), String(d.question || '').trim()].filter(Boolean).join(' '),
     slides: [
       { kind: 'cover', title: '', body: '', factKeys: [] },
       ...(d.slides || []).map((s) => ({ kind: 'item', title: String(s.title || '').trim(), body: String(s.body || '').trim(), factKeys: (s.facts || []).map(String) })),

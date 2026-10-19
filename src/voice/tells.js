@@ -116,9 +116,13 @@ export function limitsFor(kind, pack = null) {
   const base = LIMITS[kind] || LIMITS.slideBody;
   const own = pack?.meta?.writing?.[kind] || {};
   const out = { ...base };
-  for (const [k, v] of Object.entries(own)) if (Number.isFinite(v) && (k === 'minWords' ? v >= (base[k] ?? 0) : v <= (base[k] ?? Infinity))) out[k] = v;
+  for (const [k, v] of Object.entries(own)) if (Number.isFinite(v) && (k === 'minWords' ? v >= (base[k] ?? 0) : v <= (base[k] ?? Infinity))) out[k] = Math.max(v, FLOOR[kind]?.[k] ?? 0);
   return out;
 }
+
+// TikTok's caption is a story in four beats (src/rules/caption.js): a short-caption account still gets room for
+// four lines and the closing question, however far it lowers the limits.
+export const FLOOR = { captionLong: { sentences: 5, maxChars: 160 } };
 
 /**
  * Every tell in one text, as { code, msg }. Empty means it reads like a person.

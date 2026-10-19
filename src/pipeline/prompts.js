@@ -1,5 +1,6 @@
 import { COMPLIANCE } from '../rules/compliance.js';
 import { overlayOf } from '../rules/overlay.js';
+import { BEAT, MAX_HASHTAGS, STORY } from '../rules/caption.js';
 import { CONNECTIVES, FILLER, FORMAL, LIMITS, limitsFor } from '../voice/tells.js';
 import { focusText } from '../sources/text.js';
 import { contentRange, groupOf, hookPatterns, kindName, kindOf, shapesPrompt } from '../formats/kinds.js';
@@ -105,13 +106,19 @@ export const SLIDES_SCHEMA = {
         additionalProperties: false,
       },
     },
-    caption: { type: 'string' },
+    // TikTok's caption, as the story's four beats (src/rules/caption.js): the code joins them, one a line.
+    story: {
+      type: 'object',
+      properties: Object.fromEntries(STORY.map((k) => [k, { type: 'string' }])),
+      required: STORY,
+      additionalProperties: false,
+    },
     captionShort: { type: 'string' },
     question: { type: 'string' },
     keywords: { type: 'array', items: { type: 'string' } },
     coverVisual: VISUAL_SCHEMA,
   },
-  required: ['hook', 'sub', 'hookPattern', 'subject', 'slides', 'caption', 'captionShort', 'question', 'keywords', 'coverVisual'],
+  required: ['hook', 'sub', 'hookPattern', 'subject', 'slides', 'story', 'captionShort', 'question', 'keywords', 'coverVisual'],
   additionalProperties: false,
 };
 
@@ -207,7 +214,7 @@ EVERY POST:
 - Talk like a friend, in spoken Hebrew: the spoken imperative (תעקבו, תשמרו, תשלחו, תכתבו, תנחשו), never the formal one (עקבו, שמרו, שלחו, כתבו, נחשו), and the everyday word over the formal one (פאונד, not ליברה).
 - A claim of "the only", "the first", "never" or "every" keeps every condition its fact has: "the only player to win all six" shortened to three of them is false. Keep the whole list, or drop the "only".
 - Name what the post is about (the product, the person, the club, the fight) on the cover or the first slide: a post that never says whose story it is reads as a riddle nobody asked for.
-- caption: the TikTok caption, ${shortCaps ? `${capLong.minChars} to ${capLong.maxChars} characters: short and catchy, one or two lines that make them open the post (a tease or the stakes, never a summary of it), with the names people search for` : '200 to 600 characters: what the post is about in the words people search for, and a line on why it matters'}. The post's best fact, quote or twist is on a slide, never only in the caption, and the caption promises nothing the slides do not show ("what Cavani said years later" with no slide that says it reads as a broken promise). captionShort: the Instagram caption, ${capShort.maxChars < LIMITS.captionShort.maxChars ? `up to ${capShort.maxChars} characters, one catchy line` : '60 to 200 characters'} (the design puts the cover line before it). Neither has hashtags, links or a question.
+- story: the TikTok caption, told as a story in four beats that the code puts one a line: hook (one sentence of at most ${BEAT.hookMaxChars} characters that stops the scroll: TikTok shows it before "more"), problem (what was at stake, what went wrong, or the question the post settles), discovery (the turn: what the slides found), result (how it ended, or what it means for them now). Each beat ${BEAT.minWords} words or more, at most ${BEAT.sentences} sentences, and none repeats another. Together ${shortCaps ? `${capLong.minChars} to ${capLong.maxChars} characters: short and catchy, each beat one short line, with the names people search for` : '200 to 600 characters, in the words people search for (the names, the topic)'}. The beats retell the slides: the post's best fact, quote or twist is on a slide, never only in the caption, and the caption promises nothing the slides do not show ("what Cavani said years later" with no slide that says it reads as a broken promise). A guess-who's result never names the answer and a ranking's never names number one: it says what the last slide settles, not how. captionShort: the Instagram caption, ${capShort.maxChars < LIMITS.captionShort.maxChars ? `up to ${capShort.maxChars} characters, one catchy line` : '60 to 200 characters'} (the design puts the cover line before it). Neither has hashtags (the engine adds the post's own, ${MAX_HASHTAGS} at most), links or a question.
 
 VISUALS: a post is pictures as much as words, never a deck of text cards. At least half of the slides carry a visual: the cover always has one, and the request says how many content slides need one. A content slide's "visual" is data the design draws as a graphic; its numbers are claims like the slide's own, held to the facts the slide cites. A head-to-head "stat" slide's two values are already its visual (give it type "none"). The graphics this account draws:
 ${visualsPrompt(pack)}
@@ -264,7 +271,7 @@ The request names the format and its kind, the content slides with their roles, 
 - sub: one short line under the cover line, or "" when the cover line alone fills the cover's lines (LINES in the request).
 - subject: as in the outline (you may shorten a name).
 - slides: exactly the outline's content slides, the same roles in the same order, each { role, title: up to 60 characters, body: up to 230 characters in one to three short sentences, broken into lines as the request's LINES says (or one item a line, where the shape says so), a and b: the two values on a head-to-head stat slide and "" everywhere else, facts: the ids of the facts it states }. Every number on a slide, dates and years included, must appear in the quotes of the facts it lists.
-- caption, captionShort, keywords: as the account's rules say. For a legacy list post, captionShort and keywords may be empty.
+- story, captionShort, keywords: as the account's rules say. For a legacy list post, the story may be in "hook" alone, and captionShort and keywords may be empty.
 - question: one short question about this post's own subject that a reader could answer from their own life, or "" when none would sound natural. Never a line that fits any post ("ידעתם את זה?", "מה דעתכם?", "למי זה יכול לעזור?"): those are dropped.`,
 };
 
@@ -272,7 +279,7 @@ const REWRITE_TASK = {
   cache: '5m',
   text: `TASK: REWRITE FLAGGED TEXTS.
 
-A reader flagged some texts of a post: as sounding like a bot (and said what gave each away), or as saying more than the post's facts support (a FACT PROBLEM). Rewrite each flagged text so a person would have written it, in the account's voice: natural spoken Hebrew, plural address, no exclamation marks, no long dashes. Where there is a FACT PROBLEM, say only what the facts support: drop or soften the part that goes beyond them. Keep every fact and every number that is supported; add none; keep about the same length. Return { index, text } for each flagged text you were given, using its index. A flagged "visual" is a slide's graphic, given as its data (JSON): return it corrected as the same JSON in "text", every name and number from the facts its slide may use, or "" to drop it.`,
+A reader flagged some texts of a post: as sounding like a bot (and said what gave each away), or as saying more than the post's facts support (a FACT PROBLEM). Rewrite each flagged text so a person would have written it, in the account's voice: natural spoken Hebrew, plural address, no exclamation marks, no long dashes. Where there is a FACT PROBLEM, say only what the facts support: drop or soften the part that goes beyond them. Keep every fact and every number that is supported; add none; keep about the same length. A TikTok caption ("caption") is a story in four lines, hook, problem, discovery and result: rewrite it as four lines again, one beat a line. Return { index, text } for each flagged text you were given, using its index. A flagged "visual" is a slide's graphic, given as its data (JSON): return it corrected as the same JSON in "text", every name and number from the facts its slide may use, or "" to drop it.`,
 };
 
 const DETAILS_TASK = {

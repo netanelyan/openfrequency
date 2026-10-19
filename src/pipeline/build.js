@@ -15,6 +15,7 @@ import { isGenericQuestion, limitsFor, mechanicalFix, normHe, tellsIn } from '..
 import { BLOCK_AT, REWRITE_AT, reviewTexts } from '../voice/review.js';
 import { checkRules } from '../rules/check.js';
 import { lineDraft, oneLine, overlayProblems } from '../rules/overlay.js';
+import { MAX_HASHTAGS, captionProblems, hashtagProblems, storyCaption } from '../rules/caption.js';
 import { gate, numbersIn, verifyFact } from '../verify/claims.js';
 import { findImage } from '../images/index.js';
 import { normVisual, slideHasVisual, visualProblems, visualsOf, visualText } from '../render/visuals.js';
@@ -65,7 +66,8 @@ const pickBy = (list, seed) => list[[...String(seed)].reduce((h, c) => (h * 31 +
 
 /**
  * The hashtags for one post: the format's own, two broad, and the niche tags this
- * post is about (its words appear in the post's text), never more than five. A
+ * post is about (its words appear in the post's text), never more than five
+ * (MAX_HASHTAGS, src/rules/caption.js). A
  * niche tag the post does not touch ("#צמחיתבלין" under a post about a fern) is
  * left off: a reader sees an unrelated tag as pasted. Without the text (an older
  * caller), the niche tags rotate.
@@ -95,7 +97,7 @@ export function hashtagsFor(pack, format, seed, text = null) {
   };
   const niche = words == null ? rot(h.niche, 'n') : (h.niche || []).filter(mentions);
   const tags = [...(format.hashtags || []), ...rot(h.broad, 'b').slice(0, 2), ...niche];
-  return [...new Set(tags)].slice(0, 5);
+  return [...new Set(tags)].slice(0, MAX_HASHTAGS);
 }
 
 /**
@@ -266,7 +268,9 @@ export function checkPost(ctx, pack, draft, facts, format = null) {
   for (const x of checkRules({ pack, others: ctx.packs || [], texts: textsOf(draft) })) problems.push(x);
   // The text over the picture: short lines broken by hand, a few a slide, reactions not labels (pack.json "overlay").
   for (const x of overlayProblems(draft, pack)) problems.push(x);
-  if (kindName(f) !== 'list') {
+  // A phase 1 post's one caption is not a story, but its hashtags are still the engine's.
+  if (kindName(f) === 'list') for (const x of hashtagProblems(draft)) problems.push(x);
+  else {
     const content = draft.slides.filter((s) => s.kind === 'item');
     for (const msg of shapeProblems(f, content.map((s) => s.role))) problems.push({ where: 'shape', code: 'shape', msg });
     for (const msg of kindProblems(f, { ...draft, slides: content })) problems.push({ where: 'shape', code: 'shape', msg });
@@ -278,6 +282,8 @@ export function checkPost(ctx, pack, draft, facts, format = null) {
     const capShort = limitsFor('captionShort', pack).maxChars;
     if (!String(draft.captionShort || '').trim()) problems.push({ where: 'caption short', code: 'caption', msg: 'the Instagram caption (captionShort) is missing' });
     else if (String(draft.captionShort).length > capShort) problems.push({ where: 'caption short', code: 'caption', msg: `the Instagram caption is over ${capShort} characters: it is the short one` });
+    // TikTok's caption is a story in four lines (hook, problem, discovery, result), and no caption holds a hashtag.
+    for (const x of captionProblems(draft, { limits: cap })) problems.push(x);
     const kw = draft.keywords || [];
     if (kw.length < 2 || !kw.some((k) => HEBREW.test(k)) || !kw.some((k) => LATIN.test(k))) problems.push({ where: 'keywords', code: 'keywords', msg: 'keywords need at least one in Hebrew and one in English letters' });
     for (const s of content) {
@@ -349,18 +355,19 @@ export function citeNumbers(draft, facts) {
 /** Fix the mechanical tells in every text of a draft, in place. Returns what changed, per text. */
 export function fixDraft(draft) {
   const out = [];
-  const fix = (where, get, set) => {
+  const fix = (where, get, set, sep = '\n') => {
     // A body of short lines (a layer, places 10 to 6) is fixed line by line, so its lines stay lines.
     const parts = String(get() || '').split('\n').map(mechanicalFix);
     const fixed = [...new Set(parts.flatMap((r) => r.fixed))];
     if (fixed.length) {
-      set(parts.map((r) => r.text).filter(Boolean).join('\n'));
+      set(parts.map((r) => r.text).filter(Boolean).join(sep));
       out.push(`${where}: ${fixed.join(', ')}`);
     }
   };
   fix('cover', () => draft.hook, (v) => (draft.hook = v));
   fix('cover line 2', () => draft.sub, (v) => (draft.sub = v));
-  fix('caption', () => draft.caption, (v) => (draft.caption = v));
+  // The story's beats keep the blank line between them.
+  fix('caption', () => draft.caption, (v) => (draft.caption = v), /\n\s*\n/.test(draft.caption || '') ? '\n\n' : '\n');
   if (draft.captionShort) fix('caption short', () => draft.captionShort, (v) => (draft.captionShort = v));
   draft.slides.forEach((sl, i) => {
     if (sl.kind !== 'item') return;
@@ -415,7 +422,8 @@ export function draftFromAnswer(ctx, pack, { format, answer: d, outline, items, 
     subject: { a: '', b: '', answer: '', date: '', ...(outline.subject || {}), ...Object.fromEntries(Object.entries(d.subject || {}).filter(([, v]) => String(v || '').trim())) },
     keywords: (d.keywords || []).map((k) => String(k).trim()).filter(Boolean).slice(0, 6),
     question: String(d.question || '').trim(),
-    caption: joinCaption(d.caption, d.question),
+    // TikTok's caption comes as the story's four beats (src/rules/caption.js); an older answer as one text.
+    caption: joinCaption(d.story ? storyCaption(d.story) : d.caption, d.question),
     captionShort: String(d.captionShort || '').trim(),
     cta,
     slides: [

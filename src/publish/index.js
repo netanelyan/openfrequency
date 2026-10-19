@@ -1,4 +1,5 @@
 import { oneLine } from '../rules/overlay.js';
+import { MAX_HASHTAGS, hashtagsIn } from '../rules/caption.js';
 import { chmodSync, copyFileSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
@@ -140,9 +141,15 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
     throw new PublishRefused(`fact check failed before publishing: ${problems[0]}`, 'fact_check');
   }
 
-  db.update('posts', postId, { status: 'publishing', updated_at: nowIso() });
   // TikTok gets the long caption; Instagram the short one, which repeats the cover line.
   const captionFor = (platform) => [platform === 'instagram' && post.caption_ig ? post.caption_ig : post.caption, imageCredit(db, post), (post.hashtags || []).join(' ')].filter(Boolean).join('\n\n');
+  // Five hashtags at most, counted on the caption as it would go out: the post's own and any a caption picked up.
+  for (const platform of pack.meta.platforms) {
+    const n = hashtagsIn(captionFor(platform)).length;
+    if (n > MAX_HASHTAGS) throw new PublishRefused(`${n} hashtags in the ${platform} caption: ${MAX_HASHTAGS} at most`, 'hashtags');
+  }
+
+  db.update('posts', postId, { status: 'publishing', updated_at: nowIso() });
   const results = { ...(post.publish || {}) };
   const attempts = (Number(results._attempts) || 0) + 1;
   delete results._attempts;

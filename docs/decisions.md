@@ -1206,3 +1206,31 @@ engine can act on, and what changed:
   writer, because last season's covers steer wrong. The rivals live in the database,
   not the pack: they are the owner's notes, they change weekly, and a pack is
   configuration.
+
+- **TikTok's caption is a story in four lines, and a post carries five hashtags at
+  most (2026-10-19, the owner's call).** The caption was one paragraph that said what
+  the post is about; it now tells it: a hook (one sentence, at most 100 characters,
+  the part TikTok shows before "more"), the problem (what was at stake, what went
+  wrong, the question the post settles), the discovery (the turn the slides show) and
+  the result (how it ended, or what it means for them now), with the closing question
+  at the end of the result. The writer returns the four beats as fields of the slides
+  answer (`story`), not one text, and the code joins them a blank line apart, so the
+  stored caption is the story and every later check reads the beats back from its
+  lines: the owner's edit, a rewrite, a redraft (`src/rules/caption.js`). The check is
+  of the shape, which code can see: four lines, a hook of one sentence, the others of
+  two at most, three words or more each, none repeating another. Whether a line truly
+  hooks is the reviewer's to judge. The beats retell the slides, so the old rule
+  stands: the post's best fact is on a slide, never only in the caption, and a
+  guess-who's or a ranking's result does not give the answer away. An account that
+  asked for short, catchy captions (2026-10-17) keeps them, as four short lines: its
+  limits cannot go below 160 characters and five sentences, room for four beats and
+  the question, and no beat but the last may take more than its share. A pack that
+  sets them lower is raised, and loading it prints a warning naming the pack and the
+  limit (`packWarnings`), so the change is never silent. Instagram's
+  short caption is not a story: it already leads with the cover line, and it stays
+  one line under it. Hashtags were already capped at five where they are chosen
+  (`hashtagsFor`); now no caption may hold one (a tag the writer added would go out
+  twice or push the post past five), a format may name five at most, and the
+  publisher counts the tags on each caption as it would go out and refuses more than
+  five before anything leaves. An older recorded answer with one `caption` text is
+  still read, and refused by the check unless it is four lines.

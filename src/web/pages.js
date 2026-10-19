@@ -69,8 +69,10 @@ ${f.error ? `<div class="muted">${esc(f.error)}</div>` : ''}</div></details>`
 
 function captionBlock(post) {
   const tags = `<span class="tags">${esc((post.hashtags || []).join(' '))}</span>`;
-  if (!post.caption_ig) return `<p class="caption">${esc(post.caption)} ${tags}</p>`;
-  return `<p class="caption"><span class="chip ghost">טיקטוק</span> ${esc(post.caption)} ${tags}</p><p class="caption"><span class="chip ghost">אינסטגרם</span> ${esc(post.caption_ig).replace(/\n/g, '<br>')}</p>`;
+  // TikTok's caption is a story, one beat a line (src/rules/caption.js).
+  const tiktok = esc(post.caption).replace(/\n+/g, '<br>');
+  if (!post.caption_ig) return `<p class="caption">${tiktok} ${tags}</p>`;
+  return `<p class="caption"><span class="chip ghost">טיקטוק</span> ${tiktok} ${tags}</p><p class="caption"><span class="chip ghost">אינסטגרם</span> ${esc(post.caption_ig).replace(/\n/g, '<br>')}</p>`;
 }
 
 /** What the checks found, in one quiet line: the facts and their sources, the bot score, an AI image. */
