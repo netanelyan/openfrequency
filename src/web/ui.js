@@ -66,6 +66,7 @@ const SPRITE = `<svg class="sr" width="0" height="0" aria-hidden="true"><defs>
 <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.9 5.5L19.5 10l-5.6 1.6L12 17l-1.9-5.4L4.5 10l5.6-1.5z"/></symbol>
 <symbol id="i-text" viewBox="0 0 24 24"><path d="M4 6h16M4 11h16M4 16h10"/></symbol>
 <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M4 14h4l2 3h4l2-3h4"/></symbol>
+<symbol id="i-sidebar" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M15 4v16"/></symbol>
 </defs></svg>`;
 
 // Five sections, the same on a phone (the tab bar) and on a desk (the top bar): no More tab. A new account starts
@@ -104,7 +105,7 @@ export function budgetBanner(b) {
 export function layout(ctx, body) {
   const section = SECTION_OF[ctx.active] || ctx.active;
   const badge = (key) => (key === 'today' && ctx.waiting ? `<b class="badge num" aria-label="${ctx.waiting} מחכים לך">${ctx.waiting}</b>` : '');
-  const nav = NAV.map(([href, label, key, ic]) => `<a href="${href}"${key === section ? ' aria-current="page"' : ''}>${icon(ic)}<span>${label}</span>${badge(key)}</a>`).join('');
+  const nav = NAV.map(([href, label, key, ic]) => `<a href="${href}" title="${label}"${key === section ? ' aria-current="page"' : ''}>${icon(ic)}<span>${label}</span>${badge(key)}</a>`).join('');
   const tabs = NAV.map(([href, label, key, ic]) => `<a href="${href}"${key === section ? ' aria-current="page"' : ''}>${icon(ic)}<span>${label}</span>${badge(key)}</a>`).join('');
   const s = ctx.spend || { usd: 0, cap: 0 };
   const cap = Number(s.cap) || 0;
@@ -114,7 +115,7 @@ export function layout(ctx, body) {
   const ring = `<svg class="ring${used >= 90 ? ' bad' : used >= 70 ? ' warn' : ''}" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8"/><circle class="v" cx="10" cy="10" r="8" pathLength="100" stroke-dasharray="${used} 100"/></svg>`;
   // The appearance follows the system setting: the site has no switch of its own.
   return `<!doctype html>
-<html lang="he" dir="rtl">
+<html lang="he" dir="rtl"${ctx.side === 'mini' ? ' class="side-mini"' : ''}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -133,9 +134,10 @@ export function layout(ctx, body) {
 ${SPRITE}
 <header class="top"><div class="wrap">
   <a class="brand" href="/" aria-label="תדר, להיום">${mark()}<b>תדר</b></a>
+  <button class="sidetoggle" type="button" data-side aria-label="${ctx.side === 'mini' ? 'הרחב את סרגל הצד' : 'כווץ את סרגל הצד'}" aria-expanded="${ctx.side === 'mini' ? 'false' : 'true'}" title="${ctx.side === 'mini' ? 'הרחב' : 'כווץ'}">${icon('sidebar')}</button>
   <nav class="nav" aria-label="ראשי">${nav}</nav>
   <div class="tools">
-    <a class="spend" href="/settings#budget" title="ההוצאה החודשית מתוך התקציב: ${used}%">${ring}<span>החודש</span><b class="num ltr">$${spent.toFixed(2)} / $${cap}</b></a>
+    <a class="spend" href="/settings#budget" title="ההוצאה החודשית: $${spent.toFixed(2)} מתוך $${cap} (${used}%)">${ring}<span class="lbl">החודש</span><span class="amt num ltr"><b>$${spent.toFixed(2)}</b><span> / $${cap}</span></span></a>
   </div>
 </div></header>
 <main class="wrap" id="main">

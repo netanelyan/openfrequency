@@ -14,6 +14,16 @@
   };
   if (toast?.dataset.flash) say(toast.dataset.flash);
 
+  // The desk's sidebar collapses to its icons and back; the choice is a cookie, so the next page arrives in shape.
+  document.querySelector('[data-side]')?.addEventListener('click', (e) => {
+    const mini = document.documentElement.classList.toggle('side-mini');
+    const b = e.currentTarget;
+    b.setAttribute('aria-expanded', String(!mini));
+    b.setAttribute('aria-label', mini ? 'הרחב את סרגל הצד' : 'כווץ את סרגל הצד');
+    b.title = mini ? 'הרחב' : 'כווץ';
+    document.cookie = `of_side=${mini ? 'mini' : 'full'}; Path=/; Max-Age=31536000; SameSite=Strict`;
+  });
+
   // The navigation bar lifts once the page scrolls under it.
   const lift = () => document.documentElement.classList.toggle('scrolled', window.scrollY > 8);
   window.addEventListener('scroll', lift, { passive: true });

@@ -206,33 +206,61 @@ svg.i { width: 20px; height: 20px; flex: none; stroke: currentColor; fill: none;
 .nav a[aria-current='page'] { color: var(--ink); font-weight: 600; background: var(--seg-on); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 1px rgba(0, 0, 0, 0.04); }
 .nav .badge { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--badge); color: var(--badge-ink); font-size: 11px; font-weight: 600; line-height: 18px; text-align: center; }
 .top .tools { margin-inline-start: auto; display: flex; align-items: center; gap: 8px; }
-@media (min-width: 900px) {
-  :root { --top: 0px; --side: 244px; }
-  body { padding-inline-start: calc(var(--side) + 12px); }
-  .top { position: fixed; top: 12px; bottom: 12px; inset-inline-start: 12px; width: var(--side); padding: 0; }
-  .top .wrap, .scrolled .top .wrap { height: 100%; max-width: none; margin: 0; flex-direction: column; align-items: stretch; gap: 4px; padding: 20px 12px 12px; border-radius: 24px; box-shadow: var(--shadow-float), inset 0 0 0 1px var(--bar-edge), inset 0 1px 0 var(--rim); }
-  .brand { padding: 0 8px 18px; }
-  .nav { display: flex; flex-direction: column; gap: 2px; padding: 0; border-radius: 0; background: none; }
-  .nav a { min-height: 42px; gap: 12px; padding: 0 12px; border-radius: 12px; font-size: 15px; }
-  .nav a svg.i { color: var(--ink-3); }
-  .nav a[aria-current='page'] svg.i { color: var(--accent); stroke-width: 2; }
-  .nav .badge { margin-inline-start: auto; }
-  .top .tools { margin-top: auto; margin-inline-start: 0; }
-  .spend { width: 100%; min-height: 52px; padding: 0 14px; border-radius: 14px; gap: 10px; }
-  .spend b { margin-inline-start: auto; }
-}
-
-/* The month's spend against the cap: a pill with a ring that fills as the month is spent, one tap from the budget. */
-.spend { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 14px 0 12px; border-radius: 999px; background: var(--fill); }
+/* The month's spend against the cap, on one line that never wraps: a ring that fills as the month is spent
+   (orange from 70%, red from 90%), the word, and the amount with the cap quieter. One tap to the budget. */
+.spend { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 14px 0 10px; border-radius: 999px; background: var(--fill); white-space: nowrap; }
 .spend:hover { text-decoration: none; background: var(--fill-2); }
-.spend span { font-size: 13px; color: var(--ink-2); }
-.spend b { font-size: 14px; font-weight: 600; color: var(--ink); }
+.spend .lbl { font-size: 13px; color: var(--ink-2); }
+.spend .amt { font-size: 13px; color: var(--ink-2); }
+.spend .amt b { font-size: 15px; font-weight: 600; color: var(--ink); }
 .ring { width: 20px; height: 20px; flex: none; fill: none; stroke-width: 3; }
 .ring circle { stroke: var(--line-2); }
 .ring circle.v { stroke: var(--accent-fill); stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; }
 .ring.warn circle.v { stroke: var(--warn); }
 .ring.bad circle.v { stroke: var(--bad); }
-@media (max-width: 520px) { .spend span { display: none; } }
+@media (max-width: 520px) { .spend .lbl { display: none; } }
+
+/* the sidebar toggle: on a desk only */
+.sidetoggle { display: none; }
+
+@media (min-width: 900px) {
+  :root { --top: 0px; --side: 244px; }
+  .side-mini { --side: 76px; }
+  body { padding-inline-start: calc(var(--side) + 12px); transition: padding-inline-start 0.25s ease; }
+  .top { position: fixed; top: 12px; bottom: 12px; inset-inline-start: 12px; width: var(--side); padding: 0; transition: width 0.25s ease; }
+  /* logo and toggle on the first row, the sections under them, the spend at the foot */
+  .top .wrap, .scrolled .top .wrap {
+    height: 100%; max-width: none; margin: 0;
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto 1fr; align-items: center; gap: 4px;
+    padding: 16px 12px 12px; border-radius: 24px; overflow: hidden;
+    box-shadow: var(--shadow-float), inset 0 0 0 1px var(--bar-edge), inset 0 1px 0 var(--rim);
+  }
+  .brand { grid-column: 1; grid-row: 1; padding: 0 6px; min-width: 0; }
+  .sidetoggle { display: grid; place-items: center; grid-column: 2; grid-row: 1; width: 36px; height: 36px; border: 0; border-radius: 10px; background: none; color: var(--ink-2); cursor: pointer; }
+  .sidetoggle:hover { background: var(--fill); color: var(--ink); }
+  .nav { grid-column: 1 / -1; grid-row: 2; align-self: start; margin-top: 16px; display: flex; flex-direction: column; gap: 2px; padding: 0; border-radius: 0; background: none; }
+  .nav a { min-height: 42px; gap: 12px; padding: 0 12px; border-radius: 12px; font-size: 15px; position: relative; white-space: nowrap; }
+  .nav a svg.i { color: var(--ink-3); }
+  .nav a[aria-current='page'] svg.i { color: var(--accent); stroke-width: 2; }
+  .nav .badge { margin-inline-start: auto; }
+  .top .tools { grid-column: 1 / -1; grid-row: 3; align-self: end; margin: 0; }
+  .spend { width: 100%; min-height: 48px; padding: 0 12px; border-radius: 14px; gap: 10px; }
+  .spend .amt { margin-inline-start: auto; }
+
+  /* Collapsed: a rail of icons. The names stay for screen readers and come back as tooltips; the waiting count
+     sits on the icon's corner, as on a tab bar; the spend is its ring, with the amount in the tooltip. */
+  .side-mini .top .wrap { grid-template-columns: 1fr; grid-template-rows: auto auto auto 1fr; justify-items: center; padding: 16px 10px 10px; }
+  .side-mini .brand { padding: 0; }
+  .side-mini .brand b { display: none; }
+  .side-mini .sidetoggle { grid-column: 1; grid-row: 2; margin-top: 6px; }
+  .side-mini .nav { grid-row: 3; width: 100%; margin-top: 8px; }
+  .side-mini .nav a { justify-content: center; padding: 0; }
+  .side-mini .nav a > span, .side-mini .spend .lbl, .side-mini .spend .amt { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .side-mini .nav .badge { position: absolute; top: 3px; inset-inline-start: calc(50% + 2px); margin: 0; min-width: 16px; height: 16px; line-height: 16px; font-size: 10px; padding: 0 4px; }
+  .side-mini .top .tools { grid-row: 4; justify-self: center; }
+  .side-mini .spend { width: 44px; min-height: 44px; padding: 0; justify-content: center; border-radius: 12px; }
+  .side-mini .ring { width: 22px; height: 22px; }
+}
 
 /* ------------------------------------------------------------ the tab bar (phone): a floating glass bar, as on iOS */
 
