@@ -11,6 +11,7 @@ import { pauseAccount, resumeAccount } from '../autonomy/rails.js';
 import { publishPost } from '../publish/index.js';
 import { MODES } from '../packs/validate.js';
 import { factProblems, readTopics, removeFact, saveFact } from '../sources/facts.js';
+import { removeRival, saveRival } from '../pipeline/rivals.js';
 import { israelDate } from '../schedule/israel.js';
 import { DEFAULT_MONTHLY_USD } from '../budget/ledger.js';
 
@@ -252,6 +253,26 @@ export function removeFactAction(ctx, user, _p, form) {
   if (!gone) throw new ActionError('העובדה לא נמצאה', 404);
   audit(ctx.db, { actor: user.name, action: 'fact_removed', accountId: pack.id, detail: { topic: form.topic, quote: gone.quote.slice(0, 80) } });
   return { ok: true, message: 'הוסרה. פוסט שעוד לא פורסם ונשען עליה ייחסם בבדיקה שלפני הפרסום.', redirect: `/facts?account=${encodeURIComponent(pack.id)}` };
+}
+
+// ---- rivals the owner watches (src/pipeline/rivals.js), typed in by hand
+
+export function saveRivalAction(ctx, user, _p, form) {
+  const pack = ctx.pack(String(form.account || ''));
+  if (!pack) throw new ActionError('אין חשבון כזה', 404);
+  const r = saveRival(ctx.db, pack.id, form, { by: user.name });
+  if (r.problems) throw new ActionError('המתחרה לא נשמר', 422, { problems: r.problems, values: { ...form } });
+  audit(ctx.db, { actor: user.name, action: form.id ? 'rival_updated' : 'rival_added', accountId: pack.id, detail: { handle: String(form.handle || '').replace(/^@+/, '').trim(), platform: form.platform } });
+  return { ok: true, message: form.id ? 'עודכן. הכתיבה הבאה תשתמש בזה.' : 'נוסף. הכתיבה הבאה תשתמש בזה.', redirect: `/rivals?account=${encodeURIComponent(pack.id)}` };
+}
+
+export function removeRivalAction(ctx, user, _p, form) {
+  const pack = ctx.pack(String(form.account || ''));
+  if (!pack) throw new ActionError('אין חשבון כזה', 404);
+  const gone = removeRival(ctx.db, pack.id, form.id);
+  if (!gone) throw new ActionError('אין מתחרה כזה', 404);
+  audit(ctx.db, { actor: user.name, action: 'rival_removed', accountId: pack.id, detail: { handle: gone.handle, platform: gone.platform } });
+  return { ok: true, message: `@${gone.handle} הוסר.`, redirect: `/rivals?account=${encodeURIComponent(pack.id)}` };
 }
 
 /** A takedown notice for a post: recorded, the post taken down, the account paused on the second in 90 days. */

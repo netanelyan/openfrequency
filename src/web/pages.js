@@ -2,6 +2,7 @@ import { accDot, csrfField, dayHe, esc, icon, k, layout, markDots, MODE_HE, post
 import { PAUSE_REASONS } from '../autonomy/rails.js';
 import { KINDS, MIX } from '../formats/kinds.js';
 import { BOXES, MEASURES, PRIORITY } from '../metrics/feedback.js';
+import { RIVALS } from '../pipeline/rivals.js';
 
 const KIND_HE = Object.fromEntries(Object.entries(KINDS).map(([k2, v]) => [k2, v.name]));
 
@@ -27,7 +28,7 @@ const AUDIT_HE = {
   auto_approved: 'אושר אוטומטית', mode: 'שינוי מצב', pause: 'השהיה', resume: 'חידוש', global_kill_on: 'כיבוי כללי', global_kill_off: 'הפעלה מחדש', global_budget: 'תקציב כללי',
   takedown: 'הודעת הסרה', takedown_deleted: 'נמחק ידנית אחרי הודעה', image_ok: 'תמונה נבדקה בעין', mix_changed: 'יחס בידור ומספרים זז',
   generate_at: 'שעת ייצור', source_approved: 'מקור אושר', source_removed: 'מקור הוסר', source_added: 'מקור נוסף', user_added: 'משתמש נוסף',
-  publish_retry: 'פרסום יחזור על עצמו', fact_added: 'עובדה נוספה', fact_confirmed: 'עובדה נבדקה שוב', fact_removed: 'עובדה הוסרה', format_dropped: 'פורמט נשר', format_promoted: 'פורמט הוכח', format_returned: 'פורמט חזר', onboarding: 'חשבון חדש', went_live: 'חשבון עלה לאוויר',
+  publish_retry: 'פרסום יחזור על עצמו', fact_added: 'עובדה נוספה', fact_confirmed: 'עובדה נבדקה שוב', fact_removed: 'עובדה הוסרה', rival_added: 'מתחרה נוסף', rival_updated: 'מתחרה עודכן', rival_removed: 'מתחרה הוסר', format_dropped: 'פורמט נשר', format_promoted: 'פורמט הוכח', format_returned: 'פורמט חזר', onboarding: 'חשבון חדש', went_live: 'חשבון עלה לאוויר',
 };
 
 const media = (post, platform, i) => `/media/${encodeURIComponent(post.id)}/${platform}/${i}?v=${encodeURIComponent(String(post.updated_at || '').replace(/D/g, '').slice(-10))}`;
@@ -276,7 +277,7 @@ ${paused ? `<div class="paused${acc.paused_reason === 'kill' ? ' kill' : ''}">${
 <div><div class="row"><span>7 הימים האחרונים</span><b>${week.days.reduce((s, x) => s + x.n, 0)} פורסמו${week.views != null ? ` · ${k(week.views)} צפיות` : ''}</b></div>
 <div class="week" aria-label="פוסטים שפורסמו בכל יום">${week.days.map((x) => `<span title="${esc(shortDate(x.at))}: ${x.n}"><i class="${h(x.n)}"></i>${esc(weekdayNarrow(x.at))}</span>`).join('')}</div></div>
 <dl class="kv"><dt>בתור</dt><dd>${week.counts.queued || 0} ממתינים · ${week.counts.approved || 0} מאושרים</dd><dt>נחסמו השבוע</dt><dd>${week.counts.blocked || 0}</dd><dt>פרסום</dt><dd>${publishers.map((x) => `${PLATFORM_HE[x.platform] || x.platform}: ${publisherHe(x)}`).join(' · ')}</dd></dl>
-<div class="actions p0">${!paused ? postButton(ctx, `/accounts/${pack.id}/kill`, `${icon('power')}כבה את החשבון`, { cls: 'btn danger', confirm: 'בטוח? לחצו שוב לכיבוי' }) : ''}<a class="btn" href="/sources?account=${esc(pack.id)}">מקורות</a></div>
+<div class="actions p0">${!paused ? postButton(ctx, `/accounts/${pack.id}/kill`, `${icon('power')}כבה את החשבון`, { cls: 'btn danger', confirm: 'בטוח? לחצו שוב לכיבוי' }) : ''}<a class="btn" href="/sources?account=${esc(pack.id)}">מקורות</a><a class="btn" href="/rivals?account=${esc(pack.id)}">מתחרים</a></div>
 </article>`;
     })
     .join('')}</div>`;
@@ -520,4 +521,53 @@ ${problems.length ? `<div class="problems"><ul>${problems.map((x) => `<li>${esc(
 <label class="f">הערה <small>לא חובה</small><input type="text" name="note" maxlength="200" value="${esc(form.note || '')}"></label>
 <button class="btn primary" type="submit">${icon('plus')}הוסף עובדה</button></form></section></div>`;
   return layout({ ...ctx, title: 'עובדות שנבדקו ביד', active: 'sources' }, body);
+}
+
+/* ------------------------------------------------------------ rivals, typed in by hand */
+
+const RIVAL_STATE = { fresh: null, stale: ['כדאי להציץ שוב', 'warn'], dropped: ['ישן: לא בשימוש', 'bad'] };
+const agoHe = (d) => (d <= 0 ? 'היום' : d === 1 ? 'אתמול' : `לפני ${d} ימים`);
+
+/** The rival form: a new rival, or the one `r` is (its fields prefilled). */
+function rivalForm(ctx, current, r = {}, { id = null, submit = 'הוסף מתחרה' } = {}) {
+  const v = (x) => (Array.isArray(x) ? x.join('\n') : x || '');
+  return `<form method="post" action="/rivals/save" class="formgrid">${csrfField(ctx)}<input type="hidden" name="account" value="${esc(current.id)}">${id ? `<input type="hidden" name="id" value="${esc(id)}">` : ''}
+<label class="f">שם משתמש<input type="text" name="handle" required maxlength="40" dir="ltr" autocapitalize="off" spellcheck="false" placeholder="@" value="${esc(r.handle || '')}"></label>
+<label class="f">פלטפורמה<select name="platform">${['tiktok', 'instagram'].map((x) => `<option value="${x}"${(r.platform || 'tiktok') === x ? ' selected' : ''}>${PLATFORM_HE[x]}</option>`).join('')}</select></label>
+<label class="f">שורות השער שעבדו להם הכי טוב <small>שורה לכל אחת, עד ${RIVALS.hooks}, כמו שהן כתובות</small><textarea name="hooks" required rows="4" dir="auto">${esc(v(r.hooks))}</textarea></label>
+<label class="f">הפורמטים שלהם <small>שורה לכל אחד: "דירוג 5 עד 1", "סיפור בשקפים"</small><textarea name="formats" rows="2" dir="auto">${esc(v(r.formats))}</textarea></label>
+<label class="f">שעות פרסום <small><bdi dir="ltr">18:30, 21:00</bdi></small><input type="text" name="times" dir="ltr" value="${esc(Array.isArray(r.times) ? r.times.join(', ') : r.times || '')}"></label>
+<label class="f">מה הם לא נותנים <small>הנושאים והזוויות שהקהל שלהם לא מקבל; הכי חשוב בטופס</small><textarea name="gaps" rows="3" maxlength="${RIVALS.gapChars}" dir="auto">${esc(r.gaps || '')}</textarea></label>
+<button class="btn primary" type="submit">${id ? icon('check') : icon('plus')}${submit}</button></form>`;
+}
+
+export function rivalsPage(ctx, { packs, current, rivals, times, form = {}, problems = [] }) {
+  const tabs = `<nav class="tabs" aria-label="חשבונות">${packs.map((p) => `<a href="/rivals?account=${esc(p.id)}"${p.id === current.id ? ' aria-current="true"' : ''}>${accDot(p.id)}${esc(p.meta.displayName)}</a>`).join('')}</nav>`;
+  const editing = form.id ? Number(form.id) : null;
+  const list = rivals
+    .map((r) => {
+      const st = RIVAL_STATE[r.state];
+      const shown = editing === r.id ? { ...r, ...form } : r;
+      return `<section class="panel acc acc-${esc(current.id)}" id="rival-${r.id}"><header><h2 class="ltr">@${esc(r.handle)}</h2><span class="chip ghost">${esc(PLATFORM_HE[r.platform] || r.platform)}</span>${st ? `<span class="chip ${st[1]}">${esc(st[0])}</span>` : ''}<span class="end muted small">עודכן ${esc(agoHe(r.age))}${r.updatedBy ? ` · ${esc(r.updatedBy)}` : ''}</span></header>
+<ul class="rival">${r.hooks.map((h) => `<li dir="auto">${esc(h)}</li>`).join('')}</ul>
+<dl class="kv">${r.formats.length ? `<dt>פורמטים</dt><dd dir="auto">${esc(r.formats.join(' · '))}</dd>` : ''}${r.times.length ? `<dt>שעות</dt><dd class="ltr">${esc(r.times.join(' · '))}</dd>` : ''}${r.gaps ? `<dt>מה חסר אצלם</dt><dd dir="auto">${esc(r.gaps)}</dd>` : ''}</dl>
+<details class="rivaledit"${editing === r.id ? ' open' : ''}><summary>עדכון</summary>${editing === r.id && problems.length ? `<div class="problems"><ul>${problems.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}${rivalForm(ctx, current, shown, { id: r.id, submit: 'שמור, הסתכלתי היום' })}</details>
+<div class="actions pt10 p0x">${postButton(ctx, '/rivals/remove', 'הסר', { cls: 'btn sm danger', confirm: 'להסיר את המתחרה?', fields: { account: current.id, id: r.id } })}</div></section>`;
+    })
+    .join('');
+  const fewer = rivals.length < RIVALS.min ? `<p class="small"><span class="chip warn">${rivals.length ? `עוד ${RIVALS.min - rivals.length}` : `${RIVALS.min} לפחות`}</span> שלושה עד חמישה חשבונות נותנים תמונה של הנישה; אחד הוא רק טעם של חשבון אחד.</p>` : '';
+  const slots = times.own.length
+    ? `<section class="panel"><header><h2>שעות</h2></header><dl class="kv">${times.own.map((x) => `<dt class="ltr">${esc(x.at)}</dt><dd>${x.near ? `${x.near === 1 ? 'מתחרה אחד מפרסם' : `${x.near} מתחרים מפרסמים`} בטווח שעה` : 'אף מתחרה לא מפרסם בטווח שעה'}</dd>`).join('')}${times.theirs.length ? `<dt>הם</dt><dd><bdi dir="ltr">${esc(times.theirs.map((x) => x.at).join(' · '))}</bdi></dd>` : ''}</dl>
+<p class="muted small m6">המשבצות של החשבון באות מהחבילה שלו, עם שבת, חגים ושעות הפרסום. השעות של המתחרים מוצגות כאן לידן ולא משנות אותן.</p></section>`
+    : '';
+  const adding = !editing && problems.length;
+  const body = `<div class="head"><h1>מתחרים</h1><span class="sub">מה שראיתם אצלם, בשביל הכתיבה</span></div>
+${tabs}
+<p class="lede">המנוע לא קורא חשבונות של אחרים: זה דף של מישהו אחר, וכלל הרשת שלנו חוסם אותו. כאן אתם כותבים מה ראיתם כשגללתם בנישה: השערים שעבדו להם, הפורמטים, מתי הם מפרסמים ומה הם לא נותנים. הכותב מקבל את זה בכל תכנון: מה שחסר אצלם מכוון את הנושא והזווית, והשערים שלהם הם מה שהשער שלנו צריך לבלוט מולו, בלי להעתיק. מתחרה שלא עודכן ${RIVALS.staleDays} יום מסומן, ואחרי ${RIVALS.dropDays} יום הוא כבר לא מגיע לכותב.</p>
+${fewer}
+<div class="cols"><div>${list || '<div class="empty"><b>עוד אין מתחרים לחשבון הזה</b>הכתיבה עובדת גם בלעדיהם, רק בלי לדעת מה הנישה כבר רואה.</div>'}${slots}</div>
+${rivals.length < RIVALS.max ? `<section class="panel"><header><h2>מתחרה חדש</h2><span class="end muted small">${rivals.length} מתוך ${RIVALS.max}</span></header>
+${adding ? `<div class="problems"><ul>${problems.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
+${rivalForm(ctx, current, adding ? form : {})}</section>` : `<section class="panel"><header><h2>חמישה מתחרים</h2></header><p class="muted">זה המקסימום. כדי להוסיף אחר, הסירו אחד.</p></section>`}</div>`;
+  return layout({ ...ctx, title: 'מתחרים', active: 'accounts' }, body);
 }

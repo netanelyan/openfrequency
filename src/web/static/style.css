@@ -518,7 +518,7 @@ details.fact[open] > summary { border-bottom: 1px solid var(--line-2); }
 .fact .src { padding: 10px 14px 14px; display: grid; gap: 8px; font-size: 14px; color: var(--ink-2); }
 blockquote.q { margin: 0; padding: 10px 12px; border-inline-start: 3px solid var(--line-2); background: var(--surface); border-radius: 0 10px 10px 0; font-size: 15px; color: var(--ink); unicode-bidi: plaintext; text-align: start; }
 .src .where { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
-.src .where a { font-weight: 500; color: var(--accent); }
+.src .where a { font-weight: 500; color: var(--accent-p); }
 :target > details.fact, details.fact:target { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-fill) 40%, transparent); }
 
 /* actions */
@@ -734,3 +734,8 @@ h2.inline { display: inline; }
 .matrix .cell ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 8px; }
 .matrix .cell li a { overflow-wrap: anywhere; }
 .panel h3 { margin-top: 8px; }
+/* A rival the owner watches: its best cover lines as they wrote them, then the edit form folded away. */
+ul.rival { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 6px; }
+ul.rival li { padding: 10px 14px; border-radius: 12px; background: var(--inset); font-weight: 500; overflow-wrap: anywhere; }
+details.rivaledit { margin-top: 12px; border-top: 1px solid var(--line); }
+details.rivaledit > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 500; color: var(--accent-p); }

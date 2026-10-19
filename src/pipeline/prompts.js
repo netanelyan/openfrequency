@@ -326,9 +326,10 @@ function formatHead(format, n = null) {
 /**
  * The outline's user turn: this post's format, then the documents, narrowed to
  * their content. `day` (on-this-day): the date the post goes out on; `subject`:
- * a subject the post must be about (a fight week's main event).
+ * a subject the post must be about (a fight week's main event). `niche`: the
+ * rivals the owner watches, as nicheForOutline says them.
  */
-export function outlineUser(format, docs, { avoid = [], faceless = [], maxChars = 7000, day = null, subject = null, maxAgeDays = null } = {}) {
+export function outlineUser(format, docs, { avoid = [], faceless = [], maxChars = 7000, day = null, subject = null, maxAgeDays = null, niche = '' } = {}) {
   const per = docs.length > 1 ? Math.max(2500, Math.floor(maxChars / docs.length)) : maxChars;
   return [
     `${formatHead(format)}${format.trend ? ` ${format.about}` : ''}`,
@@ -342,6 +343,8 @@ export function outlineUser(format, docs, { avoid = [], faceless = [], maxChars 
     ...docs.map((d) => `<document id="${d.ref}" source="${d.sourceName}" url="${d.url}">\n${d.title ? `# ${d.title}\n` : ''}${focusText(d.text, { maxChars: per, numbersFirst: groupOf(format) === 'number' })}\n</document>`),
     avoid.length ? `Topics this account posted recently (do not repeat them): ${avoid.join(' · ')}` : '',
     faceless.length ? `Matchups with no licensed photograph of one side (choose two others, from the same card or the same documents): ${faceless.join(' · ')}` : '',
+    // The rivals the owner typed in (src/pipeline/rivals.js): a subject still wins, and the documents still decide what is true.
+    subject ? '' : niche,
   ]
     .filter(Boolean)
     .join('\n\n');
@@ -379,7 +382,7 @@ export function steerLine(steer) {
   return '';
 }
 
-export function slidesUser({ format, n, outline, facts, edits = [], problems = [], lastDraft = null, hook = null, cta = null, day = null, pack = null, steer = null }) {
+export function slidesUser({ format, n, outline, facts, edits = [], problems = [], lastDraft = null, hook = null, cta = null, day = null, pack = null, steer = null, niche = '' }) {
   const legacy = kindName(format) === 'list';
   const body = limitsFor('slideBody', pack);
   const sub = limitsFor('sub', pack);
@@ -395,6 +398,7 @@ export function slidesUser({ format, n, outline, facts, edits = [], problems = [
     !legacy ? `VISUALS: at least ${visualsNeeded(n)} of the ${n} content slides carry a visual (a stat slide's two values count).` : '',
     linesRule(pack),
     steerLine(steer),
+    niche,
     `TOPIC: ${outline.topic}`,
     !legacy && outline.subject ? `SUBJECT: ${Object.entries(outline.subject).filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`).join(', ') || '(none)'}` : '',
     'FACTS (state only these; cite their ids):',

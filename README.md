@@ -68,7 +68,7 @@ Five sections, the same on a phone and a desk:
 | Section | |
 |---|---|
 | **Today** | the day at a glance (a row of dots per account: waiting, scheduled, out, stopped), then every post that waits for you, decision first: the cover line, the slides, what the checks found in one line, and approve, edit or reject. Captions and facts fold open below |
-| **Accounts** | each account's mode, schedule, kill switch and week; a new account |
+| **Accounts** | each account's mode, schedule, kill switch and week; the rivals you watch for it; a new account |
 | **Results** | this morning's feedback for each account (its last three days' posts in four boxes, and what each box changes in the next posts), each post's numbers, and what the engine learned from them, in plain words |
 | **Sources** | every source with why it is trusted, hand-checked facts, adding and removing |
 | **Settings** | the month's spend and forecast, which keys are set (never their values), your account and signing out |
@@ -206,6 +206,15 @@ on a slide, titles that react rather than label, nothing in the top 10% or the
 bottom 20%, and a thick outline on text over a picture. A line left too long is
 broken in code; the rest is checked like any other rule, and the renderer measures
 every line against the safe zone (`src/rules/overlay.js`, `pack.json` `overlay`).
+
+**Rivals, typed in by hand.** For each account the owner keeps three to five
+accounts like it (Accounts → מתחרים): their handle, the cover lines that did best
+for them, their formats, when they post and what they leave out. The engine never
+reads another account itself (hard rule 1), so this is what the owner saw while
+scrolling the niche. The gaps steer the outline's topic and angle, the covers are
+what the writer must stand apart from (never copy), and their hours are shown beside
+the account's own slots without moving them. A rival not updated in 30 days is
+marked; after 60 it no longer reaches the writer (`src/pipeline/rivals.js`).
 
 **Fight week.** An account that follows fight cards reads the calendar daily. Three
 days before a card its first slot is a tale of the tape, the day before a pick, the
@@ -392,7 +401,7 @@ src/verify      facts against stored documents, the render gate
 src/rules       pack rules, cross-promotion, investment-advice compliance, the text on a slide
 src/images      licensed photographs and the image screen
 src/render      fonts, templates and their variants, the graphics, Chromium
-src/pipeline    one post from topic to queue; export to disk
+src/pipeline    one post from topic to queue, the rivals typed in by hand; export to disk
 src/publish     dry, Zernio (TikTok), Instagram, takedowns
 src/metrics     reading numbers, crediting formats, the morning's feedback
 src/formats     the kinds of post, rotation, the mix, cover patterns

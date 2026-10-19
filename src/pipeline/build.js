@@ -22,6 +22,7 @@ import { renderPost } from '../render/render.js';
 import { israelDate } from '../schedule/israel.js';
 import { upcoming } from '../schedule/events.js';
 import { detailsPrompt, detailsUser, outlinePrompt, outlineUser, rewritePrompt, rewriteUser, slidesPrompt, slidesUser, visualsNeeded } from './prompts.js';
+import { nicheForOutline, nicheForSlides, rivalsOf } from './rivals.js';
 import { aboutSubject, research } from '../sources/research.js';
 
 // One post, from topic to a rendered, queued slideshow:
@@ -613,6 +614,8 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
   // The morning's feedback may have planned this post (src/metrics/feedback.js): a format, a cover pattern, a call to
   // action, the document of a post that worked, and why. What the caller fixed itself wins.
   const dv = directive || {};
+  // The rivals the owner typed in: what the niche already does, said to the outline and the slides.
+  const rivals = rivalsOf(db, pack.id);
   formatKey ||= dv.formatKey || null;
   hookId ||= dv.hookId || null;
   ctaText ||= dv.ctaText || null;
@@ -709,7 +712,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
         const p = outlinePrompt(pack, { ttl });
         try {
           const res = await askJson(pctx, {
-            task: 'outline', role: 'draft', system: p.system, user: outlineUser(f, refs, { avoid: subject || dv.steer?.kind === 'variation' ? [] : recent, faceless: [...new Set(faceless)], day: postDay, subject: subject?.text, maxAgeDays: String(c.key).startsWith('bank:') ? null : pack.meta.research?.maxAgeDays || null }), schema: p.schema, effort: EFFORT.outline, maxTokens: MAX_TOKENS.outline,
+            task: 'outline', role: 'draft', system: p.system, user: outlineUser(f, refs, { avoid: subject || dv.steer?.kind === 'variation' ? [] : recent, faceless: [...new Set(faceless)], day: postDay, subject: subject?.text, maxAgeDays: String(c.key).startsWith('bank:') ? null : pack.meta.research?.maxAgeDays || null, niche: nicheForOutline(rivals) }), schema: p.schema, effort: EFFORT.outline, maxTokens: MAX_TOKENS.outline,
             meta: { recordingsDir: pack.recordingsDir, docKey: c.key, format: f.base || f.id, attempt: 0 },
           });
           tried++;
@@ -793,7 +796,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
       let res;
       try {
         res = await askJson(pctx, {
-          task: 'slides', role: 'draft', system: sp.system, user: slidesUser({ format, n: items.length, outline: { ...outline, items }, facts: verifiedFacts, edits, problems: lastProblems.map(say), lastDraft: lastAnswer, hook, cta, day: postDay, pack, steer: dv.steer || null }), schema: sp.schema,
+          task: 'slides', role: 'draft', system: sp.system, user: slidesUser({ format, n: items.length, outline: { ...outline, items }, facts: verifiedFacts, edits, problems: lastProblems.map(say), lastDraft: lastAnswer, hook, cta, day: postDay, pack, steer: dv.steer || null, niche: nicheForSlides(rivals) }), schema: sp.schema,
           effort: EFFORT.slides, maxTokens: MAX_TOKENS.slides, meta: { recordingsDir: pack.recordingsDir, docKey: cand.key, format: format.base || format.id, attempt },
         });
       } catch (e) {

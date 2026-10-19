@@ -418,4 +418,23 @@ export const MIGRATIONS = [
 
   ALTER TABLE posts ADD COLUMN directive_id INTEGER;
   `,
+  `
+  -- The rivals an account's owner watches, typed in by hand (the engine never
+  -- reads another account): their best cover lines, formats, posting times and
+  -- the gaps they leave. Planning input for the writer.
+  CREATE TABLE rivals (
+    id            INTEGER PRIMARY KEY,
+    account_id    TEXT NOT NULL REFERENCES accounts(id),
+    handle        TEXT NOT NULL,
+    platform      TEXT NOT NULL CHECK (platform IN ('tiktok','instagram')),
+    hooks_json    TEXT NOT NULL,
+    formats_json  TEXT NOT NULL,
+    times_json    TEXT NOT NULL,
+    gaps          TEXT,
+    updated_at    TEXT NOT NULL,
+    updated_by    TEXT,
+    created_at    TEXT NOT NULL
+  );
+  CREATE INDEX rivals_account ON rivals(account_id);
+  `,
 ];

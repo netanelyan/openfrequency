@@ -1189,3 +1189,20 @@ engine can act on, and what changed:
   format. The writer is told why in one line of the slides prompt. A new morning
   replaces the plans no slot took, and a post that got its answer is not answered
   again. Results shows each account's report and what became of each plan.
+
+- **Rivals are typed in by hand, never read by the engine (2026-10-19, the owner's
+  call).** Researching an account's competitors means reading their posts, and
+  hard rule 1 keeps one network door that refuses Instagram's business_discovery
+  and every social web page. Rather than open that door, each account has a form
+  for three to five rivals: handle, platform, their best cover lines (up to five,
+  as written), their formats, their posting hours and the gaps they leave, with the
+  date it was last saved. It is planning input only: the outline is told the gaps
+  ("pick the topic and angle in one of them where the documents allow"), the slides
+  are told the covers the niche has seen (stand apart, never their words or their
+  opening). A set subject (a fight week's card) wins over the gaps. The rivals'
+  hours are shown beside the slots and do not move them: the slots also carry
+  Shabbat, the festivals and the posting windows, which are not a rival's call. A
+  rival not looked at in 30 days is marked; after 60 it is no longer said to the
+  writer, because last season's covers steer wrong. The rivals live in the database,
+  not the pack: they are the owner's notes, they change weekly, and a pack is
+  configuration.

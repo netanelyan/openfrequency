@@ -18,6 +18,7 @@ import { igConfig, instagramConfigured } from '../publish/instagram.js';
 import { getSetting } from '../core/store.js';
 import { resolveFormat } from '../trends/index.js';
 import { factProblems, factState, readTopics } from '../sources/facts.js';
+import { rivalsOf, timesBeside } from '../pipeline/rivals.js';
 import path from 'node:path';
 
 // What each page shows, as plain queries. Pages never touch the database
@@ -160,6 +161,12 @@ export function factsFor(ctx, pack) {
     ...t,
     facts: t.facts.map((f) => ({ ...f, state: factState(f), problems: factProblems(f, { maxQuoteWords: pack.rules.maxQuoteWords || 40 }) })),
   }));
+}
+
+/** An account's rivals, and their posting hours beside the account's own slots. */
+export function rivalsFor(ctx, pack) {
+  const rivals = rivalsOf(ctx.db, pack.id);
+  return { current: pack, rivals, times: timesBeside(rivals, pack.meta.schedule?.slots || []) };
 }
 
 export function sourcesFor(ctx, accountId) {

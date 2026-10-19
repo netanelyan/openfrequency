@@ -38,6 +38,7 @@ const { publishPost } = await import('../src/publish/index.js');
 const { addUser } = await import('../src/web/auth.js');
 const { learn } = await import('../src/metrics/collect.js');
 const { morningFeedback } = await import('../src/metrics/feedback.js');
+const { saveRival } = await import('../src/pipeline/rivals.js');
 const { israelDate, israelInstant, addDays } = await import('../src/schedule/israel.js');
 const { slotsFor } = await import('../src/schedule/slots.js');
 const { inRest } = await import('../src/schedule/shabbat.js');
@@ -120,6 +121,16 @@ for (const [id, views] of [['demo-coffee', 2600], ['demo-running', 5300]]) {
   const s2 = slotsFor(today, p.meta.schedule).slots.find((x) => x.getTime() > now) || new Date(now + 4 * HOUR);
   const b = await buildPost(ctx, { pack: p, slotAt: s2.toISOString() });
   if (id === 'demo-running' && b.status === 'queued') db.update('posts', b.postId, { status: 'approved', approved_by: 'engine:auto', approved_at: new Date().toISOString() });
+}
+// The plant account's rivals, as an owner would type them in (fictional handles). One was last looked at five weeks ago.
+const RIVALS = [
+  { handle: 'demo.mirpeset.yeruka', platform: 'tiktok', hooks: ['הבזיליקום שלכם מת בגלל דבר אחד', '3 צמחים שאי אפשר להרוג', 'השקיתי פעם בשבוע, וזה מה שקרה'], formats: ['דירוג 5 עד 1', 'לפני ואחרי'], times: '18:00, 21:30', gaps: 'אף אחד לא מסביר מה עושים בחורף במרפסת צפונית, ואף אחד לא נותן מחירים של עציצים' },
+  { handle: 'demo.ezitz.katan', platform: 'instagram', hooks: ['הטעות שכולם עושים עם נענע', 'העציץ הזה שווה 20 שקל ומחזיק שנים'], formats: ['מדריך בשקפים', 'מיתוס מול אמת'], times: '20:00', gaps: 'הכל צילומים יפים בלי הסבר למה צמח מת' },
+  { handle: 'demo.yarok.babait', platform: 'tiktok', hooks: ['צמח שמשגשג בלי שמש בכלל'], formats: ['סיפור בשקפים'], times: '19:00, 22:00', gaps: 'לא מדברים על חיות מחמד וצמחים רעילים' },
+];
+for (const r of RIVALS) {
+  const { id: rid } = saveRival(db, 'demo', { ...r, hooks: r.hooks.join('\n'), formats: r.formats.join('\n') }, { by: 'demo' });
+  if (r.handle === 'demo.yarok.babait') db.update('rivals', rid, { updated_at: new Date(Date.now() - 36 * 24 * HOUR).toISOString() });
 }
 learn(ctx);
 // This morning's feedback, from the demo readings above.

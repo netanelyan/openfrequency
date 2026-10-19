@@ -58,6 +58,7 @@ try {
         ['accounts', '/accounts'],
         ['results', '/results'],
         ['sources', '/sources'],
+        ['rivals', '/rivals'],
         ['new', '/new'],
         ['settings', '/settings'],
         ...(device === 'phone' ? [['more', '/more']] : []),

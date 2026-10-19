@@ -53,7 +53,7 @@ async function csrfOf(cookie) {
 const post = (p, cookie, body) => fetch(`${base}${p}`, { method: 'POST', redirect: 'manual', headers: { cookie, 'content-type': 'application/x-www-form-urlencoded', 'x-of-ajax': '1' }, body: new URLSearchParams(body).toString() });
 
 test('every page needs a session', async () => {
-  for (const p of ['/', '/accounts', '/results', '/sources', '/settings', `/post/${postId}`, `/media/${postId}/tiktok/0`]) {
+  for (const p of ['/', '/accounts', '/results', '/sources', '/rivals', '/settings', `/post/${postId}`, `/media/${postId}/tiktok/0`]) {
     const res = await get(p);
     assert.equal(res.status, 303, p);
     assert.equal(res.headers.get('location'), '/login');
@@ -70,7 +70,7 @@ test('a wrong password is refused, and a request for another host is refused', a
 
 test('every page is Hebrew, right to left, and escapes what it shows (hard rule 8)', async () => {
   const cookie = await login();
-  for (const p of ['/', '/accounts', '/results', '/sources', '/settings', '/more', '/new', `/post/${postId}`]) {
+  for (const p of ['/', '/accounts', '/results', '/sources', '/rivals', '/settings', '/more', '/new', `/post/${postId}`]) {
     const res = await get(p, cookie);
     assert.equal(res.status, 200, p);
     const html = await res.text();
@@ -168,6 +168,34 @@ test('hand-checked facts are added from the website, refused when malformed, and
   res = await post('/facts/confirm', cookie, { _csrf: csrf, account: 'demo', topic: 'השקיה', id, expires: '2027-10-01' });
   assert.equal(res.status, 200);
   assert.match((await res.json()).message, /2027-10-01/);
+});
+
+test('rivals are typed in by hand per account: refused when malformed, shown, updated and removed', async () => {
+  const cookie = await login();
+  const csrf = await csrfOf(cookie);
+  let html = await (await get('/rivals?account=demo', cookie)).text();
+  assert.match(html, /המנוע לא קורא חשבונות של אחרים/);
+  assert.match(html, /עוד אין מתחרים/);
+  let res = await post('/rivals/save', cookie, { _csrf: csrf, account: 'demo', handle: 'לא תקין', platform: 'tiktok', hooks: '' });
+  assert.equal(res.status, 422);
+  assert.equal((await res.json()).problems.length, 2);
+  const rival = { _csrf: csrf, account: 'demo', handle: '@balcony.greens', platform: 'tiktok', hooks: 'הבזיליקום שלכם מת בגלל דבר אחד\n<script>x</script>', formats: 'דירוג', times: '18:00', gaps: 'אף אחד לא מדבר על חורף' };
+  res = await post('/rivals/save', cookie, rival);
+  assert.equal(res.status, 200, await res.clone().text());
+  html = await (await get('/rivals?account=demo', cookie)).text();
+  assert.match(html, /@balcony\.greens/);
+  assert.match(html, /הבזיליקום שלכם מת בגלל דבר אחד/);
+  assert.ok(!html.includes('<script>x</script>'), 'what was typed is escaped');
+  assert.match(html, /עוד 2/, 'fewer than three asks for more');
+  const id = /name="id" value="(\d+)"/.exec(html)[1];
+  res = await post('/rivals/save', cookie, { ...rival, id, hooks: 'שער אחר', gaps: '' });
+  assert.equal(res.status, 200);
+  assert.deepEqual(JSON.parse(ctx.db.get('SELECT hooks_json FROM rivals WHERE id = ?', Number(id)).hooks_json), ['שער אחר']);
+  assert.match(await (await get('/accounts', cookie)).text(), /href="\/rivals\?account=demo"/);
+  res = await post('/rivals/remove', cookie, { _csrf: csrf, account: 'demo', id });
+  assert.equal(res.status, 200);
+  assert.equal(ctx.db.get('SELECT COUNT(*) AS n FROM rivals').n, 0);
+  assert.ok(ctx.db.get("SELECT id FROM audit WHERE action = 'rival_removed'"));
 });
 
 test('the Settings page shows the month against the cap: spent, forecast, posts left, each account\'s share; a higher cap is refused', async () => {

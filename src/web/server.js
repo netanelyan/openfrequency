@@ -102,6 +102,8 @@ export function createHandler(ctx, { port, env = process.env, limiter = createLi
     ['POST', /^\/facts\/add$/, (u, m, f) => act.addFact(ctx, u, {}, f)],
     ['POST', /^\/facts\/confirm$/, (u, m, f) => act.confirmFact(ctx, u, {}, f)],
     ['POST', /^\/facts\/remove$/, (u, m, f) => act.removeFactAction(ctx, u, {}, f)],
+    ['POST', /^\/rivals\/save$/, (u, m, f) => act.saveRivalAction(ctx, u, {}, f)],
+    ['POST', /^\/rivals\/remove$/, (u, m, f) => act.removeRivalAction(ctx, u, {}, f)],
     ...onboardingRoutes(ctx),
   ];
 
@@ -198,6 +200,10 @@ export function createHandler(ctx, { port, env = process.env, limiter = createLi
               const cur = ctx.pack(form.account) || ctx.packs[0];
               return send(req, res, e.status, pages.factsPage({ ...pageCtx(), csrf }, { packs: ctx.packs, current: cur, topics: data.factsFor(ctx, cur), ...factDates(), form, problems: e.problems || [e.message] }));
             }
+            if (p === '/rivals/save') {
+              const cur = ctx.pack(form.account) || ctx.packs[0];
+              return send(req, res, e.status, pages.rivalsPage({ ...pageCtx(), csrf }, { ...data.rivalsFor(ctx, cur), packs: ctx.packs, form, problems: e.problems || [e.message] }));
+            }
             return redirect(res, req.headers.referer ? new URL(req.headers.referer).pathname : '/', { 'set-cookie': flash(e.message) });
           }
         }
@@ -246,6 +252,11 @@ export function createHandler(ctx, { port, env = process.env, limiter = createLi
         const cur = ctx.pack(url.searchParams.get('account')) || ctx.packs.find((x) => x.facts) || ctx.packs[0];
         if (!cur) return page(pages.notFoundPage(pc), 404);
         return page(pages.factsPage(pc, { packs: ctx.packs, current: cur, topics: data.factsFor(ctx, cur), ...factDates() }));
+      }
+      if (p === '/rivals') {
+        const cur = ctx.pack(url.searchParams.get('account')) || ctx.packs[0];
+        if (!cur) return page(pages.notFoundPage(pc), 404);
+        return page(pages.rivalsPage(pc, { ...data.rivalsFor(ctx, cur), packs: ctx.packs }));
       }
       if (p === '/more') return page(pages.morePage(pc));
       for (const [method, re, fn] of ROUTES) {
