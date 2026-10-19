@@ -13,6 +13,7 @@ import * as pages from './pages.js';
 import * as act from './actions.js';
 import { onboardingRoutes } from './onboarding.js';
 import { loadPost } from '../pipeline/build.js';
+import { lockedStyle } from '../render/style.js';
 
 // The website. It listens on 127.0.0.1 only; on the VPS, Caddy holds the
 // certificate and passes requests to it.
@@ -91,6 +92,7 @@ export function createHandler(ctx, { port, env = process.env, limiter = createLi
     ['POST', /^\/post\/([\w-]+)\/image-ok$/, (u, m) => act.imageOk(ctx, u, { id: m[1] })],
     ['POST', /^\/takedowns\/(\d+)\/deleted$/, (u, m, f) => act.takedownDeleted(ctx, u, { id: m[1] }, f)],
     ['POST', /^\/accounts\/([\w-]+)\/mode$/, (u, m, f) => act.setMode(ctx, u, { id: m[1] }, f)],
+    ['POST', /^\/accounts\/([\w-]+)\/style$/, (u, m) => act.applyStyle(ctx, u, { id: m[1] })],
     ['POST', /^\/accounts\/([\w-]+)\/kill$/, (u, m) => act.killAccount(ctx, u, { id: m[1] })],
     ['POST', /^\/accounts\/([\w-]+)\/resume$/, (u, m) => act.resume(ctx, u, { id: m[1] })],
     ['POST', /^\/settings\/kill$/, (u, m, f) => act.globalKill(ctx, u, {}, f)],
@@ -235,12 +237,13 @@ export function createHandler(ctx, { port, env = process.env, limiter = createLi
       const page = (html, status = 200) => send(req, res, status, flashMsg ? html.replace('<div id="toast" role="status" aria-live="polite"></div>', `<div id="toast" role="status" aria-live="polite" data-flash="${String(flashMsg).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)}"></div>`) : html, 'text/html; charset=utf-8', clearFlash);
 
       if (p === '/') return page(pages.todayPage(pc, data.today(ctx)));
+      if (p === '/posts') return page(pages.postsPage(pc, data.today(ctx)));
       const pm = /^\/post\/([\w-]+)$/.exec(p);
       if (pm) {
         const d = data.postFull(ctx, pm[1]);
         return d ? page(pages.postPage(pc, d)) : page(pages.notFoundPage(pc), 404);
       }
-      if (p === '/accounts') return page(pages.accountsPage(pc, data.accountRows(ctx).map((r) => ({ ...r, week: data.week(ctx, r.pack.id) }))));
+      if (p === '/accounts') return page(pages.accountsPage(pc, data.accountRows(ctx).map((r) => ({ ...r, week: data.week(ctx, r.pack.id), style: lockedStyle(ctx.db, r.pack, ctx.packs) }))));
       if (p === '/results') return page(pages.resultsPage(pc, data.results(ctx)));
       if (p === '/sources') {
         const cur = ctx.pack(url.searchParams.get('account')) || ctx.packs[0];

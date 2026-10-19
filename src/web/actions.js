@@ -7,6 +7,7 @@ import { lineDraft } from '../rules/overlay.js';
 import { kindName, kindOf } from '../formats/kinds.js';
 import { confirmDeleted, recordTakedown } from '../publish/takedown.js';
 import { renderPost } from '../render/render.js';
+import { lockStyle, lockedStyle, styleByHash } from '../render/style.js';
 import { pauseAccount, resumeAccount } from '../autonomy/rails.js';
 import { publishPost } from '../publish/index.js';
 import { MODES } from '../packs/validate.js';
@@ -106,7 +107,17 @@ export async function edit(ctx, user, { id }, form) {
   const image = post.checks?.image ? ctx.db.get('SELECT * FROM images WHERE id = ?', post.checks.image) : null;
   const outDir = path.dirname(post.media.tiktok?.[0] || post.media.instagram?.[0]);
   const extra = { captionIg: draft.captionIg || '', keywords: draft.keywords || [], subject: draft.subject || {}, cta: draft.cta?.text || '' };
-  const files = await renderPost({ pack, format, post: { id, hook: draft.hook, sub: draft.sub, caption: draft.caption, token: gate.token, extra, ctaKind: draft.cta?.kind }, slides, photo: image, photoOn: kindOf(format).photo, outDir });
+  // Drawn again as it was drawn: in the look it went out in, with every photograph it had (each slide's, the one
+  // behind the slides, a head-to-head's two faces). An edit used to bring back the cover's photograph alone.
+  const look = styleByHash(ctx.db, pack, post.checks?.style) || lockedStyle(ctx.db, pack, ctx.packs);
+  const img = (imageId) => (imageId ? ctx.db.get('SELECT * FROM images WHERE id = ?', imageId) : null);
+  const photos = new Map(
+    [...post.slides.map((s) => [s.idx, img(s.image_id)]), ['bg', img(post.checks?.bgImage)], ...(post.checks?.coverImages || []).map((x, k) => [k ? 'cb' : 'ca', img(x)])].filter(([, p]) => p?.file)
+  );
+  const files = await renderPost({
+    pack: { ...pack, theme: look.theme }, format, post: { id, hook: draft.hook, sub: draft.sub, caption: draft.caption, token: gate.token, extra, ctaKind: draft.cta?.kind }, slides,
+    ...(photos.size ? { photos } : { photo: image, photoOn: kindOf(format).photo }), outDir,
+  });
 
   ctx.db.tx(() => {
     const changes = [];
@@ -124,7 +135,7 @@ export async function edit(ctx, user, { id }, form) {
       ctx.db.run('UPDATE slides SET title = ?, body = ? WHERE post_id = ? AND idx = ?', draft.slides[i].title, draft.slides[i].body, id, i);
     });
     for (const c of changes) ctx.db.insert('edits', { post_id: id, account_id: post.account_id, ...c, user_id: user.id, at: nowIso() });
-    ctx.db.update('posts', id, { hook: draft.hook, sub: draft.sub, caption: draft.caption, caption_ig: draft.captionIg, data_json: { ...post.data, captionShort: draft.captionShort }, media_json: files, checks_json: { ...post.checks, token: gate.token, edited: true }, updated_at: nowIso() });
+    ctx.db.update('posts', id, { hook: draft.hook, sub: draft.sub, caption: draft.caption, caption_ig: draft.captionIg, data_json: { ...post.data, captionShort: draft.captionShort }, media_json: files, checks_json: { ...post.checks, token: gate.token, edited: true, style: look.hash }, updated_at: nowIso() });
     step(ctx.db, id, 'edit', 'ok', { by: user.name, changes: changes.length });
     audit(ctx.db, { actor: user.name, action: 'edit', accountId: post.account_id, postId: id, detail: { changes: changes.length } });
   });
@@ -137,6 +148,15 @@ export function setMode(ctx, user, { id }, form) {
   ctx.db.update('accounts', id, { mode: form.mode, updated_at: nowIso() });
   audit(ctx.db, { actor: user.name, action: 'mode', accountId: id, detail: { mode: form.mode } });
   return { ok: true, message: 'המצב עודכן.' };
+}
+
+/** The owner applies the account's theme.json: the next posts are drawn in it, and the posts already drawn keep theirs. */
+export function applyStyle(ctx, user, { id }) {
+  const pack = ctx.pack(id);
+  if (!pack) throw new ActionError('אין חשבון כזה', 404);
+  const lock = lockStyle(ctx.db, pack);
+  audit(ctx.db, { actor: user.name, action: 'style', accountId: id, detail: { hash: lock.hash, look: `${pack.theme.template}/${pack.theme.variant || 'a'}` } });
+  return { ok: true, message: 'הסגנון החדש נשמר. הפוסטים הבאים יצוירו בו, ופוסטים שכבר צוירו נשארים בשלהם.' };
 }
 
 export function killAccount(ctx, user, { id }) {

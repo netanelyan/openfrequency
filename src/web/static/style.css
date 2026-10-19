@@ -271,7 +271,7 @@ svg.i { width: 20px; height: 20px; flex: none; stroke: currentColor; fill: none;
   z-index: 30;
   height: var(--tab);
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 2px;
   padding: 4px;
   border-radius: 31px;
@@ -739,3 +739,24 @@ ul.rival { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 6
 ul.rival li { padding: 10px 14px; border-radius: 12px; background: var(--inset); font-weight: 500; overflow-wrap: anywhere; }
 details.rivaledit { margin-top: 12px; border-top: 1px solid var(--line); }
 details.rivaledit > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 500; color: var(--accent-p); }
+
+/* ------------------------------------------------------------ Home: the overview */
+
+/* Four numbers in a row, each a door to the page behind it; two by two on a phone. */
+.kpis { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin: 0 0 20px; }
+@media (min-width: 700px) { .kpis { grid-template-columns: repeat(4, 1fr); } }
+.kpi { display: flex; flex-direction: column; gap: 4px; padding: 16px 18px; color: inherit; border-radius: var(--r); background: linear-gradient(180deg, var(--surface-hi), var(--surface)); box-shadow: var(--shadow-tile), inset 0 0 0 1px var(--edge), inset 0 1px 0 var(--rim); }
+.kpi:hover { text-decoration: none; background: var(--inset); }
+.kpi .v { font: 700 30px/1.1 var(--display); font-variant-numeric: tabular-nums; }
+.kpi .l { color: var(--ink-3); font-size: 14px; }
+.kpi.sig .v { color: var(--accent); }
+.kpi.bad .v { color: var(--bad); }
+.home-panel { margin: 0 0 20px; }
+.todo a { min-height: 60px; }
+.todo .tx { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.todo .tx b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.todo .tx .small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.todo .go { flex: none; color: var(--ink-3); transform: rotate(90deg); display: inline-flex; }
+.todo .ico.bad { color: var(--bad); }
+.tabbar a span { white-space: nowrap; }
+@media (max-width: 380px) { .tabbar a { font-size: 10px; } }

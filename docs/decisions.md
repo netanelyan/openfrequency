@@ -1276,3 +1276,20 @@ engine can act on, and what changed:
   still scores 6 or more is blocked as before. Every failed check is recorded by
   a stable name (`checkOf`), and Results shows, for the last 30 days, how many
   posts each check blocked and how many first drafts failed it.
+
+- **Home is an overview, and an account's look is locked (2026-10-19, the owner's
+  call).** The owner asked for a home page like a shop's dashboard, "not a whole
+  book". Home now shows four numbers (waiting, scheduled, out today, blocked
+  today), a short "צריך אותך" list of one line per item, and one line per
+  account. The post cards, with their slides, captions and facts, moved to a new
+  Posts page in the menu. An account's look is saved the first time it renders
+  (`src/render/style.js`), and every post is drawn in the saved look: a change to
+  theme.json waits, and the Accounts page offers to apply it. Each post keeps the
+  hash of its look, so an edit draws it again in the look it went out in. Hard
+  rule 2 still wins: a saved look that another account's theme.json now uses is
+  given up for the account's own file. Inside one post, the slides now share one
+  ground photograph (they took the post's photographs in turn), and the content
+  slides share one type size: those set larger are drawn again at the size the
+  others came out at, never below 80%. An edit also used to draw a post again with
+  only its cover photograph; it now keeps each slide's photograph, the ground and
+  a head-to-head's two faces.

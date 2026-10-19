@@ -69,9 +69,11 @@ export class RenderError extends Error {
 }
 
 const FIT_FLOOR = 0.6;
+// The smallest size a post's content slides are evened down to (renderPost): below it, a slide keeps its own.
+const EVEN_FLOOR = 0.8;
 
 /** One HTML page to one JPEG. Returns { file, fitted }. */
-export async function renderHtml(html, { size, file, floor = FIT_FLOOR }) {
+export async function renderHtml(html, { size, file, floor = FIT_FLOOR, scale = 1 }) {
   const geo = SIZES[size];
   const browser = await getBrowser();
   const context = await browser.newContext({ viewport: { width: geo.w, height: geo.h }, deviceScaleFactor: 1, locale: 'he-IL', javaScriptEnabled: true });
@@ -205,8 +207,9 @@ export async function renderHtml(html, { size, file, floor = FIT_FLOOR }) {
       for (const b of document.querySelectorAll('bdi')) if (!/\s/.test(b.textContent)) b.style.whiteSpace = 'nowrap';
     });
 
-    // Shrink any block that overflows, 2% a step, down to the floor.
-    const fitted = await tab.evaluate((floor) => {
+    // Shrink any block that overflows, 2% a step, down to the floor. `scale` sets every block smaller first: the size
+    // the rest of the post's content slides came out at (renderPost), so a post's text is one size from slide to slide.
+    const fitted = await tab.evaluate(({ floor, scale }) => {
       // An overflow is a line whose letters are cut: its baseline falls below the bottom of its
       // box. A tall face's descenders spilling out of a tight line box (line-height 0.9) are not;
       // measured by overflow alone the two look alike, and a half-cut last line once passed as a
@@ -261,11 +264,12 @@ export async function renderHtml(html, { size, file, floor = FIT_FLOOR }) {
       };
       const els = [...document.querySelectorAll('.fit')];
       const base = new Map(els.map((el) => [el, parseFloat(getComputedStyle(el).fontSize)]));
+      if (scale < 1) for (const el of els) el.style.fontSize = `${base.get(el) * scale}px`;
       let out = [];
       for (const el of els) {
         if (!over(el)) continue;
         const from = base.get(el);
-        let px = from;
+        let px = from * scale;
         while (over(el) && px > from * floor) {
           px *= 0.98;
           el.style.fontSize = `${px}px`;
@@ -275,16 +279,16 @@ export async function renderHtml(html, { size, file, floor = FIT_FLOOR }) {
       // Boxes that share a slide take room from each other: a title, a graphic and a text squeezed one box to
       // nothing, and no size of it alone could fit. Then everything on the slide is set smaller together.
       if (out.some((f) => !f.fits)) {
-        for (let scale = 0.96; scale >= floor; scale *= 0.96) {
-          for (const el of els) el.style.fontSize = `${base.get(el) * scale}px`;
+        for (let all = scale * 0.96; all >= floor; all *= 0.96) {
+          for (const el of els) el.style.fontSize = `${base.get(el) * all}px`;
           if (!els.some(over)) {
-            out = els.map((el) => ({ text: el.textContent.trim().slice(0, 40), from: Math.round(base.get(el)), to: Math.round(base.get(el) * scale), fits: true }));
+            out = els.map((el) => ({ text: el.textContent.trim().slice(0, 40), from: Math.round(base.get(el)), to: Math.round(base.get(el) * all), fits: true }));
             break;
           }
         }
       }
       return out;
-    }, floor);
+    }, { floor, scale });
     const failed = fitted.filter((f) => !f.fits);
     if (failed.length) throw new RenderError(`too long for the slide even at ${Math.round(floor * 100)}% size: "${failed[0].text}..."`, 'overflow');
 
@@ -414,8 +418,10 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
   // Only a post about one subject puts its cover's face behind the other slides: a ranking's number one sat behind
   // the slide about number two, and one side of a head-to-head behind the other's.
   const oneSubject = !['guess-who', 'ranking', 'head-to-head', 'list'].includes(kindNow);
-  const pool = opts.backgroundPhoto ? [...(uri.has(0) && oneSubject ? [uri.get(0)] : []), ...(uri.has('bg') ? [uri.get('bg')] : [])] : [];
-  const bgFor = (i) => (opts.backgroundPhoto ? (typeof i === 'number' && uri.has(i) && !(kindNow === 'guess-who' && i === slides.length - 1) ? uri.get(i) : pool.length ? pool[i % pool.length] : null) : null);
+  // One ground for the whole post: the slides used to stand on their own photographs in turn, a different picture
+  // and colour behind every slide. A slide's own photograph is in its frame; the ground behind every slide is one.
+  const ground = opts.backgroundPhoto ? (uri.has(0) && oneSubject ? uri.get(0) : uri.get('bg') || null) : null;
+  const bgFor = () => ground;
   const items = slides.filter((s) => s.kind === 'item').length;
   const places = slidePlaces(slides);
   // Photographs left off a slide that could not fit them, per platform: not shown, not credited.
@@ -423,8 +429,27 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
   const postKind = format ? kindName(format) : 'list';
   const extra = post.extra || {};
   const out = {};
+  const scales = {};
+  // One slide drawn, at `scale` of its type's size: a slide that does not fit with everything on it is drawn again
+  // without its framed photograph (a presentation choice: the text and the graphic are what was checked), then with
+  // its type allowed smaller. Returns the size its text came out at, as a share of the design's.
+  const drawSlide = async ({ i, s, slide, look, file, size, scale = 1 }) => {
+    const tries = [{ ...slide }, ...(slide.photo ? [{ ...slide, photo: null, hasVisual: s.kind === 'item' && slideHasVisual({ ...slide, photo: null }) }] : [])];
+    for (const [k, sl] of [...tries.map((t) => [FIT_FLOOR, t]), [0.45, tries.at(-1)]].entries()) {
+      const html = page({ theme: pack.theme, overlay, size, slide: sl[1], parts: buildSlide(pack.theme, sl[1]), ...look });
+      try {
+        const r = await renderHtml(html, { size, file, floor: sl[0], scale });
+        if (slide.photo && !sl[1].photo) (dropped[size] ??= new Set()).add(i);
+        return Math.min(scale, ...r.fitted.filter((f) => f.from).map((f) => f.to / f.from));
+      } catch (e) {
+        if (e.code !== 'overflow' || k === tries.length) throw e;
+      }
+    }
+    throw new RenderError('the slide did not render', 'overflow');
+  };
   for (const size of pack.meta.platforms) {
     out[size] = [];
+    const drawn = [];
     let n = 0;
     for (const [i, s] of slides.entries()) {
       if (s.kind === 'item') n++;
@@ -461,24 +486,23 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
       slide.tease = Boolean(tease);
       slide.hasVisual = s.kind === 'item' && slideHasVisual(slide);
       const file = path.join(outDir, `${size}-${String(i + 1).padStart(2, '0')}.jpg`);
-      // A slide that does not fit with everything on it is drawn again: without its framed photograph (a
-      // presentation choice: the text and the graphic are what was checked), then with its type allowed smaller.
-      const tries = [{ ...slide }, ...(slide.photo ? [{ ...slide, photo: null, hasVisual: s.kind === 'item' && slideHasVisual({ ...slide, photo: null }) }] : [])];
-      let done = false;
-      for (const [k, sl] of [...tries.map((t) => [FIT_FLOOR, t]), [0.45, tries.at(-1)]].entries()) {
-        const html = page({ theme: pack.theme, overlay, size, slide: sl[1], parts: buildSlide(pack.theme, sl[1]), photo: full ? uri.get(i) : tease ? uri.get(slides.length - 1) : null, photoPos: full ? focus.get(i) : null, blur: tease, split, splitPos: split ? [focus.get('ca'), focus.get('cb')] : null, bg: bgFor(i) });
-        try {
-          await renderHtml(html, { size, file, floor: sl[0] });
-          if (slide.photo && !sl[1].photo) (dropped[size] ??= new Set()).add(i);
-          done = true;
-          break;
-        } catch (e) {
-          if (e.code !== 'overflow' || k === tries.length) throw e;
-        }
-      }
-      if (!done) throw new RenderError('the slide did not render', 'overflow');
+      const look = { photo: full ? uri.get(i) : tease ? uri.get(slides.length - 1) : null, photoPos: full ? focus.get(i) : null, blur: tease, split, splitPos: split ? [focus.get('ca'), focus.get('cb')] : null, bg: bgFor(i) };
+      drawn.push({ i, s, slide, look, file, ratio: await drawSlide({ i, s, slide, look, file, size }) });
       out[size].push(file);
     }
+    // One type size for the content slides: each was fitted on its own, and a post came out with a title at full size
+    // beside one set at 70%. The slides set larger are drawn again at the size the others came out at (never below
+    // EVEN_FLOOR: one long slide does not shrink every other one to its size).
+    const content = drawn.filter((d) => d.s.kind === 'item');
+    const even = Math.max(EVEN_FLOOR, Math.min(1, ...content.map((d) => d.ratio)));
+    if (content.length > 1 && even < 0.97) {
+      for (const d of content) {
+        if (d.ratio <= even + 0.03) continue;
+        dropped[size]?.delete(d.i);
+        d.ratio = await drawSlide({ ...d, size, scale: even });
+      }
+    }
+    (scales[size] = drawn.map((d) => Math.round(d.ratio * 100) / 100));
     if (end) {
       const sl = { kind: 'end', handle: pack.meta.handle, noHandle, brand };
       const file = path.join(outDir, `${size}-${String(slides.length + 1).padStart(2, '0')}.jpg`);
@@ -487,5 +511,7 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
     }
   }
   Object.defineProperty(out, 'dropped', { value: dropped, enumerable: false });
+  // The size each slide's text came out at, per platform, as a share of the design's.
+  Object.defineProperty(out, 'scales', { value: scales, enumerable: false });
   return out;
 }

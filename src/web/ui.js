@@ -69,10 +69,11 @@ const SPRITE = `<svg class="sr" width="0" height="0" aria-hidden="true"><defs>
 <symbol id="i-sidebar" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M15 4v16"/></symbol>
 </defs></svg>`;
 
-// Five sections, the same on a phone (the tab bar) and on a desk (the top bar): no More tab. A new account starts
-// from Accounts, and signing out lives in Settings.
+// Six sections, the same on a phone (the tab bar) and on a desk (the side bar): no More tab. Home is the overview,
+// Posts the cards to approve. A new account starts from Accounts, and signing out lives in Settings.
 export const NAV = [
   ['/', 'היום', 'today', 'today'],
+  ['/posts', 'פוסטים', 'posts', 'text'],
   ['/accounts', 'חשבונות', 'accounts', 'accounts'],
   ['/results', 'תוצאות', 'results', 'results'],
   ['/sources', 'מקורות', 'sources', 'sources'],
@@ -104,7 +105,7 @@ export function budgetBanner(b) {
 /** The page around a body. ctx: { title, active, csrf, spend: { usd, cap }, budget, waiting, user } */
 export function layout(ctx, body) {
   const section = SECTION_OF[ctx.active] || ctx.active;
-  const badge = (key) => (key === 'today' && ctx.waiting ? `<b class="badge num" aria-label="${ctx.waiting} מחכים לך">${ctx.waiting}</b>` : '');
+  const badge = (key) => (key === 'posts' && ctx.waiting ? `<b class="badge num" aria-label="${ctx.waiting} מחכים לך">${ctx.waiting}</b>` : '');
   const nav = NAV.map(([href, label, key, ic]) => `<a href="${href}" title="${label}"${key === section ? ' aria-current="page"' : ''}>${icon(ic)}<span>${label}</span>${badge(key)}</a>`).join('');
   const tabs = NAV.map(([href, label, key, ic]) => `<a href="${href}"${key === section ? ' aria-current="page"' : ''}>${icon(ic)}<span>${label}</span>${badge(key)}</a>`).join('');
   const s = ctx.spend || { usd: 0, cap: 0 };

@@ -47,13 +47,13 @@ async function login() {
 }
 const get = (p, cookie) => fetch(`${base}${p}`, { redirect: 'manual', headers: cookie ? { cookie } : {} });
 async function csrfOf(cookie) {
-  const html = await (await get('/', cookie)).text();
+  const html = await (await get('/accounts', cookie)).text();
   return /name="_csrf" value="([^"]+)"/.exec(html)[1];
 }
 const post = (p, cookie, body) => fetch(`${base}${p}`, { method: 'POST', redirect: 'manual', headers: { cookie, 'content-type': 'application/x-www-form-urlencoded', 'x-of-ajax': '1' }, body: new URLSearchParams(body).toString() });
 
 test('every page needs a session', async () => {
-  for (const p of ['/', '/accounts', '/results', '/sources', '/rivals', '/settings', `/post/${postId}`, `/media/${postId}/tiktok/0`]) {
+  for (const p of ['/', '/posts', '/accounts', '/results', '/sources', '/rivals', '/settings', `/post/${postId}`, `/media/${postId}/tiktok/0`]) {
     const res = await get(p);
     assert.equal(res.status, 303, p);
     assert.equal(res.headers.get('location'), '/login');
@@ -70,7 +70,7 @@ test('a wrong password is refused, and a request for another host is refused', a
 
 test('every page is Hebrew, right to left, and escapes what it shows (hard rule 8)', async () => {
   const cookie = await login();
-  for (const p of ['/', '/accounts', '/results', '/sources', '/rivals', '/settings', '/more', '/new', `/post/${postId}`]) {
+  for (const p of ['/', '/posts', '/accounts', '/results', '/sources', '/rivals', '/settings', '/more', '/new', `/post/${postId}`]) {
     const res = await get(p, cookie);
     assert.equal(res.status, 200, p);
     const html = await res.text();
@@ -80,6 +80,19 @@ test('every page is Hebrew, right to left, and escapes what it shows (hard rule 
   }
   const loginHtml = await (await get('/login')).text();
   assert.match(loginHtml, /<html lang="he" dir="rtl"/);
+});
+
+test('home is the overview: four numbers, what needs you, one line per account; the cards are on Posts', async () => {
+  const cookie = await login();
+  const home = await (await get('/', cookie)).text();
+  assert.match(home, /class="kpis"/);
+  assert.match(home, /<span class="v num">1<\/span><span class="l">מחכים לאישור<\/span>/);
+  assert.match(home, new RegExp(`href="/posts#post-${postId}"`), 'the waiting post is one line that leads to its card');
+  assert.doesNotMatch(home, /data-post/, 'no post card, no slides, no captions on home');
+  assert.doesNotMatch(home, /class="strip/);
+  const posts = await (await get('/posts', cookie)).text();
+  assert.match(posts, new RegExp(`id="post-${postId}"[^>]*data-post`));
+  assert.match(posts, /aria-current="page"[^>]*>.*?<span>פוסטים<\/span>/s);
 });
 
 test('a change without its CSRF token is refused', async () => {
@@ -209,4 +222,22 @@ test('the Settings page shows the month against the cap: spent, forecast, posts 
   assert.equal(res.status, 200);
   assert.match(await (await get('/settings', cookie)).text(), /\$[\d.]+ \/ \$10/);
   await post('/settings/budget', cookie, { _csrf: csrf, budget: '0' });
+});
+
+test('a changed theme.json waits on the Accounts page until the owner applies it', async () => {
+  const cookie = await login();
+  const pack = ctx.pack('demo');
+  const before = pack.theme.colors.accent;
+  try {
+    await get('/accounts', cookie);
+    pack.theme.colors.accent = '#0F5E9C';
+    const page = await (await get('/accounts', cookie)).text();
+    assert.match(page, /הסגנון בקובץ theme.json השתנה/);
+    const csrf = await csrfOf(cookie);
+    const res = await post('/accounts/demo/style', cookie, { _csrf: csrf });
+    assert.equal(res.status, 200);
+    assert.doesNotMatch(await (await get('/accounts', cookie)).text(), /הסגנון בקובץ theme.json השתנה/);
+  } finally {
+    pack.theme.colors.accent = before;
+  }
 });

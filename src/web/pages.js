@@ -29,7 +29,7 @@ export function blocksPanel(b) {
   if (!b?.total) return '';
   const pct = (n) => `${Math.round((n / b.total) * 100)}%`;
   const rows = b.rows.filter((r) => r.blocked || r.firstFail).slice(0, 10);
-  return `<section class="panel"><header><h2>מה חוסם פוסטים</h2><span class="end muted small">${b.blocked} מתוך ${b.total} פוסטים נחסמו (${pct(b.blocked)}) ב-30 הימים האחרונים</span></header>
+  return `<section class="panel" id="blocks"><header><h2>מה חוסם פוסטים</h2><span class="end muted small">${b.blocked} מתוך ${b.total} פוסטים נחסמו (${pct(b.blocked)}) ב-30 הימים האחרונים</span></header>
 ${rows.length ? `<table class="table stack"><thead><tr><th>בדיקה</th><th>חסמה</th><th>מהפוסטים</th><th>נכשלה בטיוטה הראשונה</th></tr></thead><tbody>${rows.map((r) => `<tr><td data-k="">${esc(checkHe(r.check))}</td><td class="n" data-k="חסמה">${r.blocked}</td><td class="n" data-k="מהפוסטים">${pct(r.blocked)}</td><td class="n" data-k="טיוטה ראשונה">${r.firstFail ? `${r.firstFail} (${pct(r.firstFail)})` : '–'}</td></tr>`).join('')}</tbody></table>
 <p class="muted small">פוסט שנחסם בכמה בדיקות נספר בכל אחת. "נכשלה בטיוטה הראשונה": לפני התיקון והכתיבה מחדש, שמצילים חלק מהם.</p>` : '<p class="muted">אף פוסט לא נחסם.</p>'}</section>`;
 }
@@ -137,51 +137,82 @@ ${factsBlock(post)}
 
 /* ------------------------------------------------------------ Today */
 
-export function todayPage(ctx, d) {
-  const all = d.groups.flatMap((g) => g.waiting);
-  const sched = d.groups.flatMap((g) => g.scheduled);
-  const pub = d.groups.flatMap((g) => g.published);
-  const blocked = d.groups.flatMap((g) => g.blocked);
-  const banners = [];
-  if (ctx.globalKill) banners.push(`<div class="banner bad">${icon('power')}<div><b>מתג הכיבוי הכללי מופעל.</b><p>שום חשבון לא מייצר ולא מפרסם.</p></div>${postButton(ctx, '/settings/kill', 'הפעל מחדש', { cls: 'btn sm', fields: { on: '0' } })}</div>`);
+// Home is the overview, like a shop's: four numbers, what needs you, one line per account. The posts themselves,
+// slides, captions and facts, are on Posts: the owner asked for a home page that is not a whole book.
+
+/** The banners that stop the engine: the kill switch, a paused account, an account out of its share of the budget. */
+function stopBanners(ctx, d) {
+  const out = [];
+  if (ctx.globalKill) out.push(`<div class="banner bad">${icon('power')}<div><b>מתג הכיבוי הכללי מופעל.</b><p>שום חשבון לא מייצר ולא מפרסם.</p></div>${postButton(ctx, '/settings/kill', 'הפעל מחדש', { cls: 'btn sm', fields: { on: '0' } })}</div>`);
   for (const g of d.groups) {
-    if (g.acc?.status === 'paused') banners.push(`<div class="banner warn">${icon('alert')}<div><b>${esc(g.pack.meta.displayName)} מושהה: ${esc(PAUSE_REASONS[g.acc.paused_reason] || g.acc.paused_reason)}</b>${g.acc.paused_detail ? `<p>${esc(g.acc.paused_detail)}</p>` : ''}</div><a class="btn sm" href="/accounts#acc-${esc(g.pack.id)}">לחשבון</a></div>`);
-    else if (g.reached) banners.push(`<div class="banner warn">${icon('alert')}<div><b>${esc(g.pack.meta.displayName)}: הנתח שלו מהתקציב נגמר.</b><p>לא נכתבים בו פוסטים חדשים עד שהתוכנית החודשית מפנה לו כסף, או עד החודש הבא.</p></div></div>`);
+    if (g.acc?.status === 'paused') out.push(`<div class="banner warn">${icon('alert')}<div><b>${esc(g.pack.meta.displayName)} מושהה: ${esc(PAUSE_REASONS[g.acc.paused_reason] || g.acc.paused_reason)}</b>${g.acc.paused_detail ? `<p>${esc(g.acc.paused_detail)}</p>` : ''}</div><a class="btn sm" href="/accounts#acc-${esc(g.pack.id)}">לחשבון</a></div>`);
+    else if (g.reached) out.push(`<div class="banner warn">${icon('alert')}<div><b>${esc(g.pack.meta.displayName)}: הנתח שלו מהתקציב נגמר.</b><p>לא נכתבים בו פוסטים חדשים עד שהתוכנית החודשית מפנה לו כסף, או עד החודש הבא.</p></div></div>`);
   }
-  for (const t of d.attention?.waitingDeletes || []) {
-    banners.push(`<div class="banner bad">${icon('alert')}<div><b>הודעת הסרה: צריך למחוק ידנית ב${t.waiting.map((w) => PLATFORM_HE[w.platform] || w.platform).join(' וב')}</b><p>${esc(t.hook || t.post_id)}</p></div><a class="btn sm" href="/post/${esc(t.post_id)}">לפוסט</a></div>`);
-  }
-  for (const im of d.attention?.images || []) {
-    banners.push(`<div class="banner warn">${icon('alert')}<div><b>תמונה מחכה לעין של אדם לפני פרסום</b><p>${esc(im.hook || im.id)}${im.screen?.why ? ` · ${esc(im.screen.why)}` : ''}</p></div><a class="btn sm" href="/post/${esc(im.id)}">לבדיקה</a></div>`);
-  }
-  // The day in the mark's own language: one dot per post, its shape its state (see .pulse in the stylesheet).
-  const dotsOf = (g) => {
-    const dots = [...g.waiting.map(() => 'w'), ...g.scheduled.map(() => 's'), ...g.published.map(() => 'p'), ...g.blocked.map(() => 'b')];
-    return dots.length ? `<span class="pulse" aria-hidden="true">${dots.map((c) => `<i class="${c}"></i>`).join('')}</span>` : '<span class="none">אין פוסטים היום</span>';
-  };
-  const said = (g) => [g.waiting.length && `${g.waiting.length} מחכים`, g.scheduled.length && `${g.scheduled.length} מתוזמנים`, g.published.length && `${g.published.length} פורסמו`, g.blocked.length && `${g.blocked.length} נחסמו`].filter(Boolean).join(', ') || 'אין פוסטים היום';
-  const day = `<section class="day" aria-label="היום במבט אחד">
-<div class="lead">${all.length > 1 ? `<span class="num">${all.length}</span> פוסטים מחכים לך` : all.length ? 'פוסט אחד מחכה לך' : 'אין מה לאשר כרגע'}</div>
-<p class="rest">${sched.length} מתוזמנים · ${pub.length} פורסמו היום · ${blocked.length} נחסמו בבדיקות</p>
-<div class="lines">${d.groups.map((g) => `<a href="#g-${esc(g.pack.id)}">${accDot(g.pack.id)}<span class="nm">${esc(g.pack.meta.displayName)}</span><span class="end">${dotsOf(g)}<span class="sr">${esc(said(g))}</span></span></a>`).join('')}</div>
-<div class="legend" aria-hidden="true"><span><span class="pulse"><i class="w"></i></span>מחכה לך</span><span><span class="pulse"><i class="s"></i></span>מתוזמן</span><span><span class="pulse"><i class="p"></i></span>פורסם</span><span><span class="pulse"><i class="b"></i></span>נחסם</span></div>
-</section>`;
+  return out.join('');
+}
+
+// The day in the mark's own language: one dot per post, its shape its state (see .pulse in the stylesheet).
+const dotsOf = (g) => {
+  const dots = [...g.waiting.map(() => 'w'), ...g.scheduled.map(() => 's'), ...g.published.map(() => 'p'), ...g.blocked.map(() => 'b')];
+  return dots.length ? `<span class="pulse" aria-hidden="true">${dots.map((c) => `<i class="${c}"></i>`).join('')}</span>` : '<span class="none">אין פוסטים היום</span>';
+};
+const saidOf = (g) => [g.waiting.length && `${g.waiting.length} מחכים`, g.scheduled.length && `${g.scheduled.length} מתוזמנים`, g.published.length && `${g.published.length} פורסמו`, g.blocked.length && `${g.blocked.length} נחסמו`].filter(Boolean).join(', ') || 'אין פוסטים היום';
+
+/** What needs the owner, most urgent first: a takedown to delete by hand, a picture to look at, the posts waiting. */
+export function needsYou(d, max = 6) {
+  const rows = [];
+  for (const t of d.attention?.waitingDeletes || []) rows.push({ href: `/post/${t.post_id}`, ic: 'alert', bad: true, title: t.hook || t.post_id, sub: `הודעת הסרה: למחוק ידנית ב${t.waiting.map((w) => PLATFORM_HE[w.platform] || w.platform).join(' וב')}` });
+  for (const im of d.attention?.images || []) rows.push({ href: `/post/${im.id}`, ic: 'alert', title: im.hook || im.id, sub: `תמונה מחכה לעין של אדם${im.screen?.why ? `: ${im.screen.why}` : ''}` });
+  for (const g of d.groups) for (const p of g.waiting) rows.push({ href: `/posts#post-${p.id}`, acc: g.pack.id, title: p.hook, sub: `${g.pack.meta.displayName} · ${formatName(g.pack, p.format_id)} · ${p.slot_at ? timeHe(p.slot_at) : 'בלי שעה'}` });
+  return { rows: rows.slice(0, max), more: Math.max(0, rows.length - max), total: rows.length };
+}
+
+/** A short list of posts, one line each, every line a link. */
+const postLines = (rows) => `<div class="list todo">${rows.map((r) => `<a href="${esc(r.href)}">${r.acc ? accDot(r.acc) : `<span class="ico${r.bad ? ' bad' : ''}">${icon(r.ic)}</span>`}<span class="tx"><b>${esc(r.title)}</b><span class="muted small">${esc(r.sub)}</span></span><span class="go">${icon('chev')}</span></a>`).join('')}</div>`;
+
+export function todayPage(ctx, d) {
+  const count = (k) => d.groups.reduce((n, g) => n + g[k].length, 0);
+  const tile = (href, n, label, cls = '') => `<a class="kpi${cls ? ` ${cls}` : ''}" href="${href}"><span class="v num">${n}</span><span class="l">${label}</span></a>`;
+  const todo = needsYou(d);
   const body = `<div class="head"><h1>היום</h1><span class="sub">${esc(dayHe(Date.now()))}</span></div>
-${banners.join('')}
-${day}
+${stopBanners(ctx, d)}
+<section class="kpis" aria-label="היום במספרים">
+${tile('/posts', count('waiting'), 'מחכים לאישור', count('waiting') ? 'sig' : '')}
+${tile('/posts#scheduled', count('scheduled'), 'מתוזמנים')}
+${tile('/posts#published', count('published'), 'פורסמו היום')}
+${tile('/results#blocks', count('blocked'), 'נחסמו היום', count('blocked') ? 'bad' : '')}
+</section>
+<section class="panel home-panel"><header><h2>צריך אותך</h2>${todo.total ? '<a class="end small" href="/posts">כל הפוסטים</a>' : ''}</header>
+${todo.rows.length ? `${postLines(todo.rows)}${todo.more ? `<p class="small"><a href="/posts">ועוד ${todo.more}</a></p>` : ''}` : '<p class="muted">אין מה לאשר כרגע. הפוסטים הבאים ייכתבו בשעת הייצור היומית.</p>'}
+</section>
+<section class="panel home-panel"><header><h2>חשבונות</h2><a class="end small" href="/accounts">ניהול</a></header>
+<div class="lines">${d.groups.map((g) => `<a href="/posts#g-${esc(g.pack.id)}">${accDot(g.pack.id)}<span class="nm">${esc(g.pack.meta.displayName)}</span><span class="chip ghost">${esc(MODE_HE[g.acc?.mode || 'approve'][0])}</span><span class="end">${dotsOf(g)}<span class="sr">${esc(saidOf(g))}</span></span></a>`).join('')}</div>
+<div class="legend" aria-hidden="true"><span><span class="pulse"><i class="w"></i></span>מחכה לך</span><span><span class="pulse"><i class="s"></i></span>מתוזמן</span><span><span class="pulse"><i class="p"></i></span>פורסם</span><span><span class="pulse"><i class="b"></i></span>נחסם</span></div>
+</section>
+${d.summary ? `<details class="facts panel home-panel"><summary>${icon('text')}סיכום ${esc(shortDate(`${d.summary.day}T12:00:00Z`))}<span class="chev">${icon('chev')}</span></summary><p class="lede">${esc(d.summary.text).replace(/\n/g, '<br>')}</p></details>` : ''}`;
+  return layout({ ...ctx, title: 'היום', active: 'today' }, body);
+}
+
+/* ------------------------------------------------------------ Posts */
+
+/** Every post of the day, account by account, in full: the cards to approve and what was blocked, then what is scheduled and out. */
+export function postsPage(ctx, d) {
+  const sched = d.groups.flatMap((g) => g.scheduled.map((p) => ({ href: `/post/${p.id}`, acc: g.pack.id, title: p.hook, sub: `${g.pack.meta.displayName} · ${p.slot_at ? timeHe(p.slot_at) : 'בלי שעה'}` })));
+  const pub = d.groups.flatMap((g) => g.published.map((p) => ({ href: `/post/${p.id}`, acc: g.pack.id, title: p.hook, sub: `${g.pack.meta.displayName} · ${timeHe(p.published_at)}` })));
+  const body = `<div class="head"><h1>פוסטים</h1><span class="sub">${esc(dayHe(Date.now()))}</span></div>
+${stopBanners(ctx, d)}
 ${d.groups
   .map((g) => {
     const mode = MODE_HE[g.acc?.mode || 'approve'];
-    const posts = [...g.waiting, ...g.scheduled];
     return `<section class="group" id="g-${esc(g.pack.id)}" aria-labelledby="gh-${esc(g.pack.id)}"><header>${accDot(g.pack.id)}<h2 id="gh-${esc(g.pack.id)}">${esc(g.pack.meta.displayName)}</h2><span class="handle ltr">@${esc(g.pack.meta.handle)}</span><span class="end">${g.waiting.length ? `<span class="chip sig">${g.waiting.length} מחכים</span>` : ''}${g.plan?.cut ? `<span class="chip warn" title="התקציב קצר החודש">${g.plan.perDay} ביום</span>` : ''}<span class="chip ghost" title="${esc(mode[1])}">${esc(mode[0])}</span></span></header>
-${posts.length ? `<div class="posts">${posts.map((p) => postCard(ctx, p, g.pack)).join('')}</div>` : `<div class="empty">${icon('inbox')}<b>אין כאן מה לאשר</b>${g.acc?.status === 'paused' ? 'החשבון מושהה.' : 'הפוסטים הבאים ייכתבו בשעת הייצור היומית.'}</div>`}
+${g.waiting.length ? `<div class="posts">${g.waiting.map((p) => postCard(ctx, p, g.pack)).join('')}</div>` : `<div class="empty">${icon('inbox')}<b>אין כאן מה לאשר</b>${g.acc?.status === 'paused' ? 'החשבון מושהה.' : 'הפוסטים הבאים ייכתבו בשעת הייצור היומית.'}</div>`}
 ${g.blocked.length ? `<details class="facts"><summary>${icon('shield')}נחסמו היום בבדיקות <span class="chip bad">${g.blocked.length}</span><span class="chev">${icon('chev')}</span></summary><ul class="factlist">${g.blocked.map((b) => `<li><a href="/post/${esc(b.id)}"><b>${esc(b.hook || b.topic || 'בלי כותרת')}</b></a><div class="muted small">${esc(b.reason)}</div></li>`).join('')}</ul></details>` : ''}
-${g.published.length ? `<details class="facts"><summary>${icon('check')}פורסמו היום <span class="chip ok">${g.published.length}</span><span class="chev">${icon('chev')}</span></summary><ul class="factlist">${g.published.map((b) => `<li><a href="/post/${esc(b.id)}">${esc(b.hook)}</a> <span class="muted small num">${esc(timeHe(b.published_at))}</span></li>`).join('')}</ul></details>` : ''}
 </section>`;
   })
   .join('')}
-${d.summary ? `<section class="panel"><header><h2>סיכום ${esc(shortDate(`${d.summary.day}T12:00:00Z`))}</h2></header><p class="lede">${esc(d.summary.text).replace(/\n/g, '<br>')}</p></section>` : ''}`;
-  return layout({ ...ctx, title: 'היום', active: 'today' }, body);
+<section class="panel home-panel" id="scheduled"><header><h2>מתוזמנים</h2></header>${sched.length ? postLines(sched) : '<p class="muted">אין פוסט מאושר שמחכה למשבצת.</p>'}</section>
+<section class="panel home-panel" id="published"><header><h2>פורסמו היום</h2></header>${pub.length ? postLines(pub) : '<p class="muted">עוד לא פורסם היום.</p>'}</section>`;
+  return layout({ ...ctx, title: 'פוסטים', active: 'posts' }, body);
 }
 
 /* ------------------------------------------------------------ one post */
@@ -241,7 +272,7 @@ ${post.status !== 'taken_down' ? `<details><summary class="muted">${icon('alert'
 <div><button class="btn danger" type="submit">רשום והורד את הפוסט</button></div></form></details>` : ''}</section>`
     : '';
 
-  const body = `<div class="head"><div><a class="muted small back" href="/">${icon('chev')}חזרה להיום</a><h1 class="title">${esc(post.hook || post.topic || 'פוסט')}</h1></div><span class="sub">${statusChip(post.status)}</span></div>
+  const body = `<div class="head"><div><a class="muted small back" href="/posts">${icon('chev')}חזרה לפוסטים</a><h1 class="title">${esc(post.hook || post.topic || 'פוסט')}</h1></div><span class="sub">${statusChip(post.status)}</span></div>
 ${post.reason ? `<div class="banner ${post.status === 'blocked' || post.status === 'failed' ? 'bad' : 'info'}">${icon('alert')}<div><b>${esc(post.reason)}</b></div></div>` : ''}
 <div class="cols">
 <div>
@@ -275,7 +306,7 @@ ${d.metrics.length ? d.metrics.slice(0, 2).map((m) => `<dt>${esc(PLATFORM_HE[m.p
 ${takedownPanel}
 <section class="panel"><header><h2>איך הפוסט נוצר</h2></header><ol class="trace">${trace}</ol></section>
 </div></div>`;
-  return layout({ ...ctx, title: post.hook || 'פוסט', active: 'today' }, body);
+  return layout({ ...ctx, title: post.hook || 'פוסט', active: 'posts' }, body);
 }
 
 /* ------------------------------------------------------------ accounts */
@@ -283,7 +314,7 @@ ${takedownPanel}
 export function accountsPage(ctx, rows) {
   const body = `<div class="head"><h1>חשבונות</h1><span class="sub">${rows.length === 1 ? 'חשבון אחד' : `${rows.length} חשבונות`}</span><span class="end"><a class="btn sm" href="/new">${icon('plus')}חשבון חדש</a></span></div>
 <div class="accounts">${rows
-    .map(({ pack, acc, spend, cap, plan, publishers, week }) => {
+    .map(({ pack, acc, spend, cap, plan, publishers, week, style }) => {
       const paused = acc.status === 'paused';
       const max = Math.max(1, ...week.days.map((x) => x.n));
       const h = (n) => (n === 0 ? 'h0' : `h${Math.max(1, Math.min(4, Math.ceil((n / max) * 4)))}`);
@@ -296,7 +327,8 @@ ${paused ? `<div class="paused${acc.paused_reason === 'kill' ? ' kill' : ''}">${
 <div><div class="row"><span>הנתח מהתקציב</span><b class="ltr">$${spend.toFixed(2)} / $${cap.toFixed(2)}</b></div><meter min="0" max="${cap || 1}" low="${(cap || 1) * 0.7}" high="${(cap || 1) * 0.9}" optimum="0" value="${Math.min(spend, cap || 1)}"></meter>${plan?.cut ? `<p class="small m4"><span class="chip warn">פוסט ${plan.perDay === 1 ? 'אחד' : plan.perDay} ביום במקום ${plan.planned}</span> התקציב קצר החודש, וזה החשבון שמצמצם ראשון.</p>` : ''}</div>
 <div><div class="row"><span>7 הימים האחרונים</span><b>${week.days.reduce((s, x) => s + x.n, 0)} פורסמו${week.views != null ? ` · ${k(week.views)} צפיות` : ''}</b></div>
 <div class="week" aria-label="פוסטים שפורסמו בכל יום">${week.days.map((x) => `<span title="${esc(shortDate(x.at))}: ${x.n}"><i class="${h(x.n)}"></i>${esc(weekdayNarrow(x.at))}</span>`).join('')}</div></div>
-<dl class="kv"><dt>בתור</dt><dd>${week.counts.queued || 0} ממתינים · ${week.counts.approved || 0} מאושרים</dd><dt>נחסמו השבוע</dt><dd>${week.counts.blocked || 0}</dd><dt>פרסום</dt><dd>${publishers.map((x) => `${PLATFORM_HE[x.platform] || x.platform}: ${publisherHe(x)}`).join(' · ')}</dd></dl>
+<dl class="kv"><dt>בתור</dt><dd>${week.counts.queued || 0} ממתינים · ${week.counts.approved || 0} מאושרים</dd><dt>נחסמו השבוע</dt><dd>${week.counts.blocked || 0}</dd><dt>פרסום</dt><dd>${publishers.map((x) => `${PLATFORM_HE[x.platform] || x.platform}: ${publisherHe(x)}`).join(' · ')}</dd>${style ? `<dt>סגנון</dt><dd><span class="ltr">${esc(style.theme.template)}/${esc(style.theme.variant || 'a')}</span> · נעול מ-${esc(shortDate(style.at))}</dd>` : ''}</dl>
+${style?.pending ? `<div class="paused">${icon('alert')}<div><b>הסגנון בקובץ theme.json השתנה</b><div class="small">הפוסטים ממשיכים להצטייר בסגנון הנעול עד שתחילו את החדש. פוסטים שכבר צוירו נשארים בשלהם.</div></div>${postButton(ctx, `/accounts/${pack.id}/style`, 'החל את הסגנון החדש', { cls: 'btn sm' })}</div>` : ''}
 <div class="actions p0">${!paused ? postButton(ctx, `/accounts/${pack.id}/kill`, `${icon('power')}כבה את החשבון`, { cls: 'btn danger', confirm: 'בטוח? לחצו שוב לכיבוי' }) : ''}<a class="btn" href="/sources?account=${esc(pack.id)}">מקורות</a><a class="btn" href="/rivals?account=${esc(pack.id)}">מתחרים</a></div>
 </article>`;
     })

@@ -13,6 +13,7 @@ import { contentRange, ctasOf, factFree, groupOf, hookPatterns, kindName, kindOf
 import { resolveFormat } from '../trends/index.js';
 import { isGenericQuestion, limitsFor, mechanicalFix, normHe, tellsIn } from '../voice/tells.js';
 import { BLOCK_AT, REWRITE_AT, reviewTexts } from '../voice/review.js';
+import { lockedStyle } from '../render/style.js';
 import { checkRules } from '../rules/check.js';
 import { lineDraft, oneLine, overlayProblems } from '../rules/overlay.js';
 import { MAX_HASHTAGS, captionProblems, hashtagProblems, storyCaption } from '../rules/caption.js';
@@ -1125,7 +1126,9 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     const plainSource = new Map(facts.map((f) => [f.key, sourceLabel(db, f, { article: false })]));
     const slides = draft.slides.map((s) => ({ ...s, sources: s.factKeys.map((k) => (s.role === 'clue' ? plainSource : factSource).get(k)) }));
     const outDir = path.join(ctx.mediaDir || mediaDir(), 'posts', postId);
-    const files = await renderPost({ pack, format, post: { id: postId, hook: draft.hook, sub: draft.sub, caption: draft.caption, token: final.gate.token, extra: extraOf(draft), ctaKind: draft.cta?.kind }, slides, photos, outDir });
+    // Drawn in the account's saved look (src/render/style.js), whose hash the post keeps for drawing it again.
+    const look = lockedStyle(db, pack, ctx.packs || []);
+    const files = await renderPost({ pack: { ...pack, theme: look.theme }, format, post: { id: postId, hook: draft.hook, sub: draft.sub, caption: draft.caption, token: final.gate.token, extra: extraOf(draft), ctaKind: draft.cta?.kind }, slides, photos, outDir });
     step(db, postId, 'render', 'ok', { platforms: Object.keys(files), slides: slides.length });
 
     // ---- store and queue
@@ -1146,7 +1149,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     return finish(status, {
       hook: draft.hook, sub: draft.sub, caption: draft.caption, caption_ig: draft.captionIg, hashtags_json: tags, review_score: worst, hook_pattern: draft.hookPattern,
       data_json: { subject: draft.subject, keywords: draft.keywords, cta: draft.cta, captionShort: draft.captionShort, question: draft.question, day: kindName(format) === 'on-this-day' ? postDay : undefined, coverVisual: draft.coverVisual },
-      checks_json: { token: final.gate.token, reviewer: review.reviewer, scores, rewrites: applied, image: image ? image.id : null, bgImage: photos.get('bg')?.id ?? null, coverImages: ['ca', 'cb'].map((k) => photos.get(k)?.id).filter(Boolean), imageSafety: image?.safety || null, images: [...photos.values()].map((p) => p.id), photoOn },
+      checks_json: { token: final.gate.token, reviewer: review.reviewer, scores, rewrites: applied, image: image ? image.id : null, bgImage: photos.get('bg')?.id ?? null, coverImages: ['ca', 'cb'].map((k) => photos.get(k)?.id).filter(Boolean), imageSafety: image?.safety || null, images: [...photos.values()].map((p) => p.id), photoOn, style: look.hash },
       media_json: files, ai_label: [...photos.values()].some((p) => p.ai_generated && p.realistic) ? 1 : 0,
     });
   } catch (e) {
