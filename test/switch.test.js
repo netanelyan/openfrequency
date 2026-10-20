@@ -57,9 +57,9 @@ const acct = (res) => /of_acct=([^;]+)/.exec(res.headers.get('set-cookie') || ''
 test('the site shows one account; the switcher lists them all and counts what waits in the others', async () => {
   const cookie = await login();
   const html = await (await get('/', cookie)).text();
-  assert.match(html, /<details class="acctswitch">\s*<summary aria-label="החשבון: [^"]+\. החלפת חשבון"><span class="dot acc-demo"/, 'the first account is shown');
+  assert.match(html, /<details class="acctswitch">\s*<summary aria-label="החשבון: [^"]+\. החלפת חשבון"><span class="ic"><span class="dot acc-demo"/, 'the first account is shown');
   assert.match(html, /<b class="badge num" title="מחכים לאישור בחשבונות האחרים" aria-label="1 מחכים בחשבונות האחרים">1<\/b>/);
-  assert.match(html, /name="to" value="second"><button type="submit">/);
+  assert.match(html, /name="to" value="second"><button type="submit" title="@second.test">/);
   assert.doesNotMatch(html, new RegExp(otherPost), "the other account's post is not on this account's home");
   assert.doesNotMatch(html, /class="acctab"/, 'no table of every account on home');
 });

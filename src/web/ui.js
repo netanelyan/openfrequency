@@ -119,10 +119,11 @@ export function accountSwitch(ctx) {
   if (!cur) return '';
   const others = all.filter((a) => a.id !== cur.id);
   const waitingElsewhere = others.reduce((s, a) => s + a.waiting, 0);
-  const item = (a) => `<form method="post" action="/account/switch">${csrfField(ctx)}<input type="hidden" name="to" value="${esc(a.id)}"><button type="submit"${a.id === cur.id ? ' aria-current="true"' : ''}>${accDot(a.id)}<span class="nm"><b>${esc(a.name)}</b><small class="ltr">@${esc(a.handle)}</small></span>${a.waiting ? `<b class="badge num" aria-label="${a.waiting} מחכים">${a.waiting}</b>` : ''}</button></form>`;
+  // The other accounts, as rows like the sections under them: one line, the same height and the same indent.
+  const item = (a) => `<form method="post" action="/account/switch">${csrfField(ctx)}<input type="hidden" name="to" value="${esc(a.id)}"><button type="submit" title="@${esc(a.handle)}"><span class="ic">${accDot(a.id)}</span><span class="nm"><b>${esc(a.name)}</b></span>${a.waiting ? `<b class="badge num" aria-label="${a.waiting} מחכים">${a.waiting}</b>` : ''}</button></form>`;
   return `<details class="acctswitch">
-<summary aria-label="החשבון: ${esc(cur.name)}. החלפת חשבון">${accDot(cur.id)}<span class="nm"><b>${esc(cur.name)}</b><small class="ltr">@${esc(cur.handle)}</small></span>${waitingElsewhere ? `<b class="badge num" title="מחכים לאישור בחשבונות האחרים" aria-label="${waitingElsewhere} מחכים בחשבונות האחרים">${waitingElsewhere}</b>` : ''}${icon('chev')}</summary>
-<div class="menu">${all.map(item).join('')}<a class="new" href="/new">${icon('plus')}חשבון חדש</a></div>
+<summary aria-label="החשבון: ${esc(cur.name)}. החלפת חשבון"><span class="ic">${accDot(cur.id)}</span><span class="nm"><b>${esc(cur.name)}</b><small class="ltr">@${esc(cur.handle)}</small></span>${waitingElsewhere ? `<b class="badge num" title="מחכים לאישור בחשבונות האחרים" aria-label="${waitingElsewhere} מחכים בחשבונות האחרים">${waitingElsewhere}</b>` : ''}${icon('chev')}</summary>
+<div class="menu">${others.map(item).join('')}<a class="new" href="/new"><span class="ic">${icon('plus')}</span><span class="nm">חשבון חדש</span></a></div>
 </details>`;
 }
 
