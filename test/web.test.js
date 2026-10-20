@@ -288,3 +288,18 @@ test('sounds are added per account, the service worker is served from the root, 
   assert.equal((await get('/notifications/latest.json')).status, 303, 'what a notification says is behind the session');
   assert.match((await (await get('/notifications/latest.json', cookie)).json()).title, /טיוטה מחכה/);
 });
+
+test('the topics page: a topic added to the bank waits first in line, and its form refuses a link that is not one', async () => {
+  const cookie = await login();
+  const csrf = await csrfOf(cookie);
+  let res = await post('/topics/add', cookie, { _csrf: csrf, account: 'demo', title: 'הצמח ששרד שנה בלי מים', why: 'מיליון צפיות', url: 'not a link' });
+  assert.equal(res.status, 422);
+  res = await post('/topics/add', cookie, { _csrf: csrf, account: 'demo', title: 'הצמח ששרד שנה בלי מים', why: 'מיליון צפיות', url: 'https://www.tiktok.com/@x/video/1' });
+  assert.equal(res.status, 200);
+  const html = await (await get('/topics', cookie)).text();
+  assert.match(html, /<h2>הבאים בתור<\/h2>[\s\S]*הצמח ששרד שנה בלי מים[\s\S]*<span class="tscore none"/, 'in line, waiting for its score');
+  assert.match(html, /name="names"/, 'the watch list is edited here');
+  res = await post('/topics/watch', cookie, { _csrf: csrf, account: 'demo', names: 'Epipremnum aureum\nMonstera deliciosa' });
+  assert.equal(res.status, 200);
+  assert.match(await (await get('/topics', cookie)).text(), /Epipremnum aureum\nMonstera deliciosa/);
+});

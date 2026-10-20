@@ -79,7 +79,7 @@ export const NAV = [
   ['/sources', 'מקורות', 'sources', 'sources'],
   ['/settings', 'הגדרות', 'settings', 'settings'],
 ];
-const SECTION_OF = { new: 'accounts', more: 'settings' };
+const SECTION_OF = { new: 'accounts', more: 'settings', topics: 'sources' };
 
 /**
  * The budget, said on every page when it matters: 80% of the month's cap spent,

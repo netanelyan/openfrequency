@@ -80,7 +80,13 @@ works without JavaScript, and adds to a phone's home screen.
 ## How a post is made
 
 ```
+topics first: the owner's bank, then this week's signals (a Wikipedia page read far
+  more than in the month before, the most-viewed Shorts for the account's searches),
+  each scored 0-10 for stopping a scroll; a signal under 6 is never drafted
 format (by the mix and results)
+  -> the chosen topic searched in the approved sources (its stored documents, then
+     research); a topic nothing approved supports is left, and the day's documents
+     are drafted instead
   -> documents from the format's approved sources (the topic bank first)
   -> outline: the angle, the facts with their quotes, the articles to read next
   -> research: those articles read, the details a fan would want, each verified
@@ -329,6 +335,21 @@ pictures and their licences, cost and the engine's own review. `review` and
 `verdicts` run a blind review: three readers who see only the slides, captions and
 source list; a post passes when two of them would read to the end and save, send or
 comment. Each round has its own folder and database.
+
+### Topics first
+
+Once a day, before anything is drafted, each account's candidates are gathered: the
+names on its watch list (people, teams, companies; edited on the website's Topics
+page, or `interest.wikipedia` in pack.json) whose Wikipedia page is read at least 1.5
+times as much this week as in the four weeks before, and the Shorts most viewed in
+the last two weeks for its `formats.trends.queries` (titles and YouTube's numbers
+only, with `YOUTUBE_API_KEY`). The owner adds topics they know went viral (the topic,
+why, where) to the bank on the same page. One model call scores the new candidates 0
+to 10 overall and on shock, money, rivalry, a hidden story and "I didn't know that";
+a signal under 6, or off the account's subject, is never drafted, and a bank topic is
+scored to be shown but never skipped. A post takes the best topic in line (the bank's
+first), and only then searches the approved sources for what holds it up. A candidate's
+link is where it went viral, never a fact's source. The score is on the post's page.
 
 ### Research and the topic bank
 

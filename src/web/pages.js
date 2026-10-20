@@ -6,6 +6,7 @@ import { KINDS, MIX } from '../formats/kinds.js';
 import { BOXES, MEASURES, PRIORITY } from '../metrics/feedback.js';
 import { RIVALS } from '../pipeline/rivals.js';
 import { readFileSync } from 'node:fs';
+import { PARTS as TOPIC_PARTS, PASS as PASS_TOPIC } from '../topics/index.js';
 
 const VERSION = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version;
 
@@ -18,7 +19,7 @@ const KIND_HE = Object.fromEntries(Object.entries(KINDS).map(([k2, v]) => [k2, v
 
 const REJECT_REASONS = ['לא מעניין', 'טעות בעובדה', 'הקול לא נכון', 'נושא שכבר היה', 'העיצוב לא עובד'];
 const STEP_HE = {
-  format: 'פורמט', topic: 'בחירת נושא', outline: 'מתווה ועובדות', facts: 'אימות עובדות', slides: 'כתיבת שקפים', redraft: 'כתיבה מחדש', rewrite: 'שכתוב מה שנשמע כמו בוט', review: 'בדיקת "נשמע כמו בוט"', verify: 'שער העובדות',
+  format: 'פורמט', viral: 'נושא שנבחר קודם', topic: 'מסמכים מהמקורות', outline: 'מתווה ועובדות', facts: 'אימות עובדות', slides: 'כתיבת שקפים', redraft: 'כתיבה מחדש', rewrite: 'שכתוב מה שנשמע כמו בוט', review: 'בדיקת "נשמע כמו בוט"', verify: 'שער העובדות',
   image: 'תמונה', render: 'רינדור', queue: 'לתור', publish: 'פרסום', blocked: 'נחסם', error: 'שגיאה', edit: 'עריכה', subject: 'נושא השבוע', takedown: 'הודעת הסרה',
 };
 // The checks on the Results page's block rates, by the names src/pipeline/build.js checkOf gives them.
@@ -48,7 +49,7 @@ const PLATFORM_HE = { tiktok: 'טיקטוק', instagram: 'אינסטגרם' };
 const ROLE_HE = { owner: 'בעלים', editor: 'עורך', viewer: 'צופה' };
 const AUDIT_HE = {
   login: 'כניסה', approve: 'אישור פוסט', unapprove: 'ביטול אישור', reject: 'דחיית פוסט', edit: 'עריכה', publish_now: 'פרסום ידני', published: 'פורסם', publish_failed: 'פרסום נכשל',
-  auto_approved: 'אושר אוטומטית', dev_mode: 'מצב מפתח נפתח', mode: 'שינוי מצב', pause: 'השהיה', resume: 'חידוש', global_kill_on: 'כיבוי כללי', global_kill_off: 'הפעלה מחדש', global_budget: 'תקציב כללי',
+  auto_approved: 'אושר אוטומטית', dev_mode: 'מצב מפתח נפתח', topic_added: 'נושא נוסף לבנק', topic_removed: 'נושא הוסר', watch_saved: 'רשימת מעקב נשמרה', mode: 'שינוי מצב', pause: 'השהיה', resume: 'חידוש', global_kill_on: 'כיבוי כללי', global_kill_off: 'הפעלה מחדש', global_budget: 'תקציב כללי',
   takedown: 'הודעת הסרה', takedown_deleted: 'נמחק ידנית אחרי הודעה', image_ok: 'תמונה נבדקה בעין', mix_changed: 'יחס בידור ומספרים זז',
   generate_at: 'שעת ייצור', source_approved: 'מקור אושר', source_removed: 'מקור הוסר', source_added: 'מקור נוסף', user_added: 'משתמש נוסף',
   publish_retry: 'פרסום יחזור על עצמו', fact_added: 'עובדה נוספה', fact_confirmed: 'עובדה נבדקה שוב', fact_removed: 'עובדה הוסרה', rival_added: 'מתחרה נוסף', rival_updated: 'מתחרה עודכן', rival_removed: 'מתחרה הוסר', format_dropped: 'פורמט נשר', format_promoted: 'פורמט הוכח', format_returned: 'פורמט חזר', onboarding: 'חשבון חדש', went_live: 'חשבון עלה לאוויר',
@@ -350,6 +351,7 @@ ${post.status === 'approved' ? `<div class="actionbar">${postButton(ctx, `/post/
 ${['queued', 'approved', 'sample'].includes(post.status) ? edit : ''}
 </div>
 <div>
+${topicPanel(d.topic)}
 <section class="panel">${factsBlock(post, { open: true })}</section>
 <section class="panel"><header><h2>בדיקות</h2></header>
 <dl class="kv"><dt>שער העובדות</dt><dd>${post.checks?.token ? '<span class="chip ok">עבר</span>' : '<span class="chip">לא הגיע</span>'}</dd>
@@ -561,6 +563,62 @@ ${feedbackPanels(d.feedback || [])}
   return layout({ ...ctx, title: 'תוצאות', active: 'results' }, body);
 }
 
+/* ------------------------------------------------------------ topics (src/topics) */
+
+const ORIGIN_HE = { bank: 'מהבנק', wikipedia: 'ויקיפדיה', youtube: 'יוטיוב' };
+const TOPIC_STATUS = { new: ['ממתין לציון', 'ghost'], ready: ['בתור', 'sig'], low: ['מתחת ל-6', 'ghost'], used: ['נכתב פוסט', 'ok'], unsupported: ['אין מקור', 'warn'], skipped: ['לא הסתדר', 'warn'] };
+
+/** A topic's score: the number, and its five parts as short bars. */
+export function topicScore(t) {
+  if (t.score == null) return '<span class="tscore none" title="עוד לא קיבל ציון">–</span>';
+  const parts = t.parts || {};
+  return `<span class="tscore${t.score >= PASS_TOPIC ? ' ok' : ''}" dir="ltr" title="${esc(parts.why || '')}"><b class="num">${t.score}</b><small>/10</small></span>
+<ul class="tparts" aria-label="פירוט הציון">${TOPIC_PARTS.map(([k, he]) => `<li><span>${he}</span><span class="vbar" aria-hidden="true">${parts[k] ? `<i class="w${parts[k]}"></i>` : ''}</span><b class="num">${parts[k] ?? 0}</b></li>`).join('')}</ul>`;
+}
+
+function topicRow(ctx, t, { remove = false } = {}) {
+  const [st, cls] = TOPIC_STATUS[t.status] || [t.status, ''];
+  return `<li class="topic"><div class="tmain"><div class="meta p0"><span class="chip ghost">${esc(ORIGIN_HE[t.origin] || t.origin)}</span><span class="chip ${cls}">${esc(st)}</span>${t.post_id ? `<a class="small" href="/post/${esc(t.post_id)}">לפוסט</a>` : ''}</div>
+<b>${esc(t.angle || t.title)}</b>${t.angle && t.angle !== t.title ? `<div class="muted small">${esc(t.title)}</div>` : ''}
+${t.why ? `<div class="small">${esc(t.why)}</div>` : ''}${t.parts?.why ? `<div class="muted small">${esc(t.parts.why)}</div>` : ''}${t.note ? `<div class="muted small">${esc(t.note)}</div>` : ''}
+${t.url ? `<a class="small" href="${esc(t.url)}" target="_blank" rel="noopener noreferrer">${t.origin === 'bank' ? 'איפה זה הפך ויראלי' : 'המקור של הסימן'} ${icon('ext')}</a>` : ''}
+${remove ? postButton(ctx, '/topics/remove', 'הסר', { cls: 'btn ghost sm', fields: { account: t.account_id, id: t.id } }) : ''}</div>
+<div class="tside">${topicScore(t)}</div></li>`;
+}
+
+export function topicsPage(ctx, { current, topics, pass, watch, queries, youtube, live, form = {}, problems = [] }) {
+  const next = topics.filter((t) => (t.origin === 'bank' ? ['new', 'ready', 'low'].includes(t.status) : t.status === 'ready') && (!t.expires_at || t.expires_at > new Date().toISOString()));
+  const used = topics.filter((t) => t.status === 'used');
+  const out = topics.filter((t) => !next.includes(t) && !used.includes(t));
+  const q = [...(queries.he || []), ...(queries.en || [])];
+  const body = `<div class="head"><h1>נושאים</h1><span class="sub">מה כדאי לספר, לפני שמחפשים במקורות</span><span class="end"><a class="btn sm" href="/sources">${icon('sources')}מקורות</a></span></div>
+<p class="lede">כל פוסט מתחיל מנושא: קודם מהבנק שלך, אחר כך ממה שאנשים קוראים ורואים השבוע. כל נושא מקבל ציון של 0 עד 10 על כמה הוא עוצר גלילה, ונושא מתחת ל-${pass} לא נכתב. רק אחרי שנבחר נושא מחפשים לו עובדות במקורות המאושרים, ונושא שאף מקור לא תומך בו נשאר בצד.</p>
+<section class="panel" id="bank"><header><h2>להוסיף לבנק</h2><span class="end muted small">נושאים שאת/ה יודע/ת שעבדו. הם הראשונים בתור.</span></header>
+${problems.length ? `<div class="problems"><b>לא נשמר:</b><ul>${problems.map((p) => `<li>${esc(p)}</li>`).join('')}</ul></div>` : ''}
+<form method="post" action="/topics/add" class="formgrid">${csrfField(ctx)}<input type="hidden" name="account" value="${esc(current.id)}">
+<label class="f">הנושא<input type="text" name="title" value="${esc(form.title || '')}" maxlength="300" required placeholder="למשל: השחקן שסירב לחוזה של 100 מיליון"></label>
+<label class="f">למה זה הפך ויראלי<textarea name="why" maxlength="600" placeholder="מה גרם לאנשים לעצור ולשתף">${esc(form.why || '')}</textarea></label>
+<label class="f">קישור <small>איפה זה עבד. הוא לא משמש כמקור לעובדות.</small><input type="url" name="url" value="${esc(form.url || '')}" dir="ltr" placeholder="https://"></label>
+<div><button class="btn primary" type="submit">${icon('plus')}הוסף לבנק</button></div></form></section>
+<section class="panel"><header><h2>הבאים בתור</h2><span class="end muted small">${next.length}</span></header>
+${next.length ? `<ul class="topics">${next.map((t) => topicRow(ctx, t, { remove: t.origin === 'bank' })).join('')}</ul>` : '<p class="muted">אין נושא בתור. הוסיפו לבנק, או חכו לסימנים של מחר. בינתיים הפוסטים נכתבים מהמסמכים של היום.</p>'}</section>
+${used.length ? `<details class="panel"><summary><h2 class="inline">כבר נכתבו <span class="muted small">${used.length}</span></h2></summary><ul class="topics">${used.map((t) => topicRow(ctx, t)).join('')}</ul></details>` : ''}
+${out.length ? `<details class="panel"><summary><h2 class="inline">נשארו בצד <span class="muted small">${out.length}</span></h2></summary><ul class="topics">${out.map((t) => topicRow(ctx, t, { remove: t.origin === 'bank' && t.status !== 'removed' })).join('')}</ul></details>` : ''}
+<section class="panel" id="watch"><header><h2>מאיפה מגיעים הסימנים</h2></header>
+<p class="muted">פעם ביום תדר בודק כמה קוראים את הדפים בוויקיפדיה של השמות כאן, ונושא נוצר כשקוראים אחד מהם השבוע פי 1.5 לפחות מבחודש שלפני. ${youtube ? 'הוא גם בודק אילו שורטס נצפו הכי הרבה בשבועיים האחרונים בחיפושים של החשבון' : 'יוטיוב עוד לא מחובר, אז שורטס לא נבדקים'}${q.length && youtube ? `: ${q.map((x) => `<span class="chip ghost">${esc(x)}</span>`).join(' ')}` : '.'}${live ? '' : ' (בהדגמה הסימנים לא נבדקים: רק הבנק פעיל.)'}</p>
+<form method="post" action="/topics/watch" class="formgrid">${csrfField(ctx)}<input type="hidden" name="account" value="${esc(current.id)}">
+<label class="f">שמות למעקב <small>שחקנים, קבוצות, חברות: שם אחד בשורה, כמו בכותרת של הדף בוויקיפדיה. שם בעברית נבדק בוויקיפדיה העברית.</small><textarea name="names" rows="6" dir="auto">${esc(watch.join('\n'))}</textarea></label>
+<div><button class="btn" type="submit">שמור</button></div></form></section>`;
+  return layout({ ...ctx, title: 'נושאים', active: 'topics' }, body);
+}
+
+/** The post page's account of where its topic came from, and how it scored. */
+export function topicPanel(t) {
+  if (!t) return '';
+  return `<section class="panel"><header><h2>הנושא</h2><span class="end"><span class="chip ghost">${esc(ORIGIN_HE[t.origin] || t.origin)}</span></span></header>
+<ul class="topics"><li class="topic"><div class="tmain"><b>${esc(t.angle || t.title)}</b>${t.angle && t.angle !== t.title ? `<div class="muted small">${esc(t.title)}</div>` : ''}${t.why ? `<div class="small">${esc(t.why)}</div>` : ''}${t.parts?.why ? `<div class="muted small">${esc(t.parts.why)}</div>` : ''}${t.url ? `<a class="small" href="${esc(t.url)}" target="_blank" rel="noopener noreferrer">${t.origin === 'bank' ? 'איפה זה הפך ויראלי' : 'המקור של הסימן'} ${icon('ext')}</a>` : ''}</div><div class="tside">${topicScore(t)}</div></li></ul></section>`;
+}
+
 /* ------------------------------------------------------------ sources */
 
 const SOURCE_STATUS = { approved: ['מאושר', 'ok'], pending: ['ממתין לאישור', 'warn'], removed: ['הוסר', 'ghost'] };
@@ -579,7 +637,7 @@ export function sourcesPage(ctx, { packs, current, sources, form = {}, problems 
 <div class="actions pt10 p0x">${s.status !== 'approved' ? postButton(ctx, `/sources/${s.id}/approve`, 'אשר', { cls: 'btn sm primary' }) : ''}${s.status !== 'removed' ? postButton(ctx, `/sources/${s.id}/remove`, 'הסר', { cls: 'btn sm danger', confirm: 'להסיר את המקור?' }) : ''}</div></article>`;
     })
     .join('');
-  const body = `<div class="head"><h1>מקורות</h1><span class="sub">רק מקור מאושר יכול לתמוך בעובדה</span><span class="end"><a class="btn sm" href="/facts?account=${esc(current.id)}">${icon('shield')}עובדות שנבדקו ביד</a></span></div>
+  const body = `<div class="head"><h1>מקורות</h1><span class="sub">רק מקור מאושר יכול לתמוך בעובדה</span><span class="end"><a class="btn sm" href="/topics">${icon('spark')}נושאים</a><a class="btn sm" href="/facts?account=${esc(current.id)}">${icon('shield')}עובדות שנבדקו ביד</a></span></div>
 ${tabs}
 <p class="lede">עובדה בשקף חייבת ציטוט ממסמך של מקור מאושר של החשבון. מקור שמוסר כאן מפסיק לתמוך בכל פוסט שעוד לא פורסם, והפוסט ייחסם בבדיקה שלפני הפרסום.</p>
 <div class="cols"><div class="grid12">${list || `<div class="empty"><b>אין מקורות</b></div>`}</div>

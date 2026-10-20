@@ -27,6 +27,7 @@ import { detailsPrompt, detailsUser, outlinePrompt, outlineUser, repairPrompt, r
 import { REPAIR_ATTEMPTS, applyRepair, repairPlan } from './repair.js';
 import { nicheForOutline, nicheForSlides, rivalsOf } from './rivals.js';
 import { aboutSubject, research } from '../sources/research.js';
+import { markTopic, readyTopics, topicDocs } from '../topics/index.js';
 
 // One post, from topic to a rendered, queued slideshow:
 //
@@ -816,12 +817,33 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     step(db, postId, 'format', 'info', { format: format.id, name: format.name, kind: kindName(format), group: groupOf(format) });
     if (directive) step(db, postId, 'feedback', 'info', { directive: dv.id || null, box: dv.box || null, steer: dv.steer || null });
 
+    const topicNotes = new Map();
+    const noteTopic = (c, why) => c.topicId && topicNotes.set(c.topicId, String(why || '').slice(0, 300));
+
     // ---- topic: documents from approved sources
     // A variation of a post that worked is drafted from that post's own document again.
     const docs = await candidateDocs(pctx, pack, { day: postDay, keepBlocked: Boolean(subject?.terms?.length), ...(dv.reuseDocs ? { usedWithinDays: 0 } : {}) });
-    step(db, postId, 'topic', docs.length ? 'ok' : 'failed', { candidates: docs.length, mode: pctx.sources.kind });
-    if (!docs.length) return block('no_source', 'אין מסמכים חדשים מהמקורות המאושרים');
-    let candidates = candidatesOf(docs);
+    // ---- topic first (src/topics): the bank's, then what people are looking at, scored before this post; then the
+    // approved sources searched for what holds it up, after the day's read so that what it stored is searched too.
+    // A post with its subject or its document fixed keeps them.
+    let viral = null;
+    if (!subject && !docKey && !dv.docKey) {
+      for (const t of readyTopics(db, pack.id, { limit: 2 })) {
+        const found = await topicDocs(pctx, pack, t);
+        if (!found.length) {
+          markTopic(db, t.id, 'unsupported', { note: 'אף מקור מאושר לא אומר עליו דבר' });
+          step(db, postId, 'viral', 'skipped', { topic: t.id, origin: t.origin, title: t.title, score: t.score, why: 'unsupported by the approved sources' });
+          continue;
+        }
+        viral = { topic: t, cand: { key: `topic:${t.id}`, docs: found, subject: t.angle || t.title, why: t.why, topicId: t.id } };
+        step(db, postId, 'viral', 'info', { topic: t.id, origin: t.origin, title: t.title, angle: t.angle, score: t.score, parts: t.parts, url: t.url, documents: found.map((d) => d.url) });
+        break;
+      }
+    }
+    step(db, postId, 'topic', docs.length || viral ? 'ok' : 'failed', { candidates: docs.length, mode: pctx.sources.kind, viral: viral?.topic.id || null });
+    if (!docs.length && !viral) return block('no_source', 'אין מסמכים חדשים מהמקורות המאושרים');
+    // The chosen topic is tried first, in every format; the day's documents stay behind it, for a topic no format takes.
+    let candidates = [...(viral ? [viral.cand] : []), ...candidatesOf(docs)];
     // One named document (or group): the launch set, and a test, ask for a post from exactly that.
     if (docKey) candidates = candidates.filter((c) => c.key === docKey);
     // A feed moves on: the document a winning post came from is read from the database when today's read no longer has it,
@@ -868,12 +890,13 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
         const p = outlinePrompt(pack, { ttl });
         try {
           const res = await askJson(pctx, {
-            task: 'outline', role: 'draft', system: p.system, user: outlineUser(f, refs, { avoid: subject || dv.steer?.kind === 'variation' ? [] : recent, faceless: [...new Set(faceless)], day: postDay, subject: subject?.text, maxAgeDays: String(c.key).startsWith('bank:') ? null : pack.meta.research?.maxAgeDays || null, niche: nicheForOutline(rivals) }), schema: p.schema, effort: EFFORT.outline, maxTokens: MAX_TOKENS.outline,
+            task: 'outline', role: 'draft', system: p.system, user: outlineUser(f, refs, { avoid: subject || dv.steer?.kind === 'variation' ? [] : recent, faceless: [...new Set(faceless)], day: postDay, subject: c.subject || subject?.text, why: c.why || null, maxAgeDays: String(c.key).startsWith('bank:') ? null : pack.meta.research?.maxAgeDays || null, niche: nicheForOutline(rivals) }), schema: p.schema, effort: EFFORT.outline, maxTokens: MAX_TOKENS.outline,
             meta: { recordingsDir: pack.recordingsDir, docKey: c.key, format: f.base || f.id, attempt: 0 },
           });
           tried++;
           if (!res.data.usable) {
             step(db, postId, 'outline', 'skipped', { format: f.id, documents: c.docs.map((d) => d.id), url: c.docs[0].url, why: res.data.why }, res.usd);
+            noteTopic(c, res.data.why);
             continue;
           }
           step(db, postId, 'outline', 'ok', { format: f.id, documents: c.docs.map((d) => d.id), url: c.docs[0].url, topic: res.data.topic, items: res.data.items.length, facts: res.data.facts.length, research: res.data.research || [] }, res.usd);
@@ -886,6 +909,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
               const who = [res.data.subject?.a || res.data.imageQuery, res.data.subject?.b || res.data.imageQueryB].join(' / ');
               step(db, postId, 'outline', 'skipped', { format: f.id, topic: res.data.topic, who, why: `no licensed photograph of both sides (${who})` });
               faceless.push(who);
+              noteTopic(c, `no licensed photograph of both sides (${who})`);
               lastWhy = `אין תמונה מורשית של שני הצדדים (${who})`;
               lastKind = 'no_photo';
               continue;
@@ -896,11 +920,15 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
           const det = await gatherDetails(pctx, { pack, format: f, outline: res.data, cand: { ...c, refs }, ttl });
           if (det.ran) step(db, postId, 'details', det.short ? 'failed' : 'ok', { topic: res.data.topic, documents: det.docs.map((d) => d.url), found: det.found, verified: det.verified, need: det.need, refused: det.facts.filter((x) => !x.verified).map((x) => ({ key: x.key, error: x.error })) }, det.usd);
           // Fewer details than the minimum: not this topic. General wording never fills the gap.
-          if (det.short) continue;
+          if (det.short) {
+            noteTopic(c, `the sources hold ${det.found} of the ${det.need} details a post needs`);
+            continue;
+          }
           // The facts verified and the plan kept to the kind's shape; a plan that cannot keep it leaves the topic for the next.
           const made = planFrom(pctx, { pack, format: f, outline: res.data, cand: { ...c, refs }, details: det.facts });
           if (made.why) {
             step(db, postId, 'plan', 'failed', { topic: res.data.topic, why: made.why, refused: made.facts.filter((x) => !x.verified).map((x) => ({ key: x.key, error: x.error })) });
+            noteTopic(c, made.why);
             lastWhy = made.why;
             // A plan lost to facts its quotes do not hold is a fact-check failure (the rails pause an account on those), not a missing source.
             if (made.facts.some((x) => !x.verified)) lastKind = 'fact_check';
@@ -918,8 +946,13 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
         }
       }
     }
+    // The topic tried: used by this post, or left with the reason no format could hold it.
+    if (viral) {
+      if (cand?.topicId === viral.topic.id) markTopic(db, viral.topic.id, 'used', { postId });
+      else markTopic(db, viral.topic.id, 'skipped', { note: topicNotes.get(viral.topic.id) || 'no format could hold it' });
+    }
     if (!outline) return block(lastWhy ? lastKind : 'no_source', lastWhy ? `אף נושא לא החזיק פוסט שלם: ${lastWhy}` : 'אף מסמך חדש לא הספיק לפוסט באחד הפורמטים');
-    db.update('posts', postId, { topic: outline.topic, format_id: format.id, kind: kindName(format), grp: groupOf(format) });
+    db.update('posts', postId, { topic: outline.topic, format_id: format.id, kind: kindName(format), grp: groupOf(format), topic_id: cand?.topicId || null });
 
     // ---- facts: verified against their stored documents before any slide is written (planFrom), stored here
     const { facts, good, items } = plan;

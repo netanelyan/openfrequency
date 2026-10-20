@@ -866,3 +866,20 @@ details.more[open] > summary { background: var(--fill-2); }
 .ver[data-devtap] { cursor: default; }
 .panel.dev { margin-top: 28px; box-shadow: var(--shadow-tile), inset 0 0 0 1px var(--line-2); }
 .panel.dev + .cols { margin-top: 20px; }
+
+/* Topics: each candidate with its score, the number and its five parts as short bars. */
+.topics { list-style: none; margin: 0; padding: 0; display: grid; }
+.topic { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; padding: 14px 0; border-top: 1px solid var(--line); }
+.topic:first-child { border-top: 0; }
+.topic .tmain { display: grid; gap: 4px; min-width: 0; }
+.topic .tmain form { margin-top: 4px; }
+.topic .tside { display: grid; gap: 6px; justify-items: end; min-width: 150px; }
+.tscore { font: 700 28px/1 var(--display); color: var(--ink-2); }
+.tscore.ok { color: var(--ok); }
+.tscore.none { color: var(--ink-3); }
+.tscore small { font-size: 13px; font-weight: 500; color: var(--ink-3); }
+.tparts { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-size: 11px; color: var(--ink-3); }
+.tparts li { display: grid; grid-template-columns: 64px 56px 16px; align-items: center; gap: 6px; }
+.tparts .vbar { width: 56px; margin: 0; }
+.tparts b { font-weight: 600; color: var(--ink-2); text-align: end; }
+@media (max-width: 560px) { .topic { grid-template-columns: 1fr; } .topic .tside { justify-items: start; } }

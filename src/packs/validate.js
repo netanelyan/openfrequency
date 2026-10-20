@@ -165,6 +165,9 @@ export function validatePack(pack) {
   if (minDetails !== undefined && !(Number.isInteger(minDetails) && minDetails >= 0 && minDetails <= 8)) p.push('pack.json: research.minDetails is a whole number from 0 to 8');
   const maxAge = meta.research?.maxAgeDays;
   if (maxAge !== undefined && !(Number.isInteger(maxAge) && maxAge >= 7)) p.push('pack.json: research.maxAgeDays is a whole number of days, 7 or more');
+  // The names whose Wikipedia pages are watched for a week that reads far more than the month before (src/topics).
+  const watch = meta.interest?.wikipedia;
+  if (watch !== undefined && !(Array.isArray(watch) && watch.every((x) => typeof x === 'string' && x.trim()))) p.push('pack.json: interest.wikipedia is a list of Wikipedia page titles');
   if (meta.bio !== undefined && [...String(meta.bio)].length > 80) p.push('pack.json: bio is over 80 characters, the limit on TikTok');
   if (meta.endSlide !== undefined && !(isObj(meta.endSlide) && String(meta.endSlide.title || '').trim() && [...String(meta.endSlide.title)].length <= 60 && [...String(meta.endSlide.body || '')].length <= 120)) p.push('pack.json: endSlide needs a title (up to 60 characters) and may have a body (up to 120)');
   for (const [k, v] of Object.entries(meta.writing || {})) {

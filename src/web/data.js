@@ -22,6 +22,8 @@ import { rivalsOf, timesBeside } from '../pipeline/rivals.js';
 import { SOUNDS, soundsOf, recentSoundIds } from '../pipeline/sounds.js';
 import { vapid } from '../notify/index.js';
 import path from 'node:path';
+import { PASS, topicById, topicsOf, watchList } from '../topics/index.js';
+import { youtubeConfigured } from '../trends/index.js';
 
 // What each page shows, as plain queries. Pages never touch the database
 // themselves, so what a page can see is listed here.
@@ -229,6 +231,12 @@ export function soundsFor(ctx, pack) {
   return { current: pack, sounds: soundsOf(ctx.db, pack.id), mode: tiktokMode(pack), recent: recentSoundIds(ctx.db, pack.id), limits: SOUNDS };
 }
 
+/** An account's topics before documents: the bank, the signals with their scores, and what feeds them. */
+export function topicsFor(ctx, pack) {
+  const all = topicsOf(ctx.db, pack.id);
+  return { current: pack, topics: all, pass: PASS, watch: watchList(ctx.db, pack), queries: pack.formats.trends?.queries || {}, youtube: youtubeConfigured(), live: ctx.mode === 'live' };
+}
+
 /** An account's rivals, and their posting hours beside the account's own slots. */
 export function rivalsFor(ctx, pack) {
   const rivals = rivalsOf(ctx.db, pack.id);
@@ -280,6 +288,8 @@ export const postFull = (ctx, id) => {
     image: waitingImages(ctx.db, post)[0] || (post.checks?.image ? ctx.db.get('SELECT * FROM images WHERE id = ?', post.checks.image) : null),
     metrics: ctx.db.all('SELECT * FROM metrics WHERE post_id = ? ORDER BY collected_at DESC', id),
     takedowns: takedowns(ctx.db, { limit: 200 }).filter((x) => x.post_id === id),
+    // The topic it was drafted about, when it started from one (src/topics): its scores are shown on the post.
+    topic: post.topic_id ? topicById(ctx.db, post.topic_id) : null,
   };
 };
 

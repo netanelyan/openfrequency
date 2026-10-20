@@ -21,6 +21,7 @@ import { catalogSource } from '../sources/catalog.js';
 import { robotsAllows } from '../sources/robots.js';
 import { israelDate } from '../schedule/israel.js';
 import { DEFAULT_MONTHLY_USD } from '../budget/ledger.js';
+import { addBankTopic, removeTopic, setWatchList } from '../topics/index.js';
 
 // What each button does. Every action is a function (ctx, user, params, form)
 // that returns { ok, message, redirect } or throws an ActionError with a message
@@ -428,4 +429,32 @@ export function imageOk(ctx, user, { id }) {
   for (const img of waiting) ctx.db.update('images', img.id, { reviewed_by: user.name, reviewed_at: nowIso() });
   audit(ctx.db, { actor: user.name, action: 'image_ok', accountId: post.account_id, postId: id, detail: { images: waiting.map((i) => i.id) } });
   return { ok: true, message: waiting.length > 1 ? `${waiting.length} התמונות סומנו כבדוקות. אפשר לפרסם.` : 'התמונה סומנה כבדוקה. אפשר לפרסם.' };
+}
+
+/* ------------------------------------------------------------ topics: the bank and the watch list (src/topics) */
+
+export function addTopicAction(ctx, user, _p, form) {
+  const pack = ctx.pack(String(form.account || ''));
+  if (!pack) throw new ActionError('אין חשבון כזה', 404);
+  try {
+    addBankTopic(ctx.db, pack.id, { title: form.title, why: form.why, url: form.url }, user.name);
+  } catch (e) {
+    throw new ActionError('הנושא לא נשמר', 422, { problems: [e.message], values: { ...form } });
+  }
+  return { ok: true, message: 'נוסף לבנק. הוא יקבל ציון, והפוסט הבא יתחיל ממנו.', redirect: '/topics' };
+}
+
+export function removeTopicAction(ctx, user, _p, form) {
+  const pack = ctx.pack(String(form.account || ''));
+  if (!pack) throw new ActionError('אין חשבון כזה', 404);
+  if (!removeTopic(ctx.db, pack.id, Number(form.id), user.name)) throw new ActionError('אין נושא כזה', 404);
+  return { ok: true, message: 'הוסר.', redirect: '/topics' };
+}
+
+export function saveWatchAction(ctx, user, _p, form) {
+  const pack = ctx.pack(String(form.account || ''));
+  if (!pack) throw new ActionError('אין חשבון כזה', 404);
+  const names = setWatchList(ctx.db, pack, form.names);
+  audit(ctx.db, { actor: user.name, action: 'watch_saved', accountId: pack.id, detail: { n: names.length } });
+  return { ok: true, message: names.length ? `נשמרו ${names.length} שמות. הם נבדקים פעם ביום.` : 'הרשימה ריקה: ויקיפדיה לא תיבדק.', redirect: '/topics' };
 }

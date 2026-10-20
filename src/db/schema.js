@@ -481,4 +481,31 @@ export const MIGRATIONS = [
   ALTER TABLE facts ADD COLUMN who TEXT;
   ALTER TABLE facts ADD COLUMN who_he TEXT;
   `,
+  `
+  -- Topics before documents (src/topics): what people are looking at (a Wikipedia spike, a Short's views) and what
+  -- the owner knows went viral (the bank), each scored for how hard it stops a scroll before any post is outlined.
+  CREATE TABLE topics (
+    id            INTEGER PRIMARY KEY,
+    account_id    TEXT NOT NULL REFERENCES accounts(id),
+    origin        TEXT NOT NULL CHECK (origin IN ('bank','wikipedia','youtube')),
+    key           TEXT NOT NULL,                 -- one candidate once: wiki:<lang>:<title>:<week>, yt:<video>, bank:<n>
+    title         TEXT NOT NULL,                 -- what it is about, as found or as the owner typed it
+    why           TEXT,                          -- why it is a candidate: why it went viral, the spike, the views
+    url           TEXT,                          -- where it went viral or was seen; never a fact's source
+    signal_json   TEXT,                          -- the numbers behind it: views, the spike's ratio
+    angle         TEXT,                          -- the post's topic in Hebrew, from the scoring
+    terms_json    TEXT,                          -- what to search the approved sources for
+    score         REAL,                          -- 0 to 10: how hard it stops a scroll
+    score_json    TEXT,                          -- the five parts and the reason
+    status        TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new','ready','low','used','unsupported','skipped','removed')),
+    note          TEXT,                          -- why it was skipped or found unsupported
+    post_id       TEXT,
+    created_at    TEXT NOT NULL,
+    scored_at     TEXT,
+    expires_at    TEXT,
+    UNIQUE (account_id, key)
+  );
+  CREATE INDEX topics_ready ON topics(account_id, status);
+  ALTER TABLE posts ADD COLUMN topic_id INTEGER;
+  `,
 ];

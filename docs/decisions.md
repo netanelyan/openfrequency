@@ -1364,3 +1364,22 @@ engine can act on, and what changed:
   tells the owner to delete it there until they press "מחקתי", and an edited post that
   stays approved gets a fresh draft. Settings turns notifications on and off per
   device; an iPhone (iOS 16.4 and later) needs Teder added to the home screen first.
+
+- **Topics before documents (2026-10-20, the owner's call: "viral first").** A post
+  used to start from whatever document a source had that day. Now it starts from a
+  topic people already stop for: the owner's bank (typed in on the website, with why
+  it went viral and where; first in line), then this week's signals per account (a
+  watched name's Wikipedia page read at least 1.5 times its last month's daily mean,
+  with a minimum of daily readers; the most-viewed Shorts of the last 14 days for the
+  account's searches, titles and numbers only). Each candidate is scored once, before
+  any outline, 0 to 10 overall and on five parts (shock, money, rivalry, hidden story,
+  "didn't know that"); a signal under 6 or off the niche is never drafted. A bank topic
+  is scored for the page but never skipped: the owner already knows it worked. Only
+  then are the approved sources searched for the topic (stored documents that name it,
+  then research through the approved Wikipedia and Hacker News sources). Nothing new
+  about where facts come from: every fact is still quoted from a stored document of an
+  approved source, and what a document only reports is said as theirs. A topic nothing
+  approved supports is marked so and left; when no topic in line holds a post, the
+  post is drafted from the day's documents as before, so a day is never empty. The
+  signals are read only live, never invented offline; in the demo only the bank works.
+

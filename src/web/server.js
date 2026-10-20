@@ -106,6 +106,9 @@ export function createHandler(ctx, { port, env = process.env, limiter = createLi
     ['POST', /^\/facts\/add$/, (u, m, f) => act.addFact(ctx, u, {}, f)],
     ['POST', /^\/facts\/confirm$/, (u, m, f) => act.confirmFact(ctx, u, {}, f)],
     ['POST', /^\/facts\/remove$/, (u, m, f) => act.removeFactAction(ctx, u, {}, f)],
+    ['POST', /^\/topics\/add$/, (u, m, f) => act.addTopicAction(ctx, u, {}, f)],
+    ['POST', /^\/topics\/remove$/, (u, m, f) => act.removeTopicAction(ctx, u, {}, f)],
+    ['POST', /^\/topics\/watch$/, (u, m, f) => act.saveWatchAction(ctx, u, {}, f)],
     ['POST', /^\/rivals\/save$/, (u, m, f) => act.saveRivalAction(ctx, u, {}, f)],
     ['POST', /^\/rivals\/remove$/, (u, m, f) => act.removeRivalAction(ctx, u, {}, f)],
     ['POST', /^\/sounds\/save$/, (u, m, f) => act.saveSoundAction(ctx, u, {}, f)],
@@ -242,6 +245,10 @@ export function createHandler(ctx, { port, env = process.env, limiter = createLi
               const cur = ctx.pack(form.account) || ctx.packs[0];
               return send(req, res, e.status, pages.soundsPage({ ...pageCtx(), csrf }, { ...data.soundsFor(ctx, cur), packs: [cur], form, problems: e.problems || [e.message] }));
             }
+            if (p === '/topics/add') {
+              const cur = ctx.pack(form.account) || ctx.packs[0];
+              return send(req, res, e.status, pages.topicsPage({ ...pageCtx(), csrf }, { ...data.topicsFor(ctx, cur), form, problems: e.problems || [e.message] }));
+            }
             if (p === '/rivals/save') {
               const cur = ctx.pack(form.account) || ctx.packs[0];
               return send(req, res, e.status, pages.rivalsPage({ ...pageCtx(), csrf }, { ...data.rivalsFor(ctx, cur), packs: [cur], form, problems: e.problems || [e.message] }));
@@ -308,6 +315,10 @@ export function createHandler(ctx, { port, env = process.env, limiter = createLi
       }
       // The service worker asks what to show for a push it was woken by.
       if (p === '/notifications/latest.json') return json(req, res, 200, latestNotification(ctx.db) || {});
+      if (p === '/topics') {
+        if (!cur) return page(pages.notFoundPage(pc), 404);
+        return page(pages.topicsPage(pc, data.topicsFor(ctx, cur)));
+      }
       if (p === '/rivals') {
         if (!cur) return page(pages.notFoundPage(pc), 404);
         return page(pages.rivalsPage(pc, { ...data.rivalsFor(ctx, cur), packs: sc.packs }));

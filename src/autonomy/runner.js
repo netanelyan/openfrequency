@@ -12,6 +12,7 @@ import { collectMetrics, learn } from '../metrics/collect.js';
 import { canRun, liftBudgetPauses, pauseAccount } from './rails.js';
 import { ledgerUsd, reconcileState, utcMonth } from '../budget/anthropic.js';
 import { runTrends, youtubeConfigured } from '../trends/index.js';
+import { collectSignals, scoreTopics } from '../topics/index.js';
 import { perDayFor, planMonth, savePlan } from '../budget/plan.js';
 import { makeBatcher, recoverBatches } from '../llm/batch.js';
 import { wantedPublisher } from '../publish/index.js';
@@ -209,6 +210,24 @@ export async function tick(ctx, { t = now() } = {}) {
         report.feedback = { ...(report.feedback || {}), [pack.id]: { posts: fb.posts.length, directives: fb.directives.length } };
       } catch (e) {
         report.errors.push({ account: pack.id, step: 'feedback', error: e.message });
+      }
+    }
+  }
+
+  // ---- 1c. topics before documents (src/topics): what people are looking at, read and scored once a day per account,
+  // before anything is drafted. The signals are live only; the bank's topics are scored wherever a model answers.
+  if (t >= israelInstant(today, feedbackAt).getTime()) {
+    for (const pack of ctx.packs) {
+      const key = `topics:${pack.id}:${today}`;
+      const acc = db.get('SELECT status FROM accounts WHERE id = ?', pack.id);
+      if (!acc || acc.status === 'onboarding' || getSetting(db, key)) continue;
+      setSetting(db, key, new Date(t).toISOString());
+      try {
+        const found = ctx.mode === 'live' ? await collectSignals(ctx, pack, { t }) : null;
+        const scored = await scoreTopics(ctx, pack);
+        report.topics = { ...(report.topics || {}), [pack.id]: { found, ...scored } };
+      } catch (e) {
+        report.errors.push({ account: pack.id, step: 'topics', error: e.message });
       }
     }
   }

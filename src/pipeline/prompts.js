@@ -376,13 +376,16 @@ function formatHead(format, n = null) {
  * a subject the post must be about (a fight week's main event). `niche`: the
  * rivals the owner watches, as nicheForOutline says them.
  */
-export function outlineUser(format, docs, { avoid = [], faceless = [], maxChars = 7000, day = null, subject = null, maxAgeDays = null, niche = '' } = {}) {
+export function outlineUser(format, docs, { avoid = [], faceless = [], maxChars = 7000, day = null, subject = null, why = null, maxAgeDays = null, niche = '' } = {}) {
   const per = docs.length > 1 ? Math.max(2500, Math.floor(maxChars / docs.length)) : maxChars;
   return [
     `${formatHead(format)}${format.trend ? ` ${format.about}` : ''}`,
     day ? `TODAY: ${day}.` : '',
     day && kindName(format) === 'on-this-day' ? `THE POST GOES OUT ON: ${day}. Pick a moment that happened on this day and month in an earlier year.` : '',
     subject ? `SUBJECT: ${subject}. The post is about this.` : '',
+    // A topic chosen first (src/topics): why people stop for it. The documents still decide what is true; what a
+    // document only reports is said as theirs, and a topic they do not hold up is "usable": false.
+    why ? `WHY IT STOPS A SCROLL: ${why}. Build the post around that, with only what the documents say; what a document only reports or quotes, the post says as theirs. Documents that do not hold this subject up are "usable": false.` : '',
     // A matchup the documents hold one side of was planned anyway (Oliveira against Khabib), and every draft was refused.
     kindName(format) === 'head-to-head' ? `BOTH SIDES: choose two sides only when the documents give a value for each of them on at least ${kindOf(format).segments.find(([r]) => r === 'stat')[1]} of the same stats; each stat cites the facts whose quotes hold both values. Documents that give one side's numbers and not the other's are "usable": false, with that as the reason.` : '',
     // An undated page (an encyclopedia article) passes the date filter; the story inside it may still be years old.
