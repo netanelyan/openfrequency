@@ -5,7 +5,7 @@ import { israelDate, israelInstant, addDays, hhmm } from '../schedule/israel.js'
 import { inRest } from '../schedule/shabbat.js';
 import { inWindows, slotsFor, postsOn } from '../schedule/slots.js';
 import { buildPost, PausedError } from '../pipeline/build.js';
-import { publishPost } from '../publish/index.js';
+import { publishPost, sendWaitingDrafts } from '../publish/index.js';
 import { watchDrafts } from '../publish/draft.js';
 import { REWRITE_AT } from '../voice/review.js';
 import { collectMetrics, learn } from '../metrics/collect.js';
@@ -263,6 +263,15 @@ export async function tick(ctx, { t = now() } = {}) {
       db.update('posts', p.id, { status: 'approved', approved_at: nowIso(), approved_by: `engine:${acc.mode}`, updated_at: nowIso() });
       audit(db, { action: 'auto_approved', accountId: pack.id, postId: p.id, detail: { mode: acc.mode } });
       report.approved.push(p.id);
+    }
+
+    // ---- 3a. draft-now: an approved post's TikTok draft goes to the app as soon as the rails let it (the owner's
+    // approval sends it at once; this catches the engine's approvals, and drafts held by Shabbat, a pause or a picture)
+    try {
+      const sent = await sendWaitingDrafts({ ...ctx, packs: [pack] }, { t });
+      if (sent.length) report.drafted = [...(report.drafted || []), ...sent.map((x) => ({ account: pack.id, ...x }))];
+    } catch (e) {
+      report.errors.push({ account: pack.id, step: 'tiktok draft', error: e.message });
     }
 
     // ---- 4. publish what is approved and due

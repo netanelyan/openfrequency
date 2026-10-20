@@ -1,6 +1,6 @@
 import { accDot, csrfField, dayHe, esc, icon, k, layout, markDots, MODE_HE, postButton, shortDate, stamp, statusChip, timeHe, usd, weekdayNarrow } from './ui.js';
 import { PAUSE_REASONS } from '../autonomy/rails.js';
-import { FALLBACK_MIN, FLOW_HE } from '../publish/draft.js';
+import { FLOW_HE, draftNote, flowState } from '../publish/draft.js';
 import { CATALOG } from '../sources/catalog.js';
 import { KINDS, MIX } from '../formats/kinds.js';
 import { BOXES, MEASURES, PRIORITY } from '../metrics/feedback.js';
@@ -168,7 +168,7 @@ export function needsYou(d, max = 6) {
   }
   for (const g of d.groups) {
     for (const x of g.drafts || []) {
-      if (x.flow.state === 'waiting') rows.push({ href: `/post/${x.id}`, ic: 'clock', title: x.hook, sub: `${g.pack.meta.displayName} · טיוטה בטיקטוק${x.flow.sound ? ` · סאונד: ${x.flow.sound.name}` : ''} · עולה אוטומטית ב-${timeHe(new Date(Date.parse(x.slotAt) + FALLBACK_MIN * 60_000).toISOString())}` });
+      if (x.flow.state === 'waiting') rows.push({ href: `/post/${x.id}`, ic: 'clock', title: x.hook, sub: `${g.pack.meta.displayName} · טיוטה בטיקטוק · ${draftNote(x.flow, x.slotAt, timeHe)}` });
     }
   }
   for (const t of d.attention?.waitingDeletes || []) rows.push({ href: `/post/${t.post_id}`, ic: 'alert', bad: true, title: t.hook || t.post_id, sub: `הודעת הסרה: למחוק ידנית ב${t.waiting.map((w) => PLATFORM_HE[w.platform] || w.platform).join(' וב')}` });
@@ -202,14 +202,14 @@ function tiktokPanel(d) {
   };
   const extra = (x) => {
     const f = x.flow;
-    if (f.state === 'waiting') return `${f.sound ? `סאונד: ${f.sound.name} · ${f.sound.artist}` : 'בלי סאונד מהרשימה'} · עולה אוטומטית ב-${timeHe(new Date(Date.parse(x.slotAt) + FALLBACK_MIN * 60_000).toISOString())}`;
+    if (f.state === 'waiting') return draftNote(f, x.slotAt, timeHe);
     if (f.state === 'mine') return `פורסם ${f.foundAt ? timeHe(f.foundAt) : ''}`;
     if (f.state === 'fallback') return `עם מוזיקה מהספרייה ב-${timeHe(f.fallback.at)} · מחקו את הטיוטה`;
     if (f.state === 'duplicate') return 'הטיוטה פורסמה אחרי הפרסום האוטומטי: מחקו אחד';
     return f.error || '';
   };
   return `<section class="panel home-panel" id="tiktok"><header><h2>טיוטות בטיקטוק</h2></header>
-<div class="list todo">${rows.map((x) => `<a href="/post/${esc(x.id)}">${accDot(x.g.pack.id)}<span class="tx"><b>${esc(x.hook)}</b><span class="muted small">${esc(extra(x))}</span></span>${chip(x.flow.state)}</a>`).join('')}</div></section>`;
+<div class="list todo">${rows.map((x) => `<a href="/post/${esc(x.id)}">${accDot(x.g.pack.id)}<span class="tx"><b>${esc(x.hook)}</b><span class="muted small">${esc(extra(x))}</span></span>${chip(flowState(x.flow))}</a>`).join('')}</div></section>`;
 }
 
 export function todayPage(ctx, d) {
@@ -262,6 +262,21 @@ ${g.blocked.length ? `<details class="facts"><summary>${icon('shield')}נחסמ�
 }
 
 /* ------------------------------------------------------------ one post */
+
+/** On a post's page: where its TikTok draft stands, and drafts of it left in the app for the owner to delete. */
+function tiktokDraftBanners(ctx, post) {
+  const out = [];
+  const tk = post.publish?.tiktok;
+  if (tk?.flow) {
+    const [he] = FLOW_HE[flowState(tk.flow)] || [tk.flow.state];
+    const note = tk.flow.state === 'waiting' ? draftNote(tk.flow, post.slot_at || tk.flow.slotAt, timeHe) : tk.flow.error || '';
+    out.push(`<div class="banner info">${icon('clock')}<div><b>טיקטוק: ${esc(he)}</b>${note ? `<p>${esc(note)}</p>` : ''}</div></div>`);
+  } else if (tk?.uploading) out.push(`<div class="banner info">${icon('clock')}<div><b>טיקטוק: הטיוטה בדרך לאפליקציה</b></div></div>`);
+  else if (tk?.error && post.status === 'approved') out.push(`<div class="banner warn">${icon('alert')}<div><b>הטיוטה לא הגיעה לטיקטוק</b><p>${esc(tk.error)}</p><p>${(Number(tk.tries) || 0) < 3 ? 'עוד ניסיון בדקות הקרובות, ולכל המאוחר בשעה של הפוסט.' : 'עוד ניסיון אחד בשעה של הפוסט.'}</p></div></div>`);
+  const old = post.publish?.oldDrafts || [];
+  if (old.length) out.push(`<div class="banner warn">${icon('alert')}<div><b>${old.length === 1 ? 'טיוטה ישנה של הפוסט הזה נמצאת' : `${old.length} טיוטות ישנות של הפוסט הזה נמצאות`} בתיבת הטיוטות של טיקטוק</b><p>מחקו ${old.length === 1 ? 'אותה' : 'אותן'} באפליקציה, כדי ש${old.length === 1 ? 'היא לא תפורסם' : 'הן לא יפורסמו'} בטעות.</p></div>${postButton(ctx, `/post/${post.id}/old-drafts-deleted`, 'מחקתי', { cls: 'btn sm' })}</div>`);
+  return out.join('');
+}
 
 export function postPage(ctx, d, { problems = [], values = null } = {}) {
   const { post, pack } = d;
@@ -320,6 +335,7 @@ ${post.status !== 'taken_down' ? `<details><summary class="muted">${icon('alert'
 
   const body = `<div class="head"><div><a class="muted small back" href="/posts">${icon('chev')}חזרה לפוסטים</a><h1 class="title">${esc(post.hook || post.topic || 'פוסט')}</h1></div><span class="sub">${statusChip(post.status)}</span></div>
 ${post.reason ? `<div class="banner ${post.status === 'blocked' || post.status === 'failed' ? 'bad' : 'info'}">${icon('alert')}<div><b>${esc(post.reason)}</b></div></div>` : ''}
+${tiktokDraftBanners(ctx, post)}
 <div class="cols">
 <div>
 <section class="card acc acc-${esc(post.account_id)} post"><div class="meta"><span class="chip">${accDot(post.account_id)} ${esc(pack?.meta.displayName || post.account_id)}</span><span class="chip">${esc(formatName(pack, post.format_id))}</span>${post.slot_at ? `<span class="chip">${icon('clock')}${esc(stamp(post.slot_at))}</span>` : ''}</div>
@@ -560,9 +576,11 @@ export function settingsPage(ctx, d) {
 ${s.globalKill ? postButton(ctx, '/settings/kill', 'הפעל את המערכת מחדש', { cls: 'btn primary', fields: { on: '0' } }) : postButton(ctx, '/settings/kill', `${icon('power')}עצור הכל`, { cls: 'btn danger', fields: { on: '1' }, confirm: 'בטוח? לחצו שוב לעצירה' })}
 </section>
 ${budgetPanel(ctx, d)}
-<section class="panel"><header><h2>התראות בדפדפן</h2><span class="end">${d.push?.browsers ? `<span class="chip ok">${d.push.browsers === 1 ? 'דפדפן אחד' : `${d.push.browsers} דפדפנים`}</span>` : '<span class="chip ghost">כבוי</span>'}</span></header>
-<p class="muted">טיוטה בטיקטוק שמחכה לכם, תזכורת, פרסום אוטומטי ופוסט כפול. ההתראה עצמה ריקה: הדפדפן שואל את תדר מה להציג, כך שאף מילה מהפוסט לא עוברת דרך שירות ההתראות. בטלפון: הוסיפו את תדר למסך הבית קודם.</p>
-<form method="post" action="/push/subscribe" data-ajax="reload" data-push="${esc(d.push?.key || '')}">${csrfField(ctx)}<input type="hidden" name="endpoint" value=""><button class="btn" type="button" data-push-enable>${icon('spark')}הפעל התראות בדפדפן הזה</button></form>
+<section class="panel" id="push"><header><h2>התראות</h2><span class="end">${d.push?.browsers ? `<span class="chip ok">${d.push.browsers === 1 ? 'מכשיר אחד' : `${d.push.browsers} מכשירים`}</span>` : '<span class="chip ghost">כבוי</span>'}</span></header>
+<p class="muted">פוסט שאישרתם נשלח מיד לטיוטות של טיקטוק, ובשעה שלו מגיעה התראה לפרסם אותו. ההתראה עצמה ריקה: המכשיר שואל את תדר מה להציג, כך שאף מילה מהפוסט לא עוברת דרך שירות ההתראות.</p>
+<p class="muted small">באייפון (iOS 16.4 ומעלה): פתחו את תדר בספארי, שתפו ואז "הוסף למסך הבית", ופתחו את תדר מהאייקון. רק משם אפשר להפעיל התראות.</p>
+<form method="post" action="/push/subscribe" data-ajax="reload" data-push="${esc(d.push?.key || '')}">${csrfField(ctx)}<input type="hidden" name="endpoint" value=""><button class="btn" type="button" data-push-enable>${icon('spark')}הפעל התראות במכשיר הזה</button></form>
+<form method="post" action="/push/unsubscribe" data-ajax="reload" data-push-off hidden>${csrfField(ctx)}<input type="hidden" name="endpoint" value=""><button class="btn ghost" type="button" data-push-disable>כבה התראות במכשיר הזה</button></form>
 </section>
 <section class="panel"><header><h2>שעת ייצור יומית</h2></header><form method="post" action="/settings/generate-at" class="formgrid">${csrfField(ctx)}<label class="f">שעה (שעון ישראל)<input type="text" name="at" value="${esc(s.generateAt)}" pattern="[0-2][0-9]:[0-5][0-9]" dir="ltr"></label><button class="btn" type="submit">שמור</button></form></section>
 </div>
@@ -702,8 +720,8 @@ export function soundsPage(ctx, { packs, current, sounds, mode, recent, limits, 
   const fewer = sounds.length < limits.min ? `<p class="small"><span class="chip warn">${sounds.length ? `עוד ${limits.min - sounds.length}` : `${limits.min} לפחות`}</span> כל טיוטה מקבלת סאונד שלא היה ב-${limits.recent} הטיוטות האחרונות, אז כדאי שיהיו כמה.</p>` : '';
   const body = `<div class="head"><h1>סאונדים</h1><span class="sub">לטיוטות בטיקטוק</span></div>
 ${tabs}
-<p class="lede">הסאונדים הוויראליים של טיקטוק לא נגישים לשום API, אז ${mode === 'draft-fallback' ? 'בחשבון הזה כל פוסט בטיקטוק יוצא כטיוטה' : 'כשהחשבון במצב טיוטה (<code class="ltr">zernio.tiktokMode: "draft-fallback"</code>) כל פוסט בטיקטוק יוצא כטיוטה'}, ואתם מוסיפים את הסאונד באפליקציה ומפרסמים. כל טיוטה מקבלת סאונד מהרשימה הזו, בלי לחזור על אחד מ-${limits.recent} האחרונות. סאונד שנוסף לפני ${limits.staleDays} ימים מסומן כישן: טרנד זז מהר. אם לא פרסמתם תוך שעה, הפוסט עולה לבד עם מוזיקה מהספרייה המסחרית.</p>
-${mode === 'draft-fallback' ? '' : '<p class="small"><span class="chip ghost">החשבון במצב ישיר</span> הרשימה נשמרת, ותשמש כשהחשבון יעבור למצב טיוטה.</p>'}
+<p class="lede">הסאונדים הוויראליים של טיקטוק לא נגישים לשום API, אז ${mode === 'direct' ? 'כשהחשבון במצב טיוטה כל פוסט בטיקטוק יוצא כטיוטה' : 'בחשבון הזה כל פוסט בטיקטוק יוצא כטיוטה'}, ואתם מוסיפים את הסאונד באפליקציה ומפרסמים. כל טיוטה מקבלת סאונד מהרשימה הזו, בלי לחזור על אחד מ-${limits.recent} האחרונות. סאונד שנוסף לפני ${limits.staleDays} ימים מסומן כישן: טרנד זז מהר. ${mode === 'draft-fallback' ? 'אם לא פרסמתם תוך שעה, הפוסט עולה לבד עם מוזיקה מהספרייה המסחרית.' : 'הטיוטה נשלחת ברגע שאתם מאשרים, ובשעה של הפוסט מגיעה תזכורת עם הסאונד.'}</p>
+${mode === 'direct' ? '<p class="small"><span class="chip ghost">החשבון במצב ישיר</span> הרשימה נשמרת, ותשמש כשהחשבון יעבור למצב טיוטה.</p>' : ''}
 ${fewer}
 <div class="cols"><div>${list}</div>
 ${sounds.length < limits.max ? `<section class="panel"><header><h2>סאונד חדש</h2><span class="end muted small">${sounds.length} מתוך ${limits.max}</span></header>

@@ -778,3 +778,6 @@ details.rivaledit > summary { cursor: pointer; min-height: 44px; display: flex; 
   .todo a { min-height: 52px; }
   details.facts > summary { min-height: 42px; }
 }
+
+/* Settings: the push forms swap with this device's state (app.js). */
+[hidden] { display: none !important; }

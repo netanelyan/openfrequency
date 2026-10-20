@@ -69,7 +69,7 @@ test('a TikTok draft request carries draft and no library track; the pack names 
     const packs = loadAll({ dir: path.join(home, 'packs') });
     const pack = packs[0];
     pack.meta.zernio.tiktokMode = 'sometimes';
-    assert.match(validatePack(pack).join(' '), /tiktokMode must be one of direct, draft-fallback/);
+    assert.match(validatePack(pack).join(' '), /tiktokMode must be one of draft-now, direct, draft-fallback/);
   } finally {
     cleanup();
   }

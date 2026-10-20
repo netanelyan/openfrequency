@@ -3,7 +3,7 @@ import { MAX_HASHTAGS, hashtagsIn } from '../rules/caption.js';
 import { chmodSync, copyFileSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
-import { now, nowIso } from '../core/clock.js';
+import { HOUR, now, nowIso } from '../core/clock.js';
 import { dataDir, ensureDir, outDir } from '../core/paths.js';
 import { audit, settings, step } from '../core/store.js';
 import { j } from '../db/index.js';
@@ -86,11 +86,27 @@ export function recheck(db, post, pack) {
 }
 
 /**
- * How the pack's TikTok posts go out: 'direct', or 'draft-fallback' (zernio.tiktokMode): a draft the owner publishes
- * in the app with a sound from the account's list, published directly an hour after the slot if they do not
- * (src/publish/draft.js). Instagram is not touched by it.
+ * How the pack's TikTok posts go out (zernio.tiktokMode). Instagram is not touched by any of them.
+ *
+ *   draft-now       the default: the moment a post is approved, TikTok's part goes to the app's inbox as a draft
+ *                   with a sound from the account's list named for it (sendDraft below), and at the slot the owner
+ *                   gets one reminder to publish it. Nothing is ever published to TikTok by the engine.
+ *   draft-fallback  the draft goes at the slot, a reminder at half an hour, and at an hour a draft still not out is
+ *                   published directly (src/publish/draft.js).
+ *   direct          published at the slot.
  */
-export const tiktokMode = (pack) => pack.meta.zernio?.tiktokMode || 'direct';
+export const tiktokMode = (pack) => pack.meta.zernio?.tiktokMode || 'draft-now';
+
+/** A reminder that comes this late is no use: a server down at the hour sends it later, but not after this. */
+export const REMIND_LATE_HOURS = 12;
+
+/** The reminder at the slot, draft-now's only notification: the account, the cover line, the sound. */
+export function reminderNotice(pack, post, sound) {
+  return {
+    title: `${pack.meta.displayName}: הגיעה השעה לפרסם בטיקטוק`,
+    body: [oneLine(post.hook), 'הטיוטה מחכה בתיבת הטיוטות של טיקטוק.', sound ? `סאונד: ${sound.name} · ${sound.artist}${sound.stale ? ' (ישן, החליפו ברשימה)' : ''}` : ''].filter(Boolean).join('\n'),
+  };
+}
 
 /** A platform's caption as it goes out: TikTok the long one, Instagram the short one, then the credits and the tags. */
 export const captionOf = (db, post, platform) => [platform === 'instagram' && post.caption_ig ? post.caption_ig : post.caption, imageCredit(db, post), (post.hashtags || []).join(' ')].filter(Boolean).join('\n\n');
@@ -138,13 +154,11 @@ export async function soundFor(db, pack, accountId) {
   return trendingSound(accountId, { countryCode: pack.meta.zernio?.soundCountry || 'IL', recent });
 }
 
-export async function publishPost(ctx, postId, { t = now() } = {}) {
-  const { db } = ctx;
-  const post = loadPost(db, postId);
-  if (!post) throw new PublishRefused(`no post ${postId}`, 'missing');
-  const pack = ctx.pack(post.account_id);
-  if (!pack) throw new PublishRefused(`no pack for ${post.account_id}`, 'no_pack');
-
+/**
+ * The rails every send meets, a post at its slot and a draft at its approval alike. Throws PublishRefused; a fact
+ * that no longer holds also blocks the post and pauses the account.
+ */
+function mustBeSendable(db, pack, post, t, platforms, { stepName = 'publish', before = 'לפני פרסום' } = {}) {
   const rest = restAt(t);
   if (rest) throw new PublishRefused(`${rest}: לא מפרסמים עכשיו`, 'shabbat');
   const run = canRun(db, pack.id);
@@ -155,25 +169,41 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
 
   const problems = recheck(db, post, pack);
   if (problems.length) {
-    db.update('posts', postId, { status: 'blocked', reason: `בדיקת העובדות נכשלה לפני פרסום: ${problems[0]}`, updated_at: nowIso() });
-    step(db, postId, 'publish', 'failed', { kind: 'fact_check', problems });
+    db.update('posts', post.id, { status: 'blocked', reason: `בדיקת העובדות נכשלה ${before}: ${problems[0]}`, updated_at: nowIso() });
+    step(db, post.id, stepName, 'failed', { kind: 'fact_check', problems });
     pauseAccount(db, pack.id, 'fact_check', problems[0]);
-    throw new PublishRefused(`fact check failed before publishing: ${problems[0]}`, 'fact_check');
+    throw new PublishRefused(`fact check failed ${stepName === 'publish' ? 'before publishing' : 'before the TikTok draft'}: ${problems[0]}`, 'fact_check');
   }
 
-  // TikTok gets the long caption; Instagram the short one, which repeats the cover line.
-  const captionFor = (platform) => captionOf(db, post, platform);
   // Five hashtags at most, counted on the caption as it would go out: the post's own and any a caption picked up.
-  for (const platform of pack.meta.platforms) {
-    const n = hashtagsIn(captionFor(platform)).length;
+  for (const platform of platforms) {
+    const n = hashtagsIn(captionOf(db, post, platform)).length;
     if (n > MAX_HASHTAGS) throw new PublishRefused(`${n} hashtags in the ${platform} caption: ${MAX_HASHTAGS} at most`, 'hashtags');
   }
+}
+
+/** A platform's part that is out, or a draft in the app: never sent again. */
+const done = (r) => r && !r.error && (r.status === 'published' || r.status === 'written' || r.pending || r.zernioId || r.mediaId || r.flow);
+
+export async function publishPost(ctx, postId, { t = now() } = {}) {
+  const { db } = ctx;
+  const post = loadPost(db, postId);
+  if (!post) throw new PublishRefused(`no post ${postId}`, 'missing');
+  const pack = ctx.pack(post.account_id);
+  if (!pack) throw new PublishRefused(`no pack for ${post.account_id}`, 'no_pack');
+
+  mustBeSendable(db, pack, post, t, pack.meta.platforms);
+  // A draft-now draft still on its way (approved a minute before the slot): the next tick publishes, with it in hand.
+  // One cut off mid-send is sent again below, as a draft.
+  const up = post.publish?.tiktok?.uploading;
+  if (up && t - Date.parse(up) < UPLOAD_STUCK_MS) throw new PublishRefused('the TikTok draft is on its way', 'draft_in_flight');
+  // TikTok gets the long caption; Instagram the short one, which repeats the cover line.
+  const captionFor = (platform) => captionOf(db, post, platform);
 
   db.update('posts', postId, { status: 'publishing', updated_at: nowIso() });
   const results = { ...(post.publish || {}) };
   const attempts = (Number(results._attempts) || 0) + 1;
   delete results._attempts;
-  const done = (r) => r && !r.error && (r.status === 'published' || r.status === 'written' || r.pending || r.zernioId || r.mediaId || r.flow);
   let drafted = null;
   let failed = null;
   const vias = {};
@@ -181,14 +211,17 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
     if (done(results[platform])) continue; // out already: never twice
     const via = publisherFor(pack, platform, { db });
     vias[platform] = via;
-    // Draft-fallback: TikTok's post goes to the app's inbox with a sound from the account's list named for it, and
-    // src/publish/draft.js watches for it. The draft's Zernio id is not the post's (nothing is out yet).
-    const asDraft = platform === 'tiktok' && tiktokMode(pack) === 'draft-fallback';
-    const flow = asDraft ? { state: 'waiting', sentAt: new Date(t).toISOString(), slotAt: post.slot_at || new Date(t).toISOString(), sound: assignSound(db, pack.id, { t }), remindedAt: null } : null;
+    // A TikTok draft (draft-now, or draft-fallback): the post goes to the app's inbox with a sound from the account's
+    // list named for it. The draft's Zernio id is not the post's (nothing is out yet).
+    const mode = tiktokMode(pack);
+    const asDraft = platform === 'tiktok' && mode !== 'direct';
+    const flow = asDraft ? newFlow(db, pack, post, t) : null;
     try {
-      if (via === 'zernio') {
+      if (asDraft) {
+        results[platform] = { ...(await draftRequest(db, pack, post, via, t)), flow };
+      } else if (via === 'zernio') {
         const accountId = pack.meta.zernio?.accounts?.[platform];
-        const r = await publishZernio({
+        results[platform] = await publishZernio({
           platform,
           accountId,
           caption: captionFor(platform),
@@ -196,13 +229,8 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
           privacy: pack.meta.zernio?.tiktokPrivacy || 'SELF_ONLY',
           aiLabel: Boolean(post.ai_label),
           title: oneLine(post.hook),
-          sound: platform === 'tiktok' && !asDraft ? await soundFor(db, pack, accountId) : null,
-          asDraft,
+          sound: platform === 'tiktok' ? await soundFor(db, pack, accountId) : null,
         });
-        if (asDraft) {
-          const { zernioId, ...rest } = r;
-          results[platform] = { ...rest, draftId: zernioId, flow };
-        } else results[platform] = r;
       } else if (via === 'instagram') {
         results[platform] = await publishInstagram(db, pack, { caption: captionFor(platform), imageUrls: publicUrls(post, platform), aiLabel: Boolean(post.ai_label), priorCreationId: results[platform]?.creationId || null });
       } else {
@@ -213,16 +241,16 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
         const body =
           want === 'instagram'
             ? { graph: 'POST /{ig-user-id}/media for each slide (is_carousel_item), then media_type=CAROUSEL with children and caption, then POST /{ig-user-id}/media_publish', userId: pack.meta.instagram?.userId || '<instagram user id>', slides: urls, caption: `${captionFor(platform)}${post.ai_label ? '\n\n<AI line>' : ''}`.slice(0, 2200) }
-            : postBody({ platform, accountId: pack.meta.zernio?.accounts?.[platform] || '<account id>', caption: captionFor(platform), imageUrls: urls, privacy: pack.meta.zernio?.tiktokPrivacy || 'SELF_ONLY', aiLabel: Boolean(post.ai_label), title: oneLine(post.hook), asDraft });
+            : postBody({ platform, accountId: pack.meta.zernio?.accounts?.[platform] || '<account id>', caption: captionFor(platform), imageUrls: urls, privacy: pack.meta.zernio?.tiktokPrivacy || 'SELF_ONLY', aiLabel: Boolean(post.ai_label), title: oneLine(post.hook) });
         writeFileSync(path.join(dir, `${want === 'instagram' ? 'instagram' : 'zernio'}-request.${platform}.json`), `${JSON.stringify(body, null, 2)}\n`);
-        results[platform] = { via: 'dry', path: dir, status: 'written', wanted: want, ...(asDraft ? { draft: true, flow } : {}) };
+        results[platform] = { via: 'dry', path: dir, status: 'written', wanted: want };
       }
     } catch (e) {
       results[platform] = { ...(results[platform] || {}), via, error: String(e.message).slice(0, 300), code: e.code || null, creationId: e.creationId || results[platform]?.creationId || null };
       failed = e;
       break; // a platform that might have half-posted is never retried blind; stop here and report
     }
-    if (asDraft) drafted = flow;
+    if (asDraft && mode === 'draft-fallback') drafted = flow;
   }
 
   // An Instagram throttle, or a container still processing, clears by itself: try
@@ -232,6 +260,15 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
   // create can be a post that exists.
   const retry = Boolean(failed) && attempts < MAX_ATTEMPTS && (isThrottle(failed) || failed.retryable === true);
   const ok = !failed;
+  // Draft-now: the slot's only TikTok act is one reminder, sent with the rest of the post; late if the server was down
+  // at the hour, and not at all past REMIND_LATE_HOURS.
+  const tk = results.tiktok;
+  let remind = null;
+  if (tk?.flow?.mode === 'now' && !tk.error && !tk.flow.remindedAt && !tk.flow.missedAt) {
+    tk.flow.slotAt = post.slot_at || new Date(t).toISOString();
+    if (t - Date.parse(tk.flow.slotAt) <= REMIND_LATE_HOURS * HOUR) remind = tk.flow;
+    tk.flow[remind ? 'remindedAt' : 'missedAt'] = new Date(t).toISOString();
+  }
   const status = ok ? 'published' : retry ? 'approved' : 'failed';
   db.update('posts', postId, {
     status,
@@ -256,6 +293,126 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
       ctx.log?.(`notify ${postId}: ${e.message}`);
     }
   }
+  if (remind) {
+    try {
+      await notify(ctx, { accountId: pack.id, postId, kind: 'reminder', ...reminderNotice(pack, post, remind.sound), url: `/post/${postId}` });
+    } catch (e) {
+      ctx.log?.(`notify ${postId}: ${e.message}`);
+    }
+  }
   const via = [...new Set(Object.values(vias))].join('+') || 'none';
-  return { postId, ok, via, results, retry };
+  return { postId, ok, via, results, retry, reminded: Boolean(remind) };
+}
+
+/** A new draft's state: waiting for the owner, with a sound from the account's list named for it. */
+function newFlow(db, pack, post, t) {
+  const at = new Date(t).toISOString();
+  return { ...(tiktokMode(pack) === 'draft-now' ? { mode: 'now' } : {}), state: 'waiting', sentAt: at, slotAt: post.slot_at || at, sound: assignSound(db, pack.id, { t }), remindedAt: null };
+}
+
+/** One TikTok draft through `via`: to Zernio, or to disk with the exact request Zernio would have received. */
+async function draftRequest(db, pack, post, via, t) {
+  const accountId = pack.meta.zernio?.accounts?.tiktok;
+  const args = { platform: 'tiktok', caption: captionOf(db, post, 'tiktok'), privacy: pack.meta.zernio?.tiktokPrivacy || 'SELF_ONLY', aiLabel: Boolean(post.ai_label), title: oneLine(post.hook), asDraft: true };
+  if (via === 'zernio') {
+    const { zernioId, ...rest } = await publishZernio({ ...args, accountId, imageUrls: publicUrls(post, 'tiktok') });
+    return { ...rest, draftId: zernioId };
+  }
+  const dir = path.join(outDir(), 'published', pack.id, israelDate(t), post.id);
+  exportPost(db, post.id, dir);
+  const urls = (post.media.tiktok || []).map((f) => `<public url>/${path.basename(f)}`);
+  writeFileSync(path.join(dir, 'zernio-request.tiktok.json'), `${JSON.stringify(postBody({ ...args, accountId: accountId || '<account id>', imageUrls: urls }), null, 2)}\n`);
+  return { via: 'dry', path: dir, status: 'written', wanted: wantedPublisher(pack, 'tiktok'), draft: true };
+}
+
+/** A draft that did not take is tried again at the next ticks, this many times in all. */
+const DRAFT_TRIES = 3;
+/** A send that has been on its way this long was cut off (the server stopped mid-send). */
+const UPLOAD_STUCK_MS = 15 * 60_000;
+
+/**
+ * Draft-now: an approved post's TikTok part goes to the app's inbox as a draft now, not at the slot. The post stays
+ * approved, and at the slot publishPost sends Instagram as always and the owner one reminder.
+ *
+ * The draft meets every rail a post at its slot meets. HARD RULE 9: a draft is a write to TikTok, so none goes on
+ * Shabbat or a yom tov. A draft the rails hold is sent at the runner's first tick that lets it through
+ * (sendWaitingDrafts), and at the slot by publishPost at the latest.
+ *
+ * Returns { state: 'drafted' | 'held' | 'blocked' | 'failed' | 'skip', why, code }.
+ */
+export async function sendDraft(ctx, postId, { t = now() } = {}) {
+  const { db } = ctx;
+  const post = loadPost(db, postId);
+  const pack = post && ctx.pack(post.account_id);
+  if (!pack || tiktokMode(pack) !== 'draft-now' || !pack.meta.platforms.includes('tiktok')) return { state: 'skip', why: 'not draft-now' };
+  const had = post.publish?.tiktok;
+  const tries = Number(had?.tries) || 0;
+  if (had?.uploading && t - Date.parse(had.uploading) < UPLOAD_STUCK_MS) return { state: 'skip', why: 'on its way' };
+  if (had && !had.error && !had.uploading) return { state: 'skip', why: 'sent already' };
+  if (tries >= DRAFT_TRIES) return { state: 'skip', why: 'gave up' };
+  try {
+    mustBeSendable(db, pack, post, t, ['tiktok'], { stepName: 'tiktok', before: 'לפני השליחה לטיקטוק' });
+  } catch (e) {
+    if (!(e instanceof PublishRefused)) throw e;
+    return { state: e.code === 'fact_check' ? 'blocked' : 'held', why: e.message, code: e.code };
+  }
+
+  // Written before anything is sent, and before the first await: a tick or a click that comes while the draft is on
+  // its way sends no other. One cut off mid-send is sent again after UPLOAD_STUCK_MS, so the inbox may then hold two
+  // of it: a draft is only ever the owner's to publish or delete, never a post that is out.
+  const via = publisherFor(pack, 'tiktok', { db });
+  // Only TikTok's part is written, onto the post as it is then: the rest of it may have moved during the upload.
+  const saveTiktok = (tk) => db.update('posts', postId, { publish_json: { ...(loadPost(db, postId)?.publish || {}), tiktok: tk }, updated_at: nowIso() });
+  saveTiktok({ via, uploading: new Date(t).toISOString(), tries: tries + 1 });
+  const flow = newFlow(db, pack, post, t);
+  let tk;
+  try {
+    tk = { ...(await draftRequest(db, pack, post, via, t)), flow };
+  } catch (e) {
+    tk = { via, error: String(e.message).slice(0, 300), code: e.code || null, tries: tries + 1 };
+    saveTiktok(tk);
+    step(db, postId, 'tiktok', 'failed', { flow: 'draft', via, error: tk.error, attempt: tries + 1 });
+    if (tries + 1 >= DRAFT_TRIES) {
+      await notify(ctx, { accountId: pack.id, postId, kind: 'draft_failed', title: `${pack.meta.displayName}: הטיוטה לא הגיעה לטיקטוק`, body: `${oneLine(post.hook)}\n${tk.error}`, url: `/post/${postId}` }).catch((x) => ctx.log?.(`notify ${postId}: ${x.message}`));
+    }
+    return { state: 'failed', why: tk.error };
+  }
+  saveTiktok(tk);
+  step(db, postId, 'tiktok', 'ok', { flow: 'draft', via });
+  audit(db, { action: 'tiktok_draft', accountId: pack.id, postId, detail: { via } });
+  return { state: 'drafted', via };
+}
+
+/** The runner's pass: approved draft-now posts whose TikTok draft is not in the app yet, a few per account. */
+export async function sendWaitingDrafts(ctx, { t = now(), perAccount = 3 } = {}) {
+  const out = [];
+  for (const pack of ctx.packs) {
+    if (tiktokMode(pack) !== 'draft-now' || !pack.meta.platforms.includes('tiktok')) continue;
+    const rows = ctx.db.all("SELECT id, publish_json FROM posts WHERE account_id = ? AND status = 'approved' ORDER BY slot_at", pack.id);
+    const want = rows.filter((r) => {
+      const tk = j(r.publish_json, {}).tiktok;
+      return !tk || (tk.error && (Number(tk.tries) || 0) < DRAFT_TRIES) || (tk.uploading && t - Date.parse(tk.uploading) >= UPLOAD_STUCK_MS);
+    });
+    for (const r of want.slice(0, perAccount)) {
+      const res = await sendDraft(ctx, r.id, { t });
+      if (res.state !== 'skip') out.push({ post: r.id, ...res });
+      if (res.code === 'shabbat' || res.code === 'paused') break; // the same answer for the account's other posts
+    }
+  }
+  return out;
+}
+
+/**
+ * A post whose draft is in TikTok's inbox, taken back (approval cancelled, rejected, edited): the draft stays in the
+ * app, and only the owner can delete it there. It is kept on the post as `oldDrafts` until they say they did, and an
+ * edited post that stays approved gets a fresh draft. Returns whether there was one.
+ */
+export function retireDraft(db, post) {
+  const tk = post.publish?.tiktok;
+  if (!tk?.flow || tk.flow.mode !== 'now') return false;
+  const results = { ...post.publish };
+  results.oldDrafts = [...(results.oldDrafts || []), { sentAt: tk.flow.sentAt, draftId: tk.draftId || null, via: tk.via }];
+  delete results.tiktok;
+  db.update('posts', post.id, { publish_json: results, updated_at: nowIso() });
+  return true;
 }
