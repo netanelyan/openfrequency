@@ -190,4 +190,11 @@
     const first = target?.querySelector('details.fact');
     if (first) first.open = true;
   });
+  // The account switcher closes when a tap or a key goes elsewhere, as a menu does.
+  const closeSwitch = (e) => {
+    const sw = document.querySelector('details.acctswitch[open]');
+    if (sw && (e.type === 'keydown' ? e.key === 'Escape' : !sw.contains(e.target))) sw.open = false;
+  };
+  document.addEventListener('click', closeSwitch);
+  document.addEventListener('keydown', closeSwitch);
 })();

@@ -26,20 +26,41 @@ import path from 'node:path';
 // What each page shows, as plain queries. Pages never touch the database
 // themselves, so what a page can see is listed here.
 
+/**
+ * The site seen from one account: every page lists ctx.packs, so a context whose packs are that account alone shows
+ * that account alone. The budget is the month's for every account, so its plan is made from the whole context.
+ */
+export function scoped(ctx, pack) {
+  const s = Object.create(ctx.root || ctx);
+  s.root = ctx.root || ctx;
+  s.packs = pack ? [pack] : [];
+  return s;
+}
+
+/** The ids of the accounts a context shows, and the SQL that keeps a query to them. */
+const inAccounts = (ctx, col = 'account_id') => [`${col} IN (${ctx.packs.map(() => '?').join(', ') || 'NULL'})`, ctx.packs.map((p) => p.id)];
+
 /** The month's budget plan, computed at most every few seconds (a page asks for it more than once). */
 const planOf = (ctx) => {
-  if (!ctx._plan || Date.now() - ctx._plan.at > 5000) ctx._plan = { at: Date.now(), plan: planMonth(ctx.db, ctx.packs) };
-  return ctx._plan.plan;
+  const r = ctx.root || ctx;
+  if (!r._plan || Date.now() - r._plan.at > 5000) r._plan = { at: Date.now(), plan: planMonth(r.db, r.packs) };
+  return r._plan.plan;
 };
 
 export function header(ctx) {
   const s = settings(ctx.db);
   const plan = planOf(ctx);
-  const waiting = ctx.db.get("SELECT COUNT(*) AS n FROM posts WHERE status = 'queued' AND sample = 0").n;
+  // What waits, per account: the switcher says it beside each name, the Posts tab for the account shown.
+  const per = Object.fromEntries(ctx.db.all("SELECT account_id, COUNT(*) AS n FROM posts WHERE status = 'queued' AND sample = 0 GROUP BY account_id").map((r) => [r.account_id, r.n]));
+  const waiting = ctx.packs.reduce((a, p) => a + (per[p.id] || 0), 0);
+  const all = (ctx.root || ctx).packs;
+  const accounts = all.map((p) => ({ id: p.id, name: p.meta.displayName, handle: p.meta.handle, waiting: per[p.id] || 0 }));
   return {
     spend: { usd: plan.spent, cap: plan.cap },
     budget: { level: plan.level, share: plan.cap ? plan.spent / plan.cap : 0, warnAt: plan.warnAt ?? WARN_AT, forecast: plan.forecast, cap: plan.cap, nextMonth: plan.nextMonth, cuts: plan.accounts.filter((a) => a.cut).map((a) => ({ id: a.id, name: a.name, perDay: a.perDay, planned: a.planned })) },
     waiting,
+    accounts,
+    current: ctx.packs.length === 1 ? ctx.packs[0].id : null,
     globalKill: s.globalKill,
   };
 }
@@ -114,8 +135,9 @@ export function week(ctx, accountId, t = now()) {
 /** Results: per post (newest reading per platform) and per format, with what is being dropped. */
 export function results(ctx, t = now()) {
   const since = new Date(t - 30 * DAY).toISOString();
+  const [mine, ids] = inAccounts(ctx, 'p.account_id');
   const posts = ctx.db
-    .all("SELECT p.id, p.account_id, p.hook, p.format_id, p.published_at FROM posts p WHERE p.status = 'published' AND p.published_at >= ? ORDER BY p.published_at DESC", since)
+    .all(`SELECT p.id, p.account_id, p.hook, p.format_id, p.published_at FROM posts p WHERE p.status = 'published' AND p.published_at >= ? AND ${mine} ORDER BY p.published_at DESC`, since, ...ids)
     .map((p) => {
       const m = ctx.db.all('SELECT * FROM metrics WHERE post_id = ? AND id IN (SELECT MAX(id) FROM metrics WHERE post_id = ? GROUP BY platform)', p.id, p.id);
       const per = Object.fromEntries(m.map((r) => [r.platform, { ...r, score: postScore(r.platform, r), demo: j(r.raw_json, {})?.source === 'demo-seed' }]));
@@ -150,7 +172,7 @@ export function results(ctx, t = now()) {
       }),
     };
   });
-  const trends = ctx.db.all('SELECT * FROM trend_formats ORDER BY found_at DESC LIMIT 30').map((x) => ({ ...x, card: j(x.card_json, null) }));
+  const trends = ctx.db.all(`SELECT * FROM trend_formats WHERE ${mine.replace('p.account_id', 'account_id')} ORDER BY found_at DESC LIMIT 30`, ...ids).map((x) => ({ ...x, card: j(x.card_json, null) }));
   // The mix of entertaining and number posts, and the cover patterns, per account, in words.
   const learning = ctx.packs.map((pack) => {
     const share = mixOf(ctx.db, pack);
@@ -176,7 +198,8 @@ export function results(ctx, t = now()) {
  */
 export function blockRates(ctx, t = now()) {
   const since = new Date(t - 30 * DAY).toISOString();
-  const posts = ctx.db.all("SELECT id, account_id, status FROM posts WHERE created_at >= ? AND sample = 0 AND status NOT IN ('drafting')", since);
+  const [mine, ids] = inAccounts(ctx);
+  const posts = ctx.db.all(`SELECT id, account_id, status FROM posts WHERE created_at >= ? AND sample = 0 AND status NOT IN ('drafting') AND ${mine}`, since, ...ids);
   const rows = new Map();
   const row = (check) => rows.get(check) || rows.set(check, { check, blocked: 0, firstFail: 0 }).get(check);
   let blocked = 0;
@@ -265,9 +288,11 @@ export const postFull = (ctx, id) => {
  * takedown notice, and photographs the image screen could not clear.
  */
 export function attention(ctx) {
-  const waitingDeletes = takedowns(ctx.db, { limit: 200 }).filter((x) => x.waiting.length);
+  const shown = new Set(ctx.packs.map((p) => p.id));
+  const waitingDeletes = takedowns(ctx.db, { limit: 200 }).filter((x) => x.waiting.length && shown.has(x.account_id || x.acc));
   const images = ctx.db
     .all("SELECT DISTINCT p.id, p.hook, p.account_id, i.id AS image_id, i.safety_json FROM posts p JOIN images i ON i.id = json_extract(p.checks_json, '$.image') OR i.id IN (SELECT image_id FROM slides WHERE post_id = p.id) WHERE p.status IN ('queued', 'approved') AND i.safety IS NOT NULL AND i.safety != 'ok' AND i.reviewed_at IS NULL GROUP BY p.id")
+    .filter((r) => shown.has(r.account_id))
     .map((r) => ({ ...r, screen: j(r.safety_json, null) }));
   return { waitingDeletes, images };
 }

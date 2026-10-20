@@ -232,12 +232,6 @@ ${stopBanners(ctx, d)}
 ${todo.rows.length ? `${postLines(todo.rows)}${todo.more ? `<p class="small"><a href="/posts">ועוד ${todo.more}</a></p>` : ''}` : '<p class="muted">אין מה לאשר כרגע. הפוסטים הבאים ייכתבו בשעת הייצור היומית.</p>'}
 </section>
 ${tiktokPanel(d)}
-<section class="panel home-panel"><header><h2>חשבונות</h2><a class="end small" href="/accounts">ניהול</a></header>
-<div class="acctab" role="table" aria-label="היום בכל חשבון">
-<div class="r h" role="row"><span role="columnheader">חשבון</span><span role="columnheader">מחכים</span><span role="columnheader">מתוזמנים</span><span role="columnheader">פורסמו</span></div>
-${d.groups.map((g) => `<a class="r" role="row" href="/posts#g-${esc(g.pack.id)}"><span class="who" role="cell">${accDot(g.pack.id)}<span><b>${esc(g.pack.meta.displayName)}</b><small>${esc(MODE_HE[g.acc?.mode || 'approve'][0])}</small></span></span>${['waiting', 'scheduled', 'published'].map((k) => `<span role="cell">${n(g[k].length, TONE[k])}</span>`).join('')}</a>`).join('')}
-</div>
-</section>
 ${d.summary ? summaryPanel(d) : ''}`;
   return layout({ ...ctx, title: 'היום', active: 'today' }, body);
 }
@@ -377,7 +371,7 @@ ${takedownPanel}
 /* ------------------------------------------------------------ accounts */
 
 export function accountsPage(ctx, rows) {
-  const body = `<div class="head"><h1>חשבונות</h1><span class="sub">${rows.length === 1 ? 'חשבון אחד' : `${rows.length} חשבונות`}</span><span class="end"><a class="btn sm" href="/new">${icon('plus')}חשבון חדש</a></span></div>
+  const body = `<div class="head"><h1>החשבון</h1><span class="end"><a class="btn sm" href="/new">${icon('plus')}חשבון חדש</a></span></div>
 <div class="accounts">${rows
     .map(({ pack, acc, spend, cap, plan, publishers, week, style }) => {
       const paused = acc.status === 'paused';
@@ -570,7 +564,8 @@ const SOURCE_STATUS = { approved: ['מאושר', 'ok'], pending: ['ממתין ל
 const TYPE_HE = { rss: 'פיד', web: 'דף', api: 'API' };
 
 export function sourcesPage(ctx, { packs, current, sources, form = {}, problems = [] }) {
-  const tabs = `<nav class="tabs" aria-label="חשבונות">${packs.map((p) => `<a href="/sources?account=${esc(p.id)}"${p.id === current.id ? ' aria-current="true"' : ''}>${accDot(p.id)}${esc(p.meta.displayName)}</a>`).join('')}</nav>`;
+  // The switcher at the top picks the account; tabs only when a page is given more than one.
+  const tabs = packs.length < 2 ? '' : `<nav class="tabs" aria-label="חשבונות">${packs.map((p) => `<a href="/sources?account=${esc(p.id)}"${p.id === current.id ? ' aria-current="true"' : ''}>${accDot(p.id)}${esc(p.meta.displayName)}</a>`).join('')}</nav>`;
   const list = sources
     .map((s) => {
       const [he, cls] = SOURCE_STATUS[s.status] || [s.status, ''];
@@ -706,7 +701,7 @@ export function notFoundPage(ctx) {
 const FACT_STATE = { valid: ['בתוקף', 'ok'], soon: ['פג בקרוב', 'warn'], expired: ['פג: לא בשימוש', 'bad'] };
 
 export function factsPage(ctx, { packs, current, topics, today, nextYear, form = {}, problems = [] }) {
-  const tabs = `<nav class="tabs" aria-label="חשבונות">${packs.map((p) => `<a href="/facts?account=${esc(p.id)}"${p.id === current.id ? ' aria-current="true"' : ''}>${accDot(p.id)}${esc(p.meta.displayName)}</a>`).join('')}</nav>`;
+  const tabs = packs.length < 2 ? '' : `<nav class="tabs" aria-label="חשבונות">${packs.map((p) => `<a href="/facts?account=${esc(p.id)}"${p.id === current.id ? ' aria-current="true"' : ''}>${accDot(p.id)}${esc(p.meta.displayName)}</a>`).join('')}</nav>`;
   const list = topics
     .map(
       (t) => `<section class="panel"><header><h2 dir="auto">${esc(t.topic)}</h2><span class="end muted small">${t.facts.length} עובדות</span></header>${t.facts.length ? `<ul class="factlist">${t.facts
@@ -757,7 +752,7 @@ function rivalForm(ctx, current, r = {}, { id = null, submit = 'הוסף מתח�
 }
 
 export function rivalsPage(ctx, { packs, current, rivals, times, form = {}, problems = [] }) {
-  const tabs = `<nav class="tabs" aria-label="חשבונות">${packs.map((p) => `<a href="/rivals?account=${esc(p.id)}"${p.id === current.id ? ' aria-current="true"' : ''}>${accDot(p.id)}${esc(p.meta.displayName)}</a>`).join('')}</nav>`;
+  const tabs = packs.length < 2 ? '' : `<nav class="tabs" aria-label="חשבונות">${packs.map((p) => `<a href="/rivals?account=${esc(p.id)}"${p.id === current.id ? ' aria-current="true"' : ''}>${accDot(p.id)}${esc(p.meta.displayName)}</a>`).join('')}</nav>`;
   const editing = form.id ? Number(form.id) : null;
   const list = rivals
     .map((r) => {
@@ -791,7 +786,7 @@ ${rivalForm(ctx, current, adding ? form : {})}</section>` : `<section class="pan
 
 /** An account's trending sounds for its TikTok drafts: the list, and the form to add one. */
 export function soundsPage(ctx, { packs, current, sounds, mode, recent, limits, form = {}, problems = [] }) {
-  const tabs = `<nav class="tabs" aria-label="חשבונות">${packs.map((p) => `<a href="/sounds?account=${esc(p.id)}"${p.id === current.id ? ' aria-current="true"' : ''}>${accDot(p.id)}${esc(p.meta.displayName)}</a>`).join('')}</nav>`;
+  const tabs = packs.length < 2 ? '' : `<nav class="tabs" aria-label="חשבונות">${packs.map((p) => `<a href="/sounds?account=${esc(p.id)}"${p.id === current.id ? ' aria-current="true"' : ''}>${accDot(p.id)}${esc(p.meta.displayName)}</a>`).join('')}</nav>`;
   const list = sounds.length
     ? `<div class="panel p0 soundlist">${sounds
         .map((s) => `<div class="row sound"><span class="tx"><b dir="auto">${esc(s.name)}</b><span class="muted small" dir="auto">${esc(s.artist)} · נוסף ${esc(agoHe(s.age))}${recent.includes(s.id) ? ' · היה באחת מ-5 הטיוטות האחרונות' : ''}</span></span>${s.stale ? '<span class="chip warn">ישן</span>' : '<span class="chip ok">טרי</span>'}${s.link ? `<a class="btn sm" href="${esc(s.link)}" target="_blank" rel="noopener noreferrer">${icon('ext')}בטיקטוק</a>` : ''}${postButton(ctx, '/sounds/remove', 'הסר', { cls: 'btn sm danger', confirm: 'להסיר?', fields: { account: current.id, id: s.id } })}</div>`)

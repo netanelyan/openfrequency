@@ -74,7 +74,7 @@ const SPRITE = `<svg class="sr" width="0" height="0" aria-hidden="true"><defs>
 export const NAV = [
   ['/', 'היום', 'today', 'today'],
   ['/posts', 'פוסטים', 'posts', 'text'],
-  ['/accounts', 'חשבונות', 'accounts', 'accounts'],
+  ['/accounts', 'חשבון', 'accounts', 'accounts'],
   ['/results', 'תוצאות', 'results', 'results'],
   ['/sources', 'מקורות', 'sources', 'sources'],
   ['/settings', 'הגדרות', 'settings', 'settings'],
@@ -102,7 +102,25 @@ export function budgetBanner(b) {
   return out.join('');
 }
 
-/** The page around a body. ctx: { title, active, csrf, spend: { usd, cap }, budget, waiting, user } */
+/**
+ * The account the site shows, and the menu that switches it: every account with what waits in it, and a new one.
+ * One account's pages at a time; the choice is a cookie (server.js), so a switch keeps the page it was made on. The
+ * closed switcher counts what waits in the other accounts, so nothing waits unseen.
+ */
+export function accountSwitch(ctx) {
+  const all = ctx.accounts || [];
+  const cur = all.find((a) => a.id === ctx.current);
+  if (!cur) return '';
+  const others = all.filter((a) => a.id !== cur.id);
+  const waitingElsewhere = others.reduce((s, a) => s + a.waiting, 0);
+  const item = (a) => `<form method="post" action="/account/switch">${csrfField(ctx)}<input type="hidden" name="to" value="${esc(a.id)}"><button type="submit"${a.id === cur.id ? ' aria-current="true"' : ''}>${accDot(a.id)}<span class="nm"><b>${esc(a.name)}</b><small class="ltr">@${esc(a.handle)}</small></span>${a.waiting ? `<b class="badge num" aria-label="${a.waiting} מחכים">${a.waiting}</b>` : ''}</button></form>`;
+  return `<details class="acctswitch">
+<summary aria-label="החשבון: ${esc(cur.name)}. החלפת חשבון">${accDot(cur.id)}<span class="nm"><b>${esc(cur.name)}</b><small class="ltr">@${esc(cur.handle)}</small></span>${waitingElsewhere ? `<b class="badge num" title="מחכים לאישור בחשבונות האחרים" aria-label="${waitingElsewhere} מחכים בחשבונות האחרים">${waitingElsewhere}</b>` : ''}${icon('chev')}</summary>
+<div class="menu">${all.map(item).join('')}<a class="new" href="/new">${icon('plus')}חשבון חדש</a></div>
+</details>`;
+}
+
+/** The page around a body. ctx: { title, active, csrf, spend: { usd, cap }, budget, waiting, user, accounts, current } */
 export function layout(ctx, body) {
   const section = SECTION_OF[ctx.active] || ctx.active;
   const badge = (key) => (key === 'posts' && ctx.waiting ? `<b class="badge num" aria-label="${ctx.waiting} מחכים לך">${ctx.waiting}</b>` : '');
@@ -135,6 +153,7 @@ export function layout(ctx, body) {
 ${SPRITE}
 <header class="top"><div class="wrap">
   <a class="brand" href="/" aria-label="תדר, להיום">${mark()}<b>תדר</b></a>
+  ${accountSwitch(ctx)}
   <button class="sidetoggle" type="button" data-side aria-label="${ctx.side === 'mini' ? 'הרחב את סרגל הצד' : 'כווץ את סרגל הצד'}" aria-expanded="${ctx.side === 'mini' ? 'false' : 'true'}" title="${ctx.side === 'mini' ? 'הרחב' : 'כווץ'}">${icon('sidebar')}</button>
   <nav class="nav" aria-label="ראשי">${nav}</nav>
   <div class="tools">

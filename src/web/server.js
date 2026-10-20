@@ -175,12 +175,31 @@ export function createHandler(ctx, { port, env = process.env, limiter = createLi
       const csrf = csrfFor(session, secret);
       const ajax = req.headers['x-of-ajax'] === '1';
 
+      // ---- the account shown. Every page is one account's; the switcher at the top changes it, and a link that names
+      // one (a post, ?account=) switches to that one. A cookie keeps it.
+      const acctCookie = (id) => `of_acct=${encodeURIComponent(id)}; Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly${secure ? '; Secure' : ''}`;
+      const setCookies = [];
+      const firstLive = () => ctx.packs.find((x) => ctx.db.get('SELECT status FROM accounts WHERE id = ?', x.id)?.status !== 'onboarding') || ctx.packs[0] || null;
+      let current = ctx.pack(jar.of_acct) || firstLive();
+      const switchTo = (pack) => {
+        if (!pack) return;
+        current = pack;
+        if (jar.of_acct !== pack.id) setCookies.push(acctCookie(pack.id));
+      };
+
       if (req.method === 'POST') {
         const origin = req.headers.origin;
         if (origin && !origins.has(origin)) return json(req, res, 403, { ok: false, message: 'בקשה מאתר אחר נחסמה.' });
         const form = await readForm(req);
         if (!csrfOk(form._csrf, session, secret)) return ajax ? json(req, res, 403, { ok: false, message: 'הדף ישן. רעננו אותו.' }) : send(req, res, 403, 'stale page, reload it', 'text/plain; charset=utf-8');
         if (p === '/logout') return redirect(res, '/login', { 'set-cookie': sessionCookie('', { secure, clear: true }) });
+        if (p === '/account/switch') {
+          const to = ctx.pack(String(form.to || ''));
+          if (!to) return ajax ? json(req, res, 404, { ok: false, message: 'אין חשבון כזה' }) : redirect(res, '/');
+          // Back to the same page of the other account; a post belongs to the account it was, so its page goes home.
+          const ref = req.headers.referer && new URL(req.headers.referer).host === host ? new URL(req.headers.referer).pathname : '/';
+          return redirect(res, /^\/post\//.test(ref) ? '/' : ref, { 'set-cookie': acctCookie(to.id) });
+        }
         if (p === '/theme') {
           const next = theme === 'dark' ? 'light' : 'dark';
           const c = `of_theme=${next}; Path=/; Max-Age=31536000; SameSite=Strict`;
@@ -205,19 +224,19 @@ export function createHandler(ctx, { port, env = process.env, limiter = createLi
             }
             if (p === '/sources/add') {
               const cur = ctx.pack(form.account) || ctx.packs[0];
-              return send(req, res, e.status, pages.sourcesPage({ ...pageCtx(), csrf }, { packs: ctx.packs, current: cur, sources: data.sourcesFor(ctx, cur.id), form, problems: e.problems || [e.message] }));
+              return send(req, res, e.status, pages.sourcesPage({ ...pageCtx(), csrf }, { packs: [cur], current: cur, sources: data.sourcesFor(ctx, cur.id), form, problems: e.problems || [e.message] }));
             }
             if (p === '/facts/add') {
               const cur = ctx.pack(form.account) || ctx.packs[0];
-              return send(req, res, e.status, pages.factsPage({ ...pageCtx(), csrf }, { packs: ctx.packs, current: cur, topics: data.factsFor(ctx, cur), ...factDates(), form, problems: e.problems || [e.message] }));
+              return send(req, res, e.status, pages.factsPage({ ...pageCtx(), csrf }, { packs: [cur], current: cur, topics: data.factsFor(ctx, cur), ...factDates(), form, problems: e.problems || [e.message] }));
             }
             if (p === '/sounds/save') {
               const cur = ctx.pack(form.account) || ctx.packs[0];
-              return send(req, res, e.status, pages.soundsPage({ ...pageCtx(), csrf }, { ...data.soundsFor(ctx, cur), packs: ctx.packs, form, problems: e.problems || [e.message] }));
+              return send(req, res, e.status, pages.soundsPage({ ...pageCtx(), csrf }, { ...data.soundsFor(ctx, cur), packs: [cur], form, problems: e.problems || [e.message] }));
             }
             if (p === '/rivals/save') {
               const cur = ctx.pack(form.account) || ctx.packs[0];
-              return send(req, res, e.status, pages.rivalsPage({ ...pageCtx(), csrf }, { ...data.rivalsFor(ctx, cur), packs: ctx.packs, form, problems: e.problems || [e.message] }));
+              return send(req, res, e.status, pages.rivalsPage({ ...pageCtx(), csrf }, { ...data.rivalsFor(ctx, cur), packs: [cur], form, problems: e.problems || [e.message] }));
             }
             return redirect(res, req.headers.referer ? new URL(req.headers.referer).pathname : '/', { 'set-cookie': flash(e.message) });
           }
@@ -239,9 +258,16 @@ export function createHandler(ctx, { port, env = process.env, limiter = createLi
       }
       if (p === '/static/accounts.css') return send(req, res, 200, accountsCss(ctx), 'text/css; charset=utf-8', { 'cache-control': 'private, max-age=600' });
 
-      const h = data.header(ctx);
+      const named = url.searchParams.get('account');
+      if (named) switchTo(ctx.pack(named));
+      const opened = /^\/post\/([\w-]+)$/.exec(p);
+      if (opened) switchTo(ctx.pack(ctx.db.get('SELECT account_id FROM posts WHERE id = ?', opened[1])?.account_id));
+      // What the pages read: the context seen from the account shown.
+      const sc = data.scoped(ctx, current);
+      const h = data.header(sc);
       const flashMsg = jar.of_flash ? decodeURIComponent(jar.of_flash) : null;
-      const clearFlash = flashMsg ? { 'set-cookie': 'of_flash=; Path=/; Max-Age=0; SameSite=Strict' } : {};
+      if (flashMsg) setCookies.push('of_flash=; Path=/; Max-Age=0; SameSite=Strict');
+      const clearFlash = setCookies.length ? { 'set-cookie': setCookies } : {};
       function pageCtx() {
         // The desk's sidebar, collapsed to its icons or not: a cookie the toggle sets, so the page arrives already in shape.
         return { csrf, user, theme, side: jar.of_side === 'mini' ? 'mini' : null, v: V, ...h, flash: flashMsg };
@@ -249,37 +275,34 @@ export function createHandler(ctx, { port, env = process.env, limiter = createLi
       const pc = pageCtx();
       const page = (html, status = 200) => send(req, res, status, flashMsg ? html.replace('<div id="toast" role="status" aria-live="polite"></div>', `<div id="toast" role="status" aria-live="polite" data-flash="${String(flashMsg).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)}"></div>`) : html, 'text/html; charset=utf-8', clearFlash);
 
-      if (p === '/') return page(pages.todayPage(pc, data.today(ctx)));
-      if (p === '/posts') return page(pages.postsPage(pc, data.today(ctx)));
+      if (p === '/') return page(pages.todayPage(pc, data.today(sc)));
+      if (p === '/posts') return page(pages.postsPage(pc, data.today(sc)));
       const pm = /^\/post\/([\w-]+)$/.exec(p);
       if (pm) {
         const d = data.postFull(ctx, pm[1]);
         return d ? page(pages.postPage(pc, d)) : page(pages.notFoundPage(pc), 404);
       }
-      if (p === '/accounts') return page(pages.accountsPage(pc, data.accountRows(ctx).map((r) => ({ ...r, week: data.week(ctx, r.pack.id), style: lockedStyle(ctx.db, r.pack, ctx.packs) }))));
-      if (p === '/results') return page(pages.resultsPage(pc, data.results(ctx)));
+      if (p === '/accounts') return page(pages.accountsPage(pc, data.accountRows(sc).map((r) => ({ ...r, week: data.week(ctx, r.pack.id), style: lockedStyle(ctx.db, r.pack, ctx.packs) }))));
+      if (p === '/results') return page(pages.resultsPage(pc, data.results(sc)));
+      const cur = current;
       if (p === '/sources') {
-        const cur = ctx.pack(url.searchParams.get('account')) || ctx.packs[0];
         if (!cur) return page(pages.notFoundPage(pc), 404);
-        return page(pages.sourcesPage(pc, { packs: ctx.packs, current: cur, sources: data.sourcesFor(ctx, cur.id) }));
+        return page(pages.sourcesPage(pc, { packs: sc.packs, current: cur, sources: data.sourcesFor(ctx, cur.id) }));
       }
-      if (p === '/settings') return page(pages.settingsPage(pc, data.settingsData(ctx)));
+      if (p === '/settings') return page(pages.settingsPage(pc, data.settingsData(sc)));
       if (p === '/facts') {
-        const cur = ctx.pack(url.searchParams.get('account')) || ctx.packs.find((x) => x.facts) || ctx.packs[0];
         if (!cur) return page(pages.notFoundPage(pc), 404);
-        return page(pages.factsPage(pc, { packs: ctx.packs, current: cur, topics: data.factsFor(ctx, cur), ...factDates() }));
+        return page(pages.factsPage(pc, { packs: sc.packs, current: cur, topics: data.factsFor(ctx, cur), ...factDates() }));
       }
       if (p === '/sounds') {
-        const cur = ctx.pack(url.searchParams.get('account')) || ctx.packs[0];
         if (!cur) return page(pages.notFoundPage(pc), 404);
-        return page(pages.soundsPage(pc, { ...data.soundsFor(ctx, cur), packs: ctx.packs }));
+        return page(pages.soundsPage(pc, { ...data.soundsFor(ctx, cur), packs: sc.packs }));
       }
       // The service worker asks what to show for a push it was woken by.
       if (p === '/notifications/latest.json') return json(req, res, 200, latestNotification(ctx.db) || {});
       if (p === '/rivals') {
-        const cur = ctx.pack(url.searchParams.get('account')) || ctx.packs[0];
         if (!cur) return page(pages.notFoundPage(pc), 404);
-        return page(pages.rivalsPage(pc, { ...data.rivalsFor(ctx, cur), packs: ctx.packs }));
+        return page(pages.rivalsPage(pc, { ...data.rivalsFor(ctx, cur), packs: sc.packs }));
       }
       if (p === '/more') return page(pages.morePage(pc));
       for (const [method, re, fn] of ROUTES) {

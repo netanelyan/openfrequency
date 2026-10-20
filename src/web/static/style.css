@@ -220,6 +220,32 @@ svg.i { width: 20px; height: 20px; flex: none; stroke: currentColor; fill: none;
 .ring.bad circle.v { stroke: var(--bad); }
 @media (max-width: 520px) { .spend .lbl { display: none; } }
 
+/* The account switcher: the account the site shows, beside the logo on a phone and under it on a desk. It opens
+   the list of accounts, each with what waits in it; a dot on the closed switcher says something waits elsewhere. */
+.acctswitch { position: relative; min-width: 0; }
+.acctswitch > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; min-height: 40px; max-width: 46vw; padding: 0 10px 0 12px; border-radius: 999px; background: var(--fill); }
+.acctswitch > summary::-webkit-details-marker { display: none; }
+.acctswitch > summary:hover { background: var(--fill-2); }
+.acctswitch .nm { display: grid; min-width: 0; line-height: 1.2; text-align: start; }
+.acctswitch .nm b { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.acctswitch .nm small { font-size: 11px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.acctswitch > summary > svg.i { width: 16px; height: 16px; flex: none; margin-inline-start: auto; color: var(--ink-3); stroke-width: 2.2; transition: transform 0.2s ease; }
+.acctswitch > summary > .badge { margin-inline-start: auto; }
+.acctswitch > summary > .badge + svg.i { margin-inline-start: 0; }
+.acctswitch[open] > summary > svg.i { transform: rotate(180deg); }
+/* Solid: a blur inside the bar's own blur sees nothing behind it. */
+.acctswitch .menu { position: absolute; z-index: 30; top: calc(100% + 8px); inset-inline-start: 0; display: grid; gap: 2px; min-width: 250px; padding: 6px; border-radius: 16px; background: #fbfbfd; box-shadow: var(--shadow-float), inset 0 0 0 1px var(--edge); }
+@media (prefers-color-scheme: dark) { .acctswitch .menu { background: #1e1e20; } }
+/* On a phone the bar is the logo, the account and the spend: the logo's word gives the account's name its room. */
+@media (max-width: 899px) { .acctswitch > summary .nm small { display: none; } .acctswitch > summary { max-width: 58vw; } .top .wrap:has(.acctswitch) .brand b { display: none; } }
+.acctswitch .menu form { margin: 0; }
+.acctswitch .menu button, .acctswitch .menu .new { width: 100%; display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 12px; border: 0; border-radius: 10px; background: none; color: inherit; font: inherit; text-align: start; cursor: pointer; }
+.acctswitch .menu button:hover, .acctswitch .menu .new:hover { background: var(--fill); text-decoration: none; }
+.acctswitch .menu button[aria-current] { background: var(--fill); }
+.acctswitch .menu .new { color: var(--ink-2); font-size: 13px; }
+.acctswitch .menu .new svg.i { width: 18px; height: 18px; }
+.acctswitch .badge { margin-inline-start: auto; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--badge); color: var(--badge-ink); font-size: 11px; font-weight: 600; line-height: 18px; text-align: center; }
+
 /* the sidebar toggle: on a desk only */
 .sidetoggle { display: none; }
 
@@ -231,33 +257,42 @@ svg.i { width: 20px; height: 20px; flex: none; stroke: currentColor; fill: none;
   /* logo and toggle on the first row, the sections under them, the spend at the foot */
   .top .wrap, .scrolled .top .wrap {
     height: 100%; max-width: none; margin: 0;
-    display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto 1fr; align-items: center; gap: 4px;
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto auto 1fr; align-items: center; gap: 4px;
     padding: 16px 12px 12px; border-radius: 24px; overflow: hidden;
     box-shadow: var(--shadow-float), inset 0 0 0 1px var(--bar-edge), inset 0 1px 0 var(--rim);
   }
   .brand { grid-column: 1; grid-row: 1; padding: 0 6px; min-width: 0; }
   .sidetoggle { display: grid; place-items: center; grid-column: 2; grid-row: 1; width: 36px; height: 36px; border: 0; border-radius: 10px; background: none; color: var(--ink-2); cursor: pointer; }
   .sidetoggle:hover { background: var(--fill); color: var(--ink); }
-  .nav { grid-column: 1 / -1; grid-row: 2; align-self: start; margin-top: 16px; display: flex; flex-direction: column; gap: 2px; padding: 0; border-radius: 0; background: none; }
+  .acctswitch { grid-column: 1 / -1; grid-row: 2; margin-top: 14px; }
+  .acctswitch > summary { max-width: none; min-height: 52px; border-radius: 14px; }
+  .acctswitch .menu { position: static; min-width: 0; margin-top: 6px; background: var(--inset); box-shadow: inset 0 0 0 1px var(--line); }
+  .nav { grid-column: 1 / -1; grid-row: 3; align-self: start; margin-top: 12px; display: flex; flex-direction: column; gap: 2px; padding: 0; border-radius: 0; background: none; }
   .nav a { min-height: 42px; gap: 12px; padding: 0 12px; border-radius: 12px; font-size: 13px; position: relative; white-space: nowrap; }
   .nav a svg.i { color: var(--ink-3); }
   .nav a[aria-current='page'] svg.i { color: var(--accent); stroke-width: 2; }
   .nav .badge { margin-inline-start: auto; }
-  .top .tools { grid-column: 1 / -1; grid-row: 3; align-self: end; margin: 0; }
+  .top .tools { grid-column: 1 / -1; grid-row: 4; align-self: end; margin: 0; }
   .spend { width: 100%; min-height: 48px; padding: 0 12px; border-radius: 14px; gap: 10px; }
   .spend .amt { margin-inline-start: auto; }
 
   /* Collapsed: a rail of icons. The names stay for screen readers and come back as tooltips; the waiting count
      sits on the icon's corner, as on a tab bar; the spend is its ring, with the amount in the tooltip. */
-  .side-mini .top .wrap { grid-template-columns: 1fr; grid-template-rows: auto auto auto 1fr; justify-items: center; padding: 16px 10px 10px; }
+  .side-mini .top .wrap { grid-template-columns: 1fr; grid-template-rows: auto auto auto auto 1fr; justify-items: center; padding: 16px 10px 10px; }
+  .side-mini .acctswitch { grid-row: 3; width: 100%; margin-top: 8px; }
+  .side-mini .acctswitch > summary { justify-content: center; padding: 0; min-height: 44px; border-radius: 12px; }
+  .side-mini .acctswitch .nm, .side-mini .acctswitch > summary > svg.i, .side-mini .acctswitch .new { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .side-mini .acctswitch .menu { padding: 4px; }
+  .side-mini .acctswitch .menu button { justify-content: center; padding: 0; position: relative; }
+  .side-mini .acctswitch .menu .badge { position: absolute; top: 4px; inset-inline-start: calc(50% + 2px); min-width: 16px; height: 16px; line-height: 16px; font-size: 10px; padding: 0 4px; }
   .side-mini .brand { padding: 0; }
   .side-mini .brand b { display: none; }
   .side-mini .sidetoggle { grid-column: 1; grid-row: 2; margin-top: 6px; }
-  .side-mini .nav { grid-row: 3; width: 100%; margin-top: 8px; }
+  .side-mini .nav { grid-row: 4; width: 100%; margin-top: 8px; }
   .side-mini .nav a { justify-content: center; padding: 0; }
   .side-mini .nav a > span, .side-mini .spend .lbl, .side-mini .spend .amt { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .side-mini .nav .badge { position: absolute; top: 3px; inset-inline-start: calc(50% + 2px); margin: 0; min-width: 16px; height: 16px; line-height: 16px; font-size: 10px; padding: 0 4px; }
-  .side-mini .top .tools { grid-row: 4; justify-self: center; }
+  .side-mini .top .tools { grid-row: 5; justify-self: center; }
   .side-mini .spend { width: 44px; min-height: 44px; padding: 0; justify-content: center; border-radius: 12px; }
   .side-mini .ring { width: 22px; height: 22px; }
 }
