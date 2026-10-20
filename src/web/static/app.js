@@ -120,6 +120,35 @@
     }
   });
 
+  // This device's own state: a device already subscribed is offered the off button instead.
+  const pushOn = document.querySelector('form[data-push]');
+  const pushOff = document.querySelector('form[data-push-off]');
+  const thisSub = async () => {
+    const reg = 'serviceWorker' in navigator ? await navigator.serviceWorker.getRegistration('/') : null;
+    return reg?.pushManager ? reg.pushManager.getSubscription() : null;
+  };
+  if (pushOn && pushOff) {
+    thisSub()
+      .then((sub) => {
+        if (!sub) return;
+        pushOn.hidden = true;
+        pushOff.hidden = false;
+      })
+      .catch(() => {});
+  }
+  document.addEventListener('click', async (e) => {
+    if (!e.target.closest('[data-push-disable]') || !pushOff) return;
+    try {
+      const sub = await thisSub();
+      if (!sub) return say('ההתראות כבר כבויות במכשיר הזה.');
+      pushOff.querySelector('[name=endpoint]').value = sub.endpoint;
+      await sub.unsubscribe();
+      pushOff.requestSubmit();
+    } catch {
+      say('לא הצלחתי לכבות את ההתראות במכשיר הזה.', true);
+    }
+  });
+
   // A segmented control submits as soon as it changes.
   document.querySelectorAll('form[data-autosubmit]').forEach((form) => {
     form.addEventListener('change', () => form.requestSubmit());

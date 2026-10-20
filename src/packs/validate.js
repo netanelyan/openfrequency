@@ -20,8 +20,9 @@ import { FLOOR } from '../voice/tells.js';
 export const MODES = ['approve', 'digest', 'auto'];
 export const PLATFORMS = ['tiktok', 'instagram'];
 export const PUBLISHERS = ['dry', 'zernio'];
-// TikTok straight out, or as a draft the owner publishes with a sound of their own, posted directly an hour late if not.
-export const TIKTOK_MODES = ['direct', 'draft-fallback'];
+// TikTok as a draft the moment a post is approved and a reminder at its hour (the default), straight out, or as a draft
+// at the hour posted directly an hour late if the owner does not.
+export const TIKTOK_MODES = ['draft-now', 'direct', 'draft-fallback'];
 /** Who can publish to each platform. Instagram also directly, through Meta's own Graph API. */
 export const PLATFORM_PUBLISHERS = { tiktok: ['dry', 'zernio'], instagram: ['dry', 'zernio', 'instagram'] };
 export const SOURCE_TYPES = ['rss', 'web', 'api'];

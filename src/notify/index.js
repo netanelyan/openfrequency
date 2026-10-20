@@ -50,6 +50,9 @@ export function subscribe(db, { endpoint }, { userId = null } = {}) {
   return { ok: true };
 }
 
+/** A browser that turned notifications off. Returns how many were forgotten (0 for one never kept). */
+export const unsubscribe = (db, { endpoint }) => db.run('DELETE FROM push_subs WHERE endpoint = ?', String(endpoint || '')).changes || 0;
+
 /**
  * Tell the owner: kept, then pushed to every browser that asked. `send` replaces the network for the tests.
  * Returns the notification's id. A push that fails is counted, and a browser that is gone (404, 410) is forgotten.

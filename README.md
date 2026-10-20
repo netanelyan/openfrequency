@@ -258,9 +258,15 @@ Each pack names its publisher per platform in `pack.json`
 only when `PUBLISH_MODE=live` and that publisher has what it needs; anything less
 writes the post and the exact request to disk.
 
-**TikTok** goes through Zernio as a photo post, with the AI flag. `npm run
-zernio:check` checks the key, each account id and the bill, and can send one private
-test post.
+**TikTok** goes through Zernio as a photo post, with the AI flag. By default
+(`zernio.tiktokMode: "draft-now"`) it goes to the TikTok app's drafts the moment the
+post is approved, with a sound from the account's list named for it, and at the
+post's hour the owner gets one notification to publish it (Settings turns them on
+per device; on an iPhone, from Teder added to the home screen). The engine never
+publishes to TikTok itself in this mode. `"direct"` publishes at the slot, and
+`"draft-fallback"` sends the draft at the slot and publishes it directly an hour
+later if the owner did not. `npm run zernio:check` checks the key, each account id
+and the bill, and can send one private test post.
 
 **Instagram** goes directly through Meta's Graph API as a carousel, free. Two logins
 are supported:

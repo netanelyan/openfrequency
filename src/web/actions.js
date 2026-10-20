@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { waitingImages } from '../images/index.js';
-import { nowIso } from '../core/clock.js';
+import { now, nowIso } from '../core/clock.js';
 import { audit, setSetting, step } from '../core/store.js';
 import { loadPost, checkPost, formatOfPost, igCaption, postDraft } from '../pipeline/build.js';
 import { lineDraft } from '../rules/overlay.js';
@@ -9,12 +9,14 @@ import { confirmDeleted, recordTakedown } from '../publish/takedown.js';
 import { renderPost } from '../render/render.js';
 import { lockStyle, lockedStyle, styleByHash } from '../render/style.js';
 import { pauseAccount, resumeAccount } from '../autonomy/rails.js';
-import { publishPost } from '../publish/index.js';
+import { publishPost, retireDraft, sendDraft, tiktokMode } from '../publish/index.js';
+import { restAt } from '../schedule/shabbat.js';
+import { timeHe } from './ui.js';
 import { MODES } from '../packs/validate.js';
 import { factProblems, readTopics, removeFact, saveFact } from '../sources/facts.js';
 import { removeRival, saveRival } from '../pipeline/rivals.js';
 import { removeSound, saveSound } from '../pipeline/sounds.js';
-import { subscribe } from '../notify/index.js';
+import { subscribe, unsubscribe } from '../notify/index.js';
 import { catalogSource } from '../sources/catalog.js';
 import { robotsAllows } from '../sources/robots.js';
 import { israelDate } from '../schedule/israel.js';
@@ -39,29 +41,62 @@ const mustPost = (ctx, id) => {
   return post;
 };
 
+/**
+ * Draft-now: the approved post's TikTok draft is sent at once, beside the answer (an upload to Zernio can take a
+ * minute). `job` (not sent to the browser) is the send, for the tests.
+ */
+function draftBeside(ctx, id, result) {
+  const job = sendDraft(ctx, id).catch((e) => {
+    ctx.log?.(`draft ${id}: ${e.message}`);
+    return { state: 'failed', why: e.message };
+  });
+  Object.defineProperty(result, 'job', { value: job });
+  return result;
+}
+
+const DRAFT_LEFT = 'הטיוטה הקודמת כבר בתיבת הטיוטות של טיקטוק: מחקו אותה באפליקציה.';
+
 export function approve(ctx, user, { id }) {
   const post = mustPost(ctx, id);
   if (post.status !== 'queued') throw new ActionError(`אי אפשר לאשר פוסט במצב "${post.status}"`);
   ctx.db.update('posts', id, { status: 'approved', approved_at: nowIso(), approved_by: user.name, updated_at: nowIso() });
   audit(ctx.db, { actor: user.name, action: 'approve', accountId: post.account_id, postId: id });
+  const pack = ctx.pack(post.account_id);
+  if (pack && tiktokMode(pack) === 'draft-now' && pack.meta.platforms.includes('tiktok')) {
+    const rest = restAt(now());
+    const at = post.slot_at ? ` תזכורת תגיע ב-${timeHe(post.slot_at)}.` : '';
+    return draftBeside(ctx, id, { ok: true, message: rest ? `אושר. הטיוטה תישלח לטיקטוק כש${rest} ייגמר.${at}` : `אושר. הטיוטה נשלחת לטיקטוק.${at}` });
+  }
   return { ok: true, message: post.slot_at ? 'אושר. ייצא בשעה שלו.' : 'אושר.' };
 }
 
 export function unapprove(ctx, user, { id }) {
   const post = mustPost(ctx, id);
   if (post.status !== 'approved') throw new ActionError('הפוסט לא מאושר');
+  const left = retireDraft(ctx.db, post);
   ctx.db.update('posts', id, { status: 'queued', approved_at: null, approved_by: null, updated_at: nowIso() });
-  audit(ctx.db, { actor: user.name, action: 'unapprove', accountId: post.account_id, postId: id });
-  return { ok: true, message: 'האישור בוטל. הפוסט חזר להמתנה.' };
+  audit(ctx.db, { actor: user.name, action: 'unapprove', accountId: post.account_id, postId: id, detail: left ? { draftLeft: true } : null });
+  return { ok: true, message: `האישור בוטל. הפוסט חזר להמתנה.${left ? ` ${DRAFT_LEFT}` : ''}` };
 }
 
 export function reject(ctx, user, { id }, form) {
   const post = mustPost(ctx, id);
   if (!['queued', 'approved', 'sample'].includes(post.status)) throw new ActionError(`אי אפשר לדחות פוסט במצב "${post.status}"`);
   const reason = [String(form.reason || '').trim(), String(form.note || '').trim()].filter(Boolean).join(': ').slice(0, 300) || 'נדחה';
+  const left = retireDraft(ctx.db, post);
   ctx.db.update('posts', id, { status: 'rejected', reason, updated_at: nowIso() });
   audit(ctx.db, { actor: user.name, action: 'reject', accountId: post.account_id, postId: id, detail: { reason } });
-  return { ok: true, message: 'נדחה. הסיבה נשמרה.' };
+  return { ok: true, message: `נדחה. הסיבה נשמרה.${left ? ` ${DRAFT_LEFT}` : ''}` };
+}
+
+/** The owner deleted a post's old TikTok drafts in the app: the reminder on the post goes away. */
+export function oldDraftsDeleted(ctx, user, { id }) {
+  const post = mustPost(ctx, id);
+  if (!post.publish?.oldDrafts?.length) return { ok: true, message: 'אין טיוטות ישנות.' };
+  const { oldDrafts, ...rest } = post.publish;
+  ctx.db.update('posts', id, { publish_json: rest, updated_at: nowIso() });
+  audit(ctx.db, { actor: user.name, action: 'tiktok_old_drafts_deleted', accountId: post.account_id, postId: id, detail: { n: oldDrafts.length } });
+  return { ok: true, message: 'סומן. הטיוטות הישנות נמחקו.' };
 }
 
 export async function publishNow(ctx, user, { id }) {
@@ -143,6 +178,10 @@ export async function edit(ctx, user, { id }, form) {
     step(ctx.db, id, 'edit', 'ok', { by: user.name, changes: changes.length });
     audit(ctx.db, { actor: user.name, action: 'edit', accountId: post.account_id, postId: id, detail: { changes: changes.length } });
   });
+  // A draft sent before the edit is the old text: it stays in the app for the owner to delete, and the new one goes.
+  if (post.status === 'approved' && retireDraft(ctx.db, loadPost(ctx.db, id))) {
+    return draftBeside(ctx, id, { ok: true, message: `נשמר, נבדק ורונדר מחדש. טיוטה חדשה נשלחת לטיקטוק. ${DRAFT_LEFT}`, redirect: `/post/${id}` });
+  }
   return { ok: true, message: 'נשמר, נבדק ורונדר מחדש.', redirect: `/post/${id}` };
 }
 
@@ -344,6 +383,13 @@ export function subscribePush(ctx, user, _p, form) {
   if (!r.ok) throw new ActionError('הדפדפן לא החזיר כתובת התראות תקינה');
   audit(ctx.db, { actor: user.name, action: 'push_subscribed', detail: { host: new URL(String(form.endpoint)).hostname } });
   return { ok: true, message: 'ההתראות מופעלות בדפדפן הזה.' };
+}
+
+/** A browser turns its notifications off: its endpoint is forgotten. */
+export function unsubscribePush(ctx, user, _p, form) {
+  const n = unsubscribe(ctx.db, { endpoint: form.endpoint });
+  audit(ctx.db, { actor: user.name, action: 'push_unsubscribed', detail: { n } });
+  return { ok: true, message: 'ההתראות כבויות בדפדפן הזה.' };
 }
 
 /** A takedown notice for a post: recorded, the post taken down, the account paused on the second in 90 days. */

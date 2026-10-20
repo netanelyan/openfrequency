@@ -35,13 +35,17 @@ const MINUTE = 60_000;
 // told to look.
 //
 // Instagram is not touched: it went out at the slot as always.
+//
+// Draft-now (the default mode) sends its draft at approval and its one reminder at the slot (src/publish/index.js);
+// here its drafts are only matched to the owner's post, so the numbers can be read. Never a fallback.
 
 export const REMIND_MIN = 30;
 export const FALLBACK_MIN = 60;
 export const WATCH_HOURS = 24;
 
-/** What a TikTok draft-fallback post is now, in the owner's words. */
+/** What a TikTok draft post is now, in the owner's words. */
 export const FLOW_HE = {
+  drafted: ['בטיוטות של טיקטוק', 'ghost'],
   waiting: ['טיוטה מחכה לך', 'sig'],
   mine: ['פורסם על ידך', 'ok'],
   sending: ['מפרסם אוטומטית', 'warn'],
@@ -50,6 +54,16 @@ export const FLOW_HE = {
   failed: ['הפרסום האוטומטי נכשל', 'bad'],
   stopped: ['נעצר בבדיקה', 'bad'],
 };
+
+/** A flow's key in FLOW_HE: a draft-now draft before its hour is only sitting in the drafts; at the hour it waits for you. */
+export const flowState = (flow) => (flow?.mode === 'now' && flow.state === 'waiting' && !flow.remindedAt ? 'drafted' : flow?.state);
+
+/** The line under a draft that waits: its sound, and what happens next. */
+export function draftNote(flow, slotAt, timeOf) {
+  const sound = flow.sound ? `סאונד: ${flow.sound.name} · ${flow.sound.artist}` : 'בלי סאונד מהרשימה';
+  if (flow.mode !== 'now') return `${sound} · עולה אוטומטית ב-${timeOf(new Date(Date.parse(slotAt) + FALLBACK_MIN * MINUTE).toISOString())}`;
+  return flow.remindedAt ? `${sound} · השעה הגיעה: פרסמו מהטיוטות` : `${sound} · תזכורת ב-${timeOf(slotAt)}`;
+}
 
 const save = (db, postId, results) => db.update('posts', postId, { publish_json: results, updated_at: nowIso() });
 
@@ -127,6 +141,8 @@ export async function watchDrafts(ctx, { t = now(), list = null, send = null } =
         out.push({ post: post.id, state: 'mine' });
         continue;
       }
+      // Draft-now: the reminder went with the slot (src/publish/index.js), and the engine never publishes it itself.
+      if (flow.mode === 'now') continue;
       if (t >= slot + FALLBACK_MIN * MINUTE) {
         out.push({ post: post.id, ...(await fallback(ctx, pack, post, { t, said })) });
         continue;

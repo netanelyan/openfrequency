@@ -1341,3 +1341,26 @@ engine can act on, and what changed:
   pixels, a framed slide or half a head-to-head 450, the blurred ground behind the
   slides 400, and a PNG photograph counts (never one described as a screenshot).
   The name in the title, the licence and the screen decide as before.
+
+- **Every approved post goes to TikTok's drafts at once, and the owner is reminded at
+  its hour (2026-10-20, the owner's call).** "Each approved post should go to the
+  TikTok draft immediately, then only a reminder at the correct hour." This is now the
+  default TikTok mode, `draft-now` (`direct` and `draft-fallback` stay for a pack that
+  names them). The moment the owner approves (or the engine does, in Digest and Auto),
+  TikTok's part goes to the app's inbox as a draft, with a sound from the account's
+  list named for it; nobody is notified then, since TikTok tells the owner of a new
+  draft itself. The post stays approved, and at its slot Instagram goes out as always
+  and the owner gets one Web Push: the account, the cover line, the sound. A server
+  that was down at the hour sends it late, but not 12 hours late. The engine never
+  publishes to TikTok in this mode, and nothing falls back. The draft meets every rail
+  a post at its slot meets: a draft is a write to TikTok, so none goes on Shabbat or a
+  yom tov (hard rule 9), nor for a paused account, a picture waiting for a person, or a
+  fact that no longer holds (the post is blocked and the account paused, as at the
+  slot). A held draft is sent at the runner's first tick the rails allow, and at the
+  slot at the latest. The state is saved before the send, so a tick or a second click
+  sends no other; a send cut off mid-way is tried again after 15 minutes, three times
+  in all. A draft is only ever the owner's to publish or delete, so a draft of a post
+  whose approval is taken back, rejected or edited stays in the app: the post page
+  tells the owner to delete it there until they press "מחקתי", and an edited post that
+  stays approved gets a fresh draft. Settings turns notifications on and off per
+  device; an iPhone (iOS 16.4 and later) needs Teder added to the home screen first.

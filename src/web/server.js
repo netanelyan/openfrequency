@@ -111,6 +111,8 @@ export function createHandler(ctx, { port, env = process.env, limiter = createLi
     ['POST', /^\/sounds\/save$/, (u, m, f) => act.saveSoundAction(ctx, u, {}, f)],
     ['POST', /^\/sounds\/remove$/, (u, m, f) => act.removeSoundAction(ctx, u, {}, f)],
     ['POST', /^\/push\/subscribe$/, (u, m, f) => act.subscribePush(ctx, u, {}, f)],
+    ['POST', /^\/push\/unsubscribe$/, (u, m, f) => act.unsubscribePush(ctx, u, {}, f)],
+    ['POST', /^\/post\/([\w-]+)\/old-drafts-deleted$/, (u, m) => act.oldDraftsDeleted(ctx, u, { id: m[1] })],
     ...onboardingRoutes(ctx),
   ];
 
