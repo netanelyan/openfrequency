@@ -193,6 +193,14 @@ export function createHandler(ctx, { port, env = process.env, limiter = createLi
         const form = await readForm(req);
         if (!csrfOk(form._csrf, session, secret)) return ajax ? json(req, res, 403, { ok: false, message: 'הדף ישן. רעננו אותו.' }) : send(req, res, 403, 'stale page, reload it', 'text/plain; charset=utf-8');
         if (p === '/logout') return redirect(res, '/login', { 'set-cookie': sessionCookie('', { secure, clear: true }) });
+        // Developer mode: the settings a developer reads, opened by an owner from the version line, kept on this browser.
+        if (p === '/settings/dev') {
+          if (user.role !== 'owner') return ajax ? json(req, res, 403, { ok: false, message: 'רק הבעלים' }) : redirect(res, '/settings');
+          const on = form.on === '1';
+          const c = `of_dev=${on ? '1' : ''}; Path=/; Max-Age=${on ? 31536000 : 0}; SameSite=Strict; HttpOnly${secure ? '; Secure' : ''}`;
+          if (on) audit(ctx.db, { actor: user.name, action: 'dev_mode' });
+          return redirect(res, on ? '/settings#dev' : '/settings', { 'set-cookie': [c, flash(on ? 'מצב מפתח פתוח' : 'מצב מפתח כבוי')] });
+        }
         if (p === '/account/switch') {
           const to = ctx.pack(String(form.to || ''));
           if (!to) return ajax ? json(req, res, 404, { ok: false, message: 'אין חשבון כזה' }) : redirect(res, '/');
@@ -270,7 +278,7 @@ export function createHandler(ctx, { port, env = process.env, limiter = createLi
       const clearFlash = setCookies.length ? { 'set-cookie': setCookies } : {};
       function pageCtx() {
         // The desk's sidebar, collapsed to its icons or not: a cookie the toggle sets, so the page arrives already in shape.
-        return { csrf, user, theme, side: jar.of_side === 'mini' ? 'mini' : null, v: V, ...h, flash: flashMsg };
+        return { csrf, user, theme, side: jar.of_side === 'mini' ? 'mini' : null, v: V, ...h, flash: flashMsg, dev: jar.of_dev === '1' && user.role === 'owner' };
       }
       const pc = pageCtx();
       const page = (html, status = 200) => send(req, res, status, flashMsg ? html.replace('<div id="toast" role="status" aria-live="polite"></div>', `<div id="toast" role="status" aria-live="polite" data-flash="${String(flashMsg).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)}"></div>`) : html, 'text/html; charset=utf-8', clearFlash);

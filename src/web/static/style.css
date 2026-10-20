@@ -405,7 +405,7 @@ h3 { font-size: 14px; margin: 0; font-weight: 600; }
 
 label.f { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 500; color: var(--ink-2); }
 label.f small { font-weight: 400; color: var(--ink-3); font-size: 12px; }
-input[type='text'], input[type='password'], input[type='url'], input[type='number'], input[type='date'], select, textarea {
+input[type='text'], input[type='password'], input[type='url'], input[type='number'], input[type='date'], input[type='time'], select, textarea {
   font: 400 16px/1.35 var(--text);
   color: var(--ink);
   background: var(--field);
@@ -860,3 +860,9 @@ details.more[open] > summary { background: var(--fill-2); }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
 .legend i { width: 10px; height: 10px; border-radius: 3px; }
 .legend b { font-weight: 600; color: var(--ink); }
+
+/* Settings: the version line at the foot (developer mode opens from it), and developer mode's header. */
+.ver { margin: 28px 0 0; text-align: center; font-size: 12px; color: var(--ink-3); user-select: none; -webkit-user-select: none; }
+.ver[data-devtap] { cursor: default; }
+.panel.dev { margin-top: 28px; box-shadow: var(--shadow-tile), inset 0 0 0 1px var(--line-2); }
+.panel.dev + .cols { margin-top: 20px; }

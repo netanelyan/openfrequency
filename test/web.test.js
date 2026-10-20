@@ -168,11 +168,19 @@ test('the kill switch and the mode are set from the Accounts page', async () => 
   assert.equal(ctx.db.get("SELECT status FROM accounts WHERE id = 'demo'").status, 'active');
 });
 
-test('the Settings page shows which keys are set, never their values', async () => {
+test("Settings are the owner's; developer mode, opened from the version line, shows which keys are set, never their values", async () => {
   process.env.PEXELS_API_KEY = 'secret-value-that-must-not-show';
   const cookie = await login();
-  const html = await (await get('/settings', cookie)).text();
+  const plain = await (await get('/settings', cookie)).text();
+  assert.ok(!plain.includes('PEXELS_API_KEY'), "no keys on the owner's page");
+  assert.ok(!plain.includes('npm run'), 'no commands either');
+  assert.match(plain, /<form method="post" action="\/settings\/dev" class="ver" data-devtap>/);
+  const csrf = await csrfOf(cookie);
+  const res = await fetch(`${base}/settings/dev`, { method: 'POST', redirect: 'manual', headers: { cookie, 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ _csrf: csrf, on: '1' }).toString() });
+  assert.match(res.headers.get('set-cookie'), /of_dev=1; .*HttpOnly/);
+  const html = await (await get('/settings', `${cookie}; of_dev=1`)).text();
   delete process.env.PEXELS_API_KEY;
+  assert.ok(html.includes('<h2>מצב מפתח</h2>'));
   assert.ok(html.includes('PEXELS_API_KEY'));
   assert.ok(!html.includes('secret-value-that-must-not-show'));
 });
@@ -227,7 +235,11 @@ test('rivals are typed in by hand per account: refused when malformed, shown, up
 test('the Settings page shows the month against the cap: spent, forecast, posts left, each account\'s share; a higher cap is refused', async () => {
   const cookie = await login();
   const html = await (await get('/settings', cookie)).text();
-  for (const s of ['תקציב חודשי', 'תחזית לסוף החודש', 'פוסטים', 'OF_BUDGET_MONTHLY_USD', 'נתח']) assert.ok(html.includes(s), s);
+  for (const s of ['תקציב חודשי', 'תחזית לסוף החודש', 'פוסטים']) assert.ok(html.includes(s), s);
+  // Each account's share and where the cap is set are developer mode's.
+  assert.ok(!html.includes('OF_BUDGET_MONTHLY_USD'));
+  const dev = await (await get('/settings', `${cookie}; of_dev=1`)).text();
+  for (const s of ['OF_BUDGET_MONTHLY_USD', 'נתח']) assert.ok(dev.includes(s), s);
   const csrf = await csrfOf(cookie);
   let res = await post('/settings/budget', cookie, { _csrf: csrf, budget: '400' });
   assert.equal(res.status, 400, 'never above OF_BUDGET_MONTHLY_USD');

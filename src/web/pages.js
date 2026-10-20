@@ -5,6 +5,9 @@ import { CATALOG } from '../sources/catalog.js';
 import { KINDS, MIX } from '../formats/kinds.js';
 import { BOXES, MEASURES, PRIORITY } from '../metrics/feedback.js';
 import { RIVALS } from '../pipeline/rivals.js';
+import { readFileSync } from 'node:fs';
+
+const VERSION = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version;
 
 const KIND_HE = Object.fromEntries(Object.entries(KINDS).map(([k2, v]) => [k2, v.name]));
 
@@ -45,7 +48,7 @@ const PLATFORM_HE = { tiktok: 'טיקטוק', instagram: 'אינסטגרם' };
 const ROLE_HE = { owner: 'בעלים', editor: 'עורך', viewer: 'צופה' };
 const AUDIT_HE = {
   login: 'כניסה', approve: 'אישור פוסט', unapprove: 'ביטול אישור', reject: 'דחיית פוסט', edit: 'עריכה', publish_now: 'פרסום ידני', published: 'פורסם', publish_failed: 'פרסום נכשל',
-  auto_approved: 'אושר אוטומטית', mode: 'שינוי מצב', pause: 'השהיה', resume: 'חידוש', global_kill_on: 'כיבוי כללי', global_kill_off: 'הפעלה מחדש', global_budget: 'תקציב כללי',
+  auto_approved: 'אושר אוטומטית', dev_mode: 'מצב מפתח נפתח', mode: 'שינוי מצב', pause: 'השהיה', resume: 'חידוש', global_kill_on: 'כיבוי כללי', global_kill_off: 'הפעלה מחדש', global_budget: 'תקציב כללי',
   takedown: 'הודעת הסרה', takedown_deleted: 'נמחק ידנית אחרי הודעה', image_ok: 'תמונה נבדקה בעין', mix_changed: 'יחס בידור ומספרים זז',
   generate_at: 'שעת ייצור', source_approved: 'מקור אושר', source_removed: 'מקור הוסר', source_added: 'מקור נוסף', user_added: 'משתמש נוסף',
   publish_retry: 'פרסום יחזור על עצמו', fact_added: 'עובדה נוספה', fact_confirmed: 'עובדה נבדקה שוב', fact_removed: 'עובדה הוסרה', rival_added: 'מתחרה נוסף', rival_updated: 'מתחרה עודכן', rival_removed: 'מתחרה הוסר', format_dropped: 'פורמט נשר', format_promoted: 'פורמט הוכח', format_returned: 'פורמט חזר', onboarding: 'חשבון חדש', went_live: 'חשבון עלה לאוויר',
@@ -619,7 +622,7 @@ const BASIS_HE = { results: 'לפי התוצאות', approval: 'לפי שיעו�
 const LEVEL_HE = { ok: ['בתוך התקציב', 'ok'], short: ['התחזית מעל התקציב גם אחרי צמצום', 'warn'], warn: ['מעל 80%', 'warn'], stop: ['נגמר: אין כתיבה עד החודש הבא', 'bad'] };
 
 /** The month against the cap: spent, held, forecast, posts left, and each account's share and volume. */
-export function budgetPanel(ctx, d) {
+export function budgetPanel(ctx, d, { dev = false } = {}) {
   const p = d.plan;
   const [lvl, cls] = LEVEL_HE[p.level] || [p.level, ''];
   // Only a value that lowers the cap is in force (globalCap), so only that one is shown: an older, higher setting reads as 0.
@@ -635,40 +638,59 @@ export function budgetPanel(ctx, d) {
   return `<section class="panel" id="budget"><header><h2>תקציב חודשי</h2><span class="end"><span class="chip ${cls}">${esc(lvl)}</span></span></header>
 <div class="row spread"><span>הוצאה ב-${esc(p.month)}</span><b class="ltr num">$${p.spent.toFixed(2)} / $${p.cap}</b></div>
 <meter min="0" max="${p.cap || 1}" low="${(p.cap || 1) * 0.7}" high="${(p.cap || 1) * 0.8}" optimum="0" value="${Math.min(p.spent, p.cap || 1)}"></meter>
-<dl class="kv mt12"><dt>תחזית לסוף החודש</dt><dd>${usd(p.forecast)}</dd><dt>שמור לקריאות שעוד רצות</dt><dd>${usd(p.reserved, 3)}</dd><dt>נשאר</dt><dd>${usd(p.left)} · בערך ${p.postsLeft} פוסטים, ב-${usd(p.costPerPost, 3)} לפוסט</dd></dl>
+<dl class="kv mt12"><dt>תחזית לסוף החודש</dt><dd>${usd(p.forecast)}</dd><dt>נשאר</dt><dd>${usd(p.left)}, בערך ${p.postsLeft} פוסטים</dd></dl>
+<p class="muted small">כשהתקציב לא מספיק לכל החודש, החשבון החלש מפרסם פחות. ב-80% מופיעה אזהרה, וב-100% לא נכתבים פוסטים חדשים עד החודש הבא.</p>
+${dev ? `<dl class="kv mt12"><dt>שמור לקריאות שעוד רצות</dt><dd>${usd(p.reserved, 3)}</dd><dt>לפוסט</dt><dd>${usd(p.costPerPost, 3)}</dd></dl>
 <div class="scrollx mt12"><table class="table stack"><thead><tr><th>חשבון</th><th>נתח</th><th>הוצאה</th><th>לפוסט</th><th>ביום</th><th>נשארו החודש</th><th>חוזק</th></tr></thead><tbody>${rows}</tbody></table></div>
-<p class="muted small">התקרה היא <code class="ltr">OF_BUDGET_MONTHLY_USD</code> ב-<code class="ltr">.env</code> (${capUsd}), לכל שירות בתשלום חוץ מ-Zernio. כל קריאה שומרת קודם את המחיר הגבוה ביותר שהיא יכולה לעלות, ולכן שום דבר לא עובר את התקרה. כשהתחזית עוברת אותה, החשבון החלש ביותר יורד לפוסט אחד ביום, ואחריו הבא. ב-80% מופיעה אזהרה, וב-100% שום פוסט לא נכתב עד החודש הבא.</p>
-<form method="post" action="/settings/budget" class="formgrid mt12">${csrfField(ctx)}<label class="f">תקרה נמוכה יותר לחודש הזה <small>עד ${capUsd}; 0 חוזר לתקרה מ-<code class="ltr">.env</code></small><input type="number" name="budget" min="0" max="${d.envCap}" step="0.5" value="${esc(lower)}"></label><button class="btn" type="submit">שמור</button></form></section>`;
+<p class="muted small">התקרה היא <code class="ltr">OF_BUDGET_MONTHLY_USD</code> ב-<code class="ltr">.env</code> (${capUsd}), לכל שירות בתשלום חוץ מ-Zernio. כל קריאה שומרת קודם את המחיר הגבוה ביותר שהיא יכולה לעלות, ולכן שום דבר לא עובר את התקרה.</p>` : ''}
+<form method="post" action="/settings/budget" class="formgrid mt12">${csrfField(ctx)}<label class="f">תקרה נמוכה יותר לחודש הזה <small>עד ${capUsd}; 0 מבטל אותה</small><input type="number" name="budget" min="0" max="${d.envCap}" step="0.5" value="${esc(lower)}"></label><button class="btn" type="submit">שמור</button></form></section>`;
 }
 
+/**
+ * Settings, for the owner: notifications, when the day's posts are written, the team, the budget, and the stop for
+ * everything. What a developer needs (keys, the engine, the publishers, the log) is developer mode: seven taps on the
+ * version line, by an owner, kept in a cookie on that browser (server.js).
+ */
 export function settingsPage(ctx, d) {
   const s = d.settings;
-  const body = `<div class="head"><h1>הגדרות</h1></div>
+  const dev = !!ctx.dev;
+  const devPanels = dev
+    ? `<section class="panel dev" id="dev"><header><h2>מצב מפתח</h2><span class="end">${postButton(ctx, '/settings/dev', 'כבה', { cls: 'btn sm', fields: { on: '0' } })}</span></header><p class="muted small m0">מפתחות, המנוע, הפרסום והיומן. נשאר פתוח בדפדפן הזה עד שמכבים.</p></section>
 <div class="cols even">
-<div>
-<section class="panel"><header><h2>מתג כיבוי כללי</h2><span class="end">${s.globalKill ? '<span class="chip bad">מופעל</span>' : '<span class="chip ok">כבוי</span>'}</span></header>
-<p class="muted">עוצר את כל החשבונות מיד: שום פוסט לא נכתב ושום פוסט לא מתפרסם עד שמכבים אותו.</p>
-${s.globalKill ? postButton(ctx, '/settings/kill', 'הפעל את המערכת מחדש', { cls: 'btn primary', fields: { on: '0' } }) : postButton(ctx, '/settings/kill', `${icon('power')}עצור הכל`, { cls: 'btn danger', fields: { on: '1' }, confirm: 'בטוח? לחצו שוב לעצירה' })}
-</section>
-${budgetPanel(ctx, d)}
-<section class="panel" id="push"><header><h2>התראות</h2><span class="end">${d.push?.browsers ? `<span class="chip ok">${d.push.browsers === 1 ? 'מכשיר אחד' : `${d.push.browsers} מכשירים`}</span>` : '<span class="chip ghost">כבוי</span>'}</span></header>
-<p class="muted">פוסט שאישרתם נשלח מיד לטיוטות של טיקטוק, ובשעה שלו מגיעה התראה לפרסם אותו. ההתראה עצמה ריקה: המכשיר שואל את תדר מה להציג, כך שאף מילה מהפוסט לא עוברת דרך שירות ההתראות.</p>
-<p class="muted small">באייפון (iOS 16.4 ומעלה): פתחו את תדר בספארי, שתפו ואז "הוסף למסך הבית", ופתחו את תדר מהאייקון. רק משם אפשר להפעיל התראות.</p>
-<form method="post" action="/push/subscribe" data-ajax="reload" data-push="${esc(d.push?.key || '')}">${csrfField(ctx)}<input type="hidden" name="endpoint" value=""><button class="btn" type="button" data-push-enable>${icon('spark')}הפעל התראות במכשיר הזה</button></form>
-<form method="post" action="/push/unsubscribe" data-ajax="reload" data-push-off hidden>${csrfField(ctx)}<input type="hidden" name="endpoint" value=""><button class="btn ghost" type="button" data-push-disable>כבה התראות במכשיר הזה</button></form>
-</section>
-<section class="panel"><header><h2>שעת ייצור יומית</h2></header><form method="post" action="/settings/generate-at" class="formgrid">${csrfField(ctx)}<label class="f">שעה (שעון ישראל)<input type="text" name="at" value="${esc(s.generateAt)}" pattern="[0-2][0-9]:[0-5][0-9]" dir="ltr"></label><button class="btn" type="submit">שמור</button></form></section>
-</div>
 <div>
 <section class="panel"><header><h2>מפתחות</h2><span class="end muted small">הערכים עצמם לא מוצגים</span></header><ul class="keys">${d.keys.map((x) => `<li>${x.set ? `<span class="chip ok">${icon('check')}מוגדר</span>` : '<span class="chip ghost">חסר</span>'}<div><code>${esc(x.name)}</code><div class="muted small">${esc(x.he || x.what)}</div></div></li>`).join('')}</ul></section>
 <section class="panel"><header><h2>מצב המנוע</h2></header><dl class="kv"><dt>מקורות וכתיבה</dt><dd>${d.mode === 'live' ? '<span class="chip ok">חי</span> מקורות אמיתיים ו-Claude' : '<span class="chip warn">הקלטות</span> בלי רשת ובלי מפתח'}</dd>
 <dt>מתג פרסום חי</dt><dd>${d.liveSwitch ? '<span class="chip ok">PUBLISH_MODE=live</span>' : '<span class="chip ghost">כבוי: הכל יבש</span>'}</dd>
 ${d.publishers.map((p) => `<dt>${esc(p.name)}</dt><dd>${p.platforms.map((x) => `${PLATFORM_HE[x.platform] || x.platform}: ${publisherHe(x)}`).join(' · ')}</dd>`).join('')}</dl></section>
 ${d.instagram.length ? `<section class="panel"><header><h2>אינסטגרם ישירות (Meta Graph API)</h2></header><ul class="factlist">${d.instagram.map((x) => `<li>${accDot(x.id)} <b>${esc(x.name)}</b> ${x.configured ? '<span class="chip ok">מחובר</span>' : `<span class="chip ghost">חסר ${!x.userId ? 'instagram.userId ב-pack.json' : `<code class="ltr">${esc(x.tokenEnv)}</code>`}</span>`} <span class="muted small">${x.auth === 'instagram' ? 'Instagram Login' : 'Facebook Login (עמוד פייסבוק)'}${x.daysLeft != null ? ` · האסימון בתוקף עוד ${x.daysLeft} ימים` : ''}</span></li>`).join('')}</ul><p class="muted small">בדיקה מלאה של האסימון, החשבון ונתוני ה-insights: <code class="ltr">npm run instagram:check</code></p></section>` : ''}
-<section class="panel"><header><h2>החשבון שלך</h2></header><p class="muted m0">שם המשתמש: <b>${esc(ctx.user?.name || '')}</b></p><div class="actions p0 mt12">${postButton(ctx, '/logout', `${icon('logout')}יציאה`, { cls: 'btn danger' })}</div></section>
-<section class="panel"><header><h2>משתמשים</h2></header><ul class="factlist">${d.users.map((u) => `<li><b>${esc(u.name)}</b> <span class="chip ghost">${esc(ROLE_HE[u.role] || u.role)}</span> <span class="muted small">${u.last_login_at ? `נכנס ${esc(stamp(u.last_login_at))}` : ''}</span></li>`).join('')}</ul><p class="muted small">משתמש נוסף: <code class="ltr">npm run user:add -- name</code></p></section>
+<section class="panel"><header><h2>משתמש נוסף</h2></header><p class="muted small m0"><code class="ltr">npm run user:add -- name</code></p></section>
+</div>
+<div>
 <section class="panel"><header><h2>יומן פעולות</h2></header><ol class="trace">${d.audit.map((a) => `<li class="ok"><b>${esc(AUDIT_HE[a.action] || a.action)}</b> <span class="muted small">${esc(a.actor)} · ${esc(stamp(a.at))}${a.account_id ? ` · ${esc(a.account_id)}` : ''}</span></li>`).join('')}</ol></section>
-</div></div>`;
+</div></div>`
+    : '';
+  const body = `<div class="head"><h1>הגדרות</h1></div>
+<div class="cols even">
+<div>
+<section class="panel" id="push"><header><h2>התראות</h2><span class="end">${d.push?.browsers ? `<span class="chip ok">${d.push.browsers === 1 ? 'מכשיר אחד' : `${d.push.browsers} מכשירים`}</span>` : '<span class="chip ghost">כבוי</span>'}</span></header>
+<p class="muted">פוסט שאישרתם נשלח מיד לטיוטות של טיקטוק, ובשעה שלו מגיעה התראה לפרסם אותו.</p>
+<p class="muted small">באייפון: פתחו את תדר בספארי, שתפו ואז "הוסף למסך הבית", ופתחו את תדר מהאייקון. רק משם אפשר להפעיל התראות.</p>
+<form method="post" action="/push/subscribe" data-ajax="reload" data-push="${esc(d.push?.key || '')}">${csrfField(ctx)}<input type="hidden" name="endpoint" value=""><button class="btn" type="button" data-push-enable>${icon('spark')}הפעל התראות במכשיר הזה</button></form>
+<form method="post" action="/push/unsubscribe" data-ajax="reload" data-push-off hidden>${csrfField(ctx)}<input type="hidden" name="endpoint" value=""><button class="btn ghost" type="button" data-push-disable>כבה התראות במכשיר הזה</button></form>
+</section>
+<section class="panel"><header><h2>מתי נכתבים הפוסטים</h2></header><p class="muted">כל יום בשעה הזו תדר כותב את הפוסטים של היום ושולח אותם לאישור.</p><form method="post" action="/settings/generate-at" class="formgrid">${csrfField(ctx)}<label class="f">שעה<input type="time" name="at" value="${esc(s.generateAt)}" dir="ltr"></label><button class="btn" type="submit">שמור</button></form></section>
+<section class="panel"><header><h2>צוות</h2></header><ul class="factlist">${d.users.map((u) => `<li><b>${esc(u.name)}</b> <span class="chip ghost">${esc(ROLE_HE[u.role] || u.role)}</span> <span class="muted small">${u.last_login_at ? `נכנס ${esc(stamp(u.last_login_at))}` : 'עוד לא נכנס'}</span></li>`).join('')}</ul></section>
+</div>
+<div>
+${budgetPanel(ctx, d, { dev })}
+<section class="panel"><header><h2>החשבון שלך</h2></header><p class="muted m0">מחובר בתור <b>${esc(ctx.user?.name || '')}</b></p><div class="actions p0 mt12">${postButton(ctx, '/logout', `${icon('logout')}יציאה`, { cls: 'btn' })}</div></section>
+<section class="panel"><header><h2>עצירת חירום</h2><span class="end">${s.globalKill ? '<span class="chip bad">הכל עצור</span>' : ''}</span></header>
+<p class="muted">עוצר את כל החשבונות מיד: שום פוסט לא נכתב ושום פוסט לא מתפרסם עד שמפעילים מחדש.</p>
+${s.globalKill ? postButton(ctx, '/settings/kill', 'הפעל הכל מחדש', { cls: 'btn primary', fields: { on: '0' } }) : postButton(ctx, '/settings/kill', `${icon('power')}עצור הכל`, { cls: 'btn danger', fields: { on: '1' }, confirm: 'בטוח? לחצו שוב לעצירה' })}
+</section>
+</div></div>
+${devPanels}
+${dev ? '' : `<form method="post" action="/settings/dev" class="ver"${ctx.user?.role === 'owner' ? ' data-devtap' : ''}>${csrfField(ctx)}<input type="hidden" name="on" value="1"><span>תדר · גרסה ${esc(VERSION)}</span></form>`}`;
   return layout({ ...ctx, title: 'הגדרות', active: 'settings' }, body);
 }
 

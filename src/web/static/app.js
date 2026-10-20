@@ -197,4 +197,15 @@
   };
   document.addEventListener('click', closeSwitch);
   document.addEventListener('keydown', closeSwitch);
+  // Developer mode opens from the settings' version line, tapped seven times in a row: not a button anyone finds.
+  let taps = 0;
+  let lastTap = 0;
+  document.addEventListener('click', (e) => {
+    const line = e.target.closest('[data-devtap]');
+    if (!line) return;
+    const t = Date.now();
+    taps = t - lastTap < 800 ? taps + 1 : 1;
+    lastTap = t;
+    if (taps >= 7) line.submit();
+  });
 })();
