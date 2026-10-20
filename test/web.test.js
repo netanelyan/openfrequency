@@ -241,11 +241,13 @@ test('the Settings page shows the month against the cap: spent, forecast, posts 
   const dev = await (await get('/settings', `${cookie}; of_dev=1`)).text();
   for (const s of ['OF_BUDGET_MONTHLY_USD', 'נתח']) assert.ok(dev.includes(s), s);
   const csrf = await csrfOf(cookie);
-  let res = await post('/settings/budget', cookie, { _csrf: csrf, budget: '400' });
+  // The owner types tokens, 100 to a dollar, and reads tokens: no dollar sign outside developer mode.
+  assert.doesNotMatch(html, /\$\d/);
+  let res = await post('/settings/budget', cookie, { _csrf: csrf, budget: '40000' });
   assert.equal(res.status, 400, 'never above OF_BUDGET_MONTHLY_USD');
-  res = await post('/settings/budget', cookie, { _csrf: csrf, budget: '10' });
+  res = await post('/settings/budget', cookie, { _csrf: csrf, budget: '1000' });
   assert.equal(res.status, 200);
-  assert.match(await (await get('/settings', cookie)).text(), /\$[\d.]+ \/ \$10/);
+  assert.match(await (await get('/settings', cookie)).text(), /<b class="num">[\d,]+ \/ 1,000<\/b>/, 'a cap of 1,000 tokens is $10');
   await post('/settings/budget', cookie, { _csrf: csrf, budget: '0' });
 });
 

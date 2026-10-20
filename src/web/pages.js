@@ -1,4 +1,4 @@
-import { accDot, csrfField, dayHe, esc, icon, k, layout, markDots, MODE_HE, postButton, shortDate, stamp, statusChip, timeHe, usd, weekdayNarrow } from './ui.js';
+import { accDot, csrfField, dayHe, esc, icon, k, layout, markDots, MODE_HE, postButton, shortDate, stamp, statusChip, timeHe, tok, tokenNum, TOKENS_PER_USD, usd, weekdayNarrow } from './ui.js';
 import { PAUSE_REASONS } from '../autonomy/rails.js';
 import { FLOW_HE, draftNote, flowState } from '../publish/draft.js';
 import { CATALOG } from '../sources/catalog.js';
@@ -189,8 +189,8 @@ function summaryPanel(d) {
   const rows = d.summaryRows || [];
   const name = (id) => d.groups.find((g) => g.pack.id === id)?.pack.meta.displayName || id;
   const table = rows.length
-    ? `<table class="table sumtab"><thead><tr><th>חשבון</th><th>פורסמו</th><th>הוצאה</th></tr></thead><tbody>${rows
-        .map((r) => `<tr><td>${accDot(r.account_id)} ${esc(name(r.account_id))}</td><td>${n(r.data.published?.length || 0, 'ok')}</td><td>${usd(r.data.spend)}</td></tr>`)
+    ? `<table class="table sumtab"><thead><tr><th>חשבון</th><th>פורסמו</th><th>טוקנים</th></tr></thead><tbody>${rows
+        .map((r) => `<tr><td>${accDot(r.account_id)} ${esc(name(r.account_id))}</td><td>${n(r.data.published?.length || 0, 'ok')}</td><td class="num">${tokenNum(r.data.spend)}</td></tr>`)
         .join('')}</tbody></table>`
     : `<p class="lede">${esc(d.summary.text).replace(/\n/g, '<br>')}</p>`;
   return `<details class="panel home-panel"><summary><h2 class="inline">סיכום ${esc(shortDate(`${d.summary.day}T12:00:00Z`))}</h2></summary>${table}</details>`;
@@ -296,7 +296,7 @@ export function postPage(ctx, d, { problems = [], values = null } = {}) {
       if (det.why) bits.push(det.why);
       if (det.via) bits.push(det.via === 'dry' ? 'פרסום יבש: נכתב לדיסק' : `דרך ${det.via}`);
       if (det.provider) bits.push(`${det.provider}, ${det.license}`);
-      return `<li class="${esc(s.status)}"><b>${esc(STEP_HE[s.step] || s.step)}</b> <span class="muted small num">${esc(stamp(s.at))}${s.cost_usd ? ` · $${s.cost_usd.toFixed(4)}` : ''}</span>${bits.length ? `<div class="d">${esc(bits.join(' · '))}</div>` : ''}</li>`;
+      return `<li class="${esc(s.status)}"><b>${esc(STEP_HE[s.step] || s.step)}</b> <span class="muted small num">${esc(stamp(s.at))}${s.cost_usd && ctx.dev ? ` · $${s.cost_usd.toFixed(4)}` : ''}</span>${bits.length ? `<div class="d">${esc(bits.join(' · '))}</div>` : ''}</li>`;
     })
     .join('');
   const scores = post.checks?.scores || [];
@@ -358,7 +358,7 @@ ${topicPanel(d.topic)}
 <dt>בודק הקול</dt><dd>${post.checks?.reviewer === 'claude' ? 'Claude' : 'אופליין (בלי מפתח API)'}</dd>
 ${scores.length ? `<dt>ציון הכי גבוה</dt><dd><span class="num ltr">${Math.max(...scores)}/10</span></dd>` : ''}
 ${(post.checks?.rewrites || []).length ? `<dt>שכתובים</dt><dd>${post.checks.rewrites.length}</dd>` : ''}
-<dt>עלות</dt><dd>${usd(post.cost_usd, 4)}${post.cost_estimated ? ' <span class="muted small">הערכה, בלי מפתח API</span>' : ''}</dd>
+<dt>עלות</dt><dd>${tok(post.cost_usd)}${ctx.dev ? ` <span class="muted small">${usd(post.cost_usd, 4)}${post.cost_estimated ? ', הערכה, בלי מפתח API' : ''}</span>` : ''}</dd>
 ${post.kind && post.kind !== 'list' ? `<dt>סוג</dt><dd>${esc(KIND_HE[post.kind] || post.kind)} · ${post.grp === 'entertaining' ? 'בידור' : 'מספרים'}</dd>` : ''}
 ${post.hook_pattern ? `<dt>תבנית השער</dt><dd><span class="ltr">${esc(post.hook_pattern)}</span></dd>` : ''}
 ${post.data?.cta?.text ? `<dt>קריאה לפעולה</dt><dd>${esc(post.data.cta.text)}</dd>` : ''}
@@ -388,7 +388,7 @@ ${paused ? `<div class="paused${acc.paused_reason === 'kill' ? ' kill' : ''}">${
 <form method="post" action="/accounts/${esc(pack.id)}/mode" data-autosubmit>${csrfField(ctx)}<div class="seg" role="radiogroup" aria-label="מצב אוטונומיה">${['approve', 'digest', 'auto']
         .map((m) => `<input type="radio" name="mode" value="${m}" id="m-${esc(pack.id)}-${m}"${acc.mode === m ? ' checked' : ''}><label for="m-${esc(pack.id)}-${m}">${MODE_HE[m][0]}<small>${MODE_HE[m][1]}</small></label>`)
         .join('')}</div><noscript><button class="btn sm" type="submit">שמור</button></noscript></form>
-<div><div class="row"><span>הנתח מהתקציב</span><b class="ltr">$${spend.toFixed(2)} / $${cap.toFixed(2)}</b></div><meter min="0" max="${cap || 1}" low="${(cap || 1) * 0.7}" high="${(cap || 1) * 0.9}" optimum="0" value="${Math.min(spend, cap || 1)}"></meter>${plan?.cut ? `<p class="small m4"><span class="chip warn">פוסט ${plan.perDay === 1 ? 'אחד' : plan.perDay} ביום במקום ${plan.planned}</span> התקציב קצר החודש, וזה החשבון שמצמצם ראשון.</p>` : ''}</div>
+<div><div class="row"><span>הנתח מהתקציב</span><b class="num">${tokenNum(spend)} / ${tokenNum(cap)} טוקנים</b></div><meter min="0" max="${cap || 1}" low="${(cap || 1) * 0.7}" high="${(cap || 1) * 0.9}" optimum="0" value="${Math.min(spend, cap || 1)}"></meter>${plan?.cut ? `<p class="small m4"><span class="chip warn">פוסט ${plan.perDay === 1 ? 'אחד' : plan.perDay} ביום במקום ${plan.planned}</span> התקציב קצר החודש, וזה החשבון שמצמצם ראשון.</p>` : ''}</div>
 <div><div class="row"><span>7 הימים האחרונים</span><b>${week.days.reduce((s, x) => s + x.n, 0)} פורסמו${week.views != null ? ` · ${k(week.views)} צפיות` : ''}</b></div>
 <div class="week" aria-label="פוסטים שפורסמו בכל יום">${week.days.map((x) => `<span title="${esc(shortDate(x.at))}: ${x.n}"><i class="${h(x.n)}"></i>${esc(weekdayNarrow(x.at))}</span>`).join('')}</div></div>
 <dl class="kv"><dt>בתור</dt><dd>${week.counts.queued || 0} ממתינים · ${week.counts.approved || 0} מאושרים</dd><dt>נחסמו השבוע</dt><dd>${week.counts.blocked || 0}</dd><dt>פרסום</dt><dd>${publishers.map((x) => `${PLATFORM_HE[x.platform] || x.platform}: ${publisherHe(x)}`).join(' · ')}</dd>${style ? `<dt>סגנון</dt><dd><span class="ltr">${esc(style.theme.template)}/${esc(style.theme.variant || 'a')}</span> · נעול מ-${esc(shortDate(style.at))}</dd>` : ''}</dl>
@@ -694,14 +694,14 @@ export function budgetPanel(ctx, d, { dev = false } = {}) {
     )
     .join('');
   return `<section class="panel" id="budget"><header><h2>תקציב חודשי</h2><span class="end"><span class="chip ${cls}">${esc(lvl)}</span></span></header>
-<div class="row spread"><span>הוצאה ב-${esc(p.month)}</span><b class="ltr num">$${p.spent.toFixed(2)} / $${p.cap}</b></div>
+<div class="row spread"><span>טוקנים ב-${esc(p.month)}</span><b class="num">${tokenNum(p.spent)} / ${tokenNum(p.cap)}</b></div>
 <meter min="0" max="${p.cap || 1}" low="${(p.cap || 1) * 0.7}" high="${(p.cap || 1) * 0.8}" optimum="0" value="${Math.min(p.spent, p.cap || 1)}"></meter>
-<dl class="kv mt12"><dt>תחזית לסוף החודש</dt><dd>${usd(p.forecast)}</dd><dt>נשאר</dt><dd>${usd(p.left)}, בערך ${p.postsLeft} פוסטים</dd></dl>
+<dl class="kv mt12"><dt>תחזית לסוף החודש</dt><dd>${tok(p.forecast)}</dd><dt>נשאר</dt><dd>${tok(p.left)}, בערך ${p.postsLeft} פוסטים</dd>${dev ? `<dt>בדולרים</dt><dd>${usd(p.spent)} / ${usd(p.cap, 0)}, תחזית ${usd(p.forecast)}</dd>` : ''}</dl>
 <p class="muted small">כשהתקציב לא מספיק לכל החודש, החשבון החלש מפרסם פחות. ב-80% מופיעה אזהרה, וב-100% לא נכתבים פוסטים חדשים עד החודש הבא.</p>
 ${dev ? `<dl class="kv mt12"><dt>שמור לקריאות שעוד רצות</dt><dd>${usd(p.reserved, 3)}</dd><dt>לפוסט</dt><dd>${usd(p.costPerPost, 3)}</dd></dl>
 <div class="scrollx mt12"><table class="table stack"><thead><tr><th>חשבון</th><th>נתח</th><th>הוצאה</th><th>לפוסט</th><th>ביום</th><th>נשארו החודש</th><th>חוזק</th></tr></thead><tbody>${rows}</tbody></table></div>
 <p class="muted small">התקרה היא <code class="ltr">OF_BUDGET_MONTHLY_USD</code> ב-<code class="ltr">.env</code> (${capUsd}), לכל שירות בתשלום חוץ מ-Zernio. כל קריאה שומרת קודם את המחיר הגבוה ביותר שהיא יכולה לעלות, ולכן שום דבר לא עובר את התקרה.</p>` : ''}
-<form method="post" action="/settings/budget" class="formgrid mt12">${csrfField(ctx)}<label class="f">תקרה נמוכה יותר לחודש הזה <small>עד ${capUsd}; 0 מבטל אותה</small><input type="number" name="budget" min="0" max="${d.envCap}" step="0.5" value="${esc(lower)}"></label><button class="btn" type="submit">שמור</button></form></section>`;
+<form method="post" action="/settings/budget" class="formgrid mt12">${csrfField(ctx)}<label class="f">תקרה נמוכה יותר לחודש הזה <small>עד ${tokenNum(d.envCap)} טוקנים; 0 מבטל אותה</small><input type="number" name="budget" min="0" max="${Math.round(d.envCap * TOKENS_PER_USD)}" step="50" value="${esc(Math.round(lower * TOKENS_PER_USD))}"></label><button class="btn" type="submit">שמור</button></form></section>`;
 }
 
 /**

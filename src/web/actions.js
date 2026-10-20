@@ -225,11 +225,14 @@ export function globalKill(ctx, user, _p, form) {
 /** A lower cap than OF_BUDGET_MONTHLY_USD for now, never a higher one; 0 goes back to it. */
 export function setBudget(ctx, user, _p, form) {
   const hard = Number(process.env.OF_BUDGET_MONTHLY_USD) > 0 ? Number(process.env.OF_BUDGET_MONTHLY_USD) : DEFAULT_MONTHLY_USD;
-  const n = Number(form.budget);
-  if (!(n >= 0 && n <= hard)) throw new ActionError(`תקרה בין 0 ל-${hard} דולר. התקרה עצמה נקבעת ב-.env (OF_BUDGET_MONTHLY_USD)`);
+  // The owner types tokens (100 to a dollar); the cap is kept in dollars, as the ledger counts.
+  const t = Number(form.budget);
+  const max = Math.round(hard * 100);
+  if (!(t >= 0 && t <= max)) throw new ActionError(`תקרה בין 0 ל-${max.toLocaleString('en-US')} טוקנים`);
+  const n = t / 100;
   setSetting(ctx.db, 'globalBudgetUsd', n);
   audit(ctx.db, { actor: user.name, action: 'global_budget', detail: { usd: n || hard } });
-  return { ok: true, message: n ? `התקרה לחודש הזה: ${n}.` : `התקרה חזרה ל-${hard} מ-.env.` };
+  return { ok: true, message: n ? `התקרה לחודש הזה: ${t.toLocaleString('en-US')} טוקנים.` : `התקרה חזרה ל-${max.toLocaleString('en-US')} טוקנים.` };
 }
 
 export function setGenerateAt(ctx, user, _p, form) {

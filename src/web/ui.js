@@ -29,6 +29,12 @@ export const timeHe = (t) => (t ? F.time.format(new Date(t)) : '');
 export const stamp = (t) => (t ? F.stamp.format(new Date(t)) : '');
 export const weekdayNarrow = (t) => F.wd.format(new Date(t));
 export const usd = (n, d = 2) => `<span class="num ltr">$${(Number(n) || 0).toFixed(d)}</span>`;
+// What the owner sees is tokens, never dollars: a dollar of the month's spend is 100 tokens. Developer mode keeps
+// the dollars, which is what the services bill.
+export const TOKENS_PER_USD = 100;
+export const toTokens = (usdAmount) => Math.round((Number(usdAmount) || 0) * TOKENS_PER_USD);
+export const tokenNum = (usdAmount) => toTokens(usdAmount).toLocaleString('en-US');
+export const tok = (usdAmount) => `<span class="num">${tokenNum(usdAmount)} טוקנים</span>`;
 export const k = (n) => (n == null ? '–' : n >= 10_000 ? `${Math.round(n / 1000)}K` : n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(n));
 export const pct = (x) => (x == null ? '–' : `${Math.round(x * 100)}%`);
 
@@ -95,7 +101,7 @@ export function budgetBanner(b) {
   const pctTxt = `${Math.round((b.share || 0) * 100)}%`;
   const nm = b.nextMonth ? shortDate(`${b.nextMonth}T12:00:00Z`) : 'החודש הבא';
   if (b.level === 'stop') out.push(`<div class="banner bad">${icon('alert')}<div><b>התקציב החודשי נגמר.</b><p>שום פוסט לא נכתב עד ${esc(nm)}. פוסטים שכבר אושרו ממשיכים לצאת.</p></div><a class="btn sm" href="/settings#budget">לתקציב</a></div>`);
-  else if (b.level === 'warn') out.push(`<div class="banner warn">${icon('alert')}<div><b>${pctTxt} מהתקציב החודשי כבר נוצלו.</b><p>התחזית לסוף החודש: $${(b.forecast || 0).toFixed(2)} מתוך $${b.cap}. ב-100% שום פוסט לא נכתב עד ${esc(nm)}.</p></div><a class="btn sm" href="/settings#budget">לתקציב</a></div>`);
+  else if (b.level === 'warn') out.push(`<div class="banner warn">${icon('alert')}<div><b>${pctTxt} מהתקציב החודשי כבר נוצלו.</b><p>התחזית לסוף החודש: ${tokenNum(b.forecast)} מתוך ${tokenNum(b.cap)} טוקנים. ב-100% שום פוסט לא נכתב עד ${esc(nm)}.</p></div><a class="btn sm" href="/settings#budget">לתקציב</a></div>`);
   if (b.cuts?.length) {
     out.push(`<div class="banner info">${icon('clock')}<div><b>התקציב קצר החודש, אז חלק מהחשבונות מפרסמים פחות.</b>${b.cuts.map((c) => `<p>${esc(c.name)}: ${rateText(c.perDay)} במקום ${c.planned} ביום.</p>`).join('')}</div><a class="btn sm" href="/settings#budget">למה</a></div>`);
   }
@@ -157,7 +163,7 @@ ${SPRITE}
   <button class="sidetoggle" type="button" data-side aria-label="${ctx.side === 'mini' ? 'הרחב את סרגל הצד' : 'כווץ את סרגל הצד'}" aria-expanded="${ctx.side === 'mini' ? 'false' : 'true'}" title="${ctx.side === 'mini' ? 'הרחב' : 'כווץ'}">${icon('sidebar')}</button>
   <nav class="nav" aria-label="ראשי">${nav}</nav>
   <div class="tools">
-    <a class="spend" href="/settings#budget" title="ההוצאה החודשית: $${spent.toFixed(2)} מתוך $${cap} (${used}%)">${ring}<span class="lbl">החודש</span><span class="amt num ltr"><b>$${spent.toFixed(2)}</b><span> / $${cap}</span></span></a>
+    <a class="spend" href="/settings#budget" title="טוקנים החודש: ${tokenNum(spent)} מתוך ${tokenNum(cap)} (${used}%)">${ring}<span class="lbl">טוקנים</span><span class="amt num ltr"><b>${tokenNum(spent)}</b><span> / ${tokenNum(cap)}</span></span></a>
   </div>
 </div></header>
 <main class="wrap" id="main">

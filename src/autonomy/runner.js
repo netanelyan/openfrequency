@@ -369,7 +369,7 @@ export function writeSummaries(ctx, day) {
     const pub = db.all("SELECT id, hook, publish_json FROM posts WHERE account_id = ? AND status = 'published' AND published_at >= ? AND published_at < ?", pack.id, from, to);
     const blocked = db.all("SELECT reason FROM posts WHERE account_id = ? AND status = 'blocked' AND created_at >= ? AND created_at < ?", pack.id, from, to);
     const spend = db.get('SELECT COALESCE(SUM(usd),0) AS usd FROM spend WHERE account_id = ? AND at >= ? AND at < ?', pack.id, from, to).usd;
-    const text = `${pack.meta.displayName}: ${pub.length} פורסמו, ${blocked.length} נחסמו, $${spend.toFixed(2)}`;
+    const text = `${pack.meta.displayName}: ${pub.length} פורסמו, ${blocked.length} נחסמו, ${Math.round(spend * 100).toLocaleString('en-US')} טוקנים`;
     db.run('INSERT OR REPLACE INTO summaries (day, account_id, text, data_json, at) VALUES (?, ?, ?, ?, ?)', day, pack.id, text, JSON.stringify({ published: pub.map((p) => ({ id: p.id, hook: p.hook, via: Object.values(j(p.publish_json, {}))[0]?.via })), blocked: blocked.map((b) => b.reason), spend }), nowIso());
     lines.push(text);
   }
