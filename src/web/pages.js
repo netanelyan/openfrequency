@@ -453,18 +453,34 @@ const bars = (last) =>
   `<span class="rel" aria-label="שלוש התוצאות האחרונות ביחס לחציון">${last.map((r) => `<i class="${r.rel >= 1 ? 'win' : r.rel < 0.7 ? 'lose' : ''} h${Math.max(1, Math.min(4, Math.round(r.rel * 2)))}" title="${r.rel.toFixed(2)}"></i>`).join('')}</span>`;
 
 export function resultsPage(ctx, d) {
+  // What the published posts did leads. The formats, and what the checks stopped, wait behind a button each.
+  const sum = (p, f) => ['tiktok', 'instagram'].reduce((a, pl) => a + (p.metrics[pl]?.[f] || 0), 0);
+  const measured = d.posts.filter((p) => Object.keys(p.metrics).length);
+  const total = (f) => measured.reduce((a, p) => a + sum(p, f), 0);
+  const top = measured.slice().sort((a, b) => sum(b, 'views') - sum(a, 'views'))[0];
+  const most = Math.max(1, ...measured.map((p) => sum(p, 'views')));
+  const rels = new Map(d.scored.map((p) => [p.id, p.rel]));
+  const side = (label, v) => `<div><span class="l">${label}</span><b class="cnt num">${k(v)}</b></div>`;
+  const kpis = `<div class="kpis">
+<div class="kpi lead"><span class="l">צפיות</span><span class="v num">${k(total('views'))}</span><span class="s">${measured.length ? `ב-${measured.length} פוסטים שנמדדו${top ? ` · הכי נצפה: ${esc(top.hook)}` : ''}` : 'עוד אין פוסט שנמדד'}</span></div>
+<div class="kpi side">${side('לייקים', total('likes'))}${side('שיתופים', total('shares'))}${side('תגובות', total('comments'))}${side('שמירות', total('saves'))}</div>
+</div>`;
   const postRow = (p) => {
-    const t = p.metrics.tiktok;
-    const ig = p.metrics.instagram;
-    return `<tr><td class="title" data-k="">${accDot(p.account_id)} <a href="/post/${esc(p.id)}">${esc(p.hook)}</a></td><td class="n" data-k="פורסם">${esc(shortDate(p.published_at))}</td><td class="n" data-k="טיקטוק">${t ? `${k(t.views)} · ${((t.score || 0) * 100).toFixed(1)}%` : '–'}</td><td class="n" data-k="אינסטגרם">${ig ? `${k(ig.views)} · ${((ig.score || 0) * 100).toFixed(1)}%` : '–'}</td><td class="n" data-k="מול החציון">${p.rel != null ? `${p.rel.toFixed(2)}×` : '–'}</td></tr>`;
+    const has = Object.keys(p.metrics).length > 0;
+    const v = sum(p, 'views');
+    const r = rels.get(p.id);
+    const per = ['tiktok', 'instagram'].filter((pl) => p.metrics[pl]).map((pl) => `${PLATFORM_HE[pl]} ${k(p.metrics[pl].views)}`).join(' · ');
+    const cell = (f) => (has ? k(sum(p, f)) : '–');
+    return `<tr><td class="title" data-k="">${accDot(p.account_id)} <a href="/post/${esc(p.id)}">${esc(p.hook)}</a><div class="muted small">${esc(shortDate(p.published_at))}${per ? ` · ${esc(per)}` : ''}</div></td>
+<td class="n views" data-k="צפיות">${has ? `<span class="vbar" aria-hidden="true"><i class="w${Math.max(1, Math.round((v / most) * 10))}"></i></span>${k(v)}` : '<span class="muted">עוד לא נמדד</span>'}</td><td class="n" data-k="לייקים">${cell('likes')}</td><td class="n" data-k="שיתופים">${cell('shares')}</td><td class="n" data-k="תגובות">${cell('comments')}</td><td class="n" data-k="מול החציון">${r != null ? `<span class="cnt${r >= 1 ? ' ok' : ''}">${r.toFixed(2)}×</span>` : '–'}</td></tr>`;
   };
-  const table = (rows) => `<table class="table stack"><thead><tr><th>פוסט</th><th>פורסם</th><th>טיקטוק</th><th>אינסטגרם</th><th>מול החציון</th></tr></thead><tbody>${rows.map(postRow).join('')}</tbody></table>`;
+  const posts = d.posts.length
+    ? `<section class="panel"><header><h2>הפוסטים שפורסמו</h2><span class="end muted small">${d.posts.length}</span></header>
+<table class="table stack resposts"><thead><tr><th>פוסט</th><th>צפיות</th><th>לייקים</th><th>שיתופים</th><th>תגובות</th><th>מול החציון</th></tr></thead><tbody>${d.posts.map(postRow).join('')}</tbody></table>
+<p class="muted small">כל פוסט נמדד 72 שעות אחרי שעלה, מול החציון של אותה פלטפורמה: בטיקטוק שיתופים ולייקים לצפייה (טיקטוק לא מדווחת שמירות), באינסטגרם שמירות לחשיפה.</p></section>`
+    : `<div class="empty">${icon('results')}<b>אין עדיין מספרים</b>המספרים נקראים מ-Zernio רק מפוסטים שפורסמו בפועל, והציון נקבע 72 שעות אחרי הפרסום.</div>`;
   const dropped = d.formats.flatMap((f) => f.rows.filter((r) => r.status === 'dropped' || r.atRisk).map((r) => ({ ...r, pack: f.pack })));
-  const body = `<div class="head"><h1>תוצאות</h1><span class="sub">30 הימים האחרונים</span></div>
-${d.demo ? `<div class="banner info">${icon('alert')}<div><b>נתוני הדגמה בדויים.</b><p>המספרים בדף הזה נזרעו לחשבון הדמו כדי להראות איך הדף נראה. מספרים אמיתיים מגיעים רק מ-Zernio, 72 שעות אחרי פרסום.</p></div></div>` : ''}
-<p class="lede">כל פוסט נמדד 72 שעות אחרי שעלה, מול החציון של אותה פלטפורמה: בטיקטוק שיתופים ולייקים לצפייה (טיקטוק לא מדווחת שמירות), באינסטגרם שמירות לחשיפה (reach). 70% מהפוסטים בפורמטים מוכחים, 30% בניסיונות, ופורמט נושר אחרי 3 תוצאות ברצף מתחת ל-70% מהחציון.</p>
-${blocksPanel(d.blocks)}
-${feedbackPanels(d.feedback || [])}
+  const formats = `<p class="lede">70% מהפוסטים בפורמטים מוכחים, 30% בניסיונות, ופורמט נושר אחרי 3 תוצאות ברצף מתחת ל-70% מהחציון.</p>
 ${(d.learning || []).filter((l) => l.share != null).map((l) => `<section class="panel"><header>${accDot(l.pack.id)}<h2>${esc(l.pack.meta.displayName)}: בידור מול מספרים</h2></header>
 <p>עכשיו <b class="num">${Math.round(l.share * 100)}%</b> מהפוסטים בפורמטים של בידור (סיפור, נחשו מי, קרחון...) ו-<b class="num">${Math.round((1 - l.share) * 100)}%</b> בפורמטים של מספרים (ראש בראש, דירוג).${l.recent ? ` מתוך ${l.recent} הפוסטים האחרונים, ${l.recentEnt} היו בידור.` : ''}</p>
 <p class="muted small">${l.learned?.why ? `השינוי האחרון (${esc(shortDate(l.learned.at))}): ${esc(l.learned.why)}.` : `עוד לא זז: היחס זז ב-5 נקודות בכל פעם, לכל היותר פעם בשבוע, בין ${Math.round(MIX.min * 100)}% ל-${Math.round(MIX.max * 100)}% בידור, לכיוון הקבוצה שהפוסטים שלה עושים יותר טוב, ורק כשיש לפחות 3 תוצאות בכל קבוצה.`}</p>
@@ -473,8 +489,7 @@ ${l.hooks.some((h) => h.used) ? `<table class="table stack"><thead><tr><th>תב�
   .sort((a, b) => (b.avg ?? -1) - (a.avg ?? -1))
   .map((h) => `<tr><td data-k="">${esc(h.pattern)}</td><td data-k="פורמט">${esc(h.format)}</td><td class="n" data-k="שימושים">${h.used}</td><td class="n" data-k="ממוצע">${h.avg != null ? `${h.avg.toFixed(2)}× (${h.n})` : 'אין עוד מספרים'}</td></tr>`)
   .join('')}</tbody></table>` : '<p class="muted small">אין עדיין פוסטים לפי תבניות השער: כל תבנית מקבלת קודם שני תורות, ואז נבחרת לפי התוצאות.</p>'}</section>`).join('')}
-${d.scored.length ? `<div class="cols even"><section class="panel"><header><h2>מנצחים</h2></header>${table(d.winners)}</section><section class="panel"><header><h2>מפסידים</h2></header>${table(d.losers)}</section></div>` : `<div class="empty">${icon('results')}<b>אין עדיין מספרים</b>המספרים נקראים מ-Zernio רק מפוסטים שפורסמו בפועל, והציון נקבע 72 שעות אחרי הפרסום.</div>`}
-<section class="panel mt16"><header><h2>מה נושר ולמה</h2></header>${dropped.length ? `<ul class="factlist">${dropped.map((r) => `<li>${accDot(r.pack.id)} <b>${esc(r.name)}</b> ${r.status === 'dropped' ? '<span class="chip bad">נשר</span>' : '<span class="chip warn">בסכנה</span>'}<div class="muted small">${esc(r.dropped_why || 'שתי התוצאות האחרונות מתחת ל-70% מהחציון: עוד אחת והוא נושר')}</div></li>`).join('')}</ul>` : '<p class="muted">אף פורמט לא נשר ואף אחד לא בסכנה.</p>'}</section>
+<section class="panel"><header><h2>מה נושר ולמה</h2></header>${dropped.length ? `<ul class="factlist">${dropped.map((r) => `<li>${accDot(r.pack.id)} <b>${esc(r.name)}</b> ${r.status === 'dropped' ? '<span class="chip bad">נשר</span>' : '<span class="chip warn">בסכנה</span>'}<div class="muted small">${esc(r.dropped_why || 'שתי התוצאות האחרונות מתחת ל-70% מהחציון: עוד אחת והוא נושר')}</div></li>`).join('')}</ul>` : '<p class="muted">אף פורמט לא נשר ואף אחד לא בסכנה.</p>'}</section>
 ${d.formats
   .map(
     (f) => `<section class="panel"><header>${accDot(f.pack.id)}<h2>${esc(f.pack.meta.displayName)}: פורמטים</h2></header>
@@ -482,9 +497,17 @@ ${d.formats
       .map((r) => `<tr><td data-k="">${esc(r.name)}</td><td data-k="סוג">${r.kind === 'proven' ? 'מוכח' : 'ניסיון'}</td><td data-k="מצב">${r.status === 'dropped' ? '<span class="chip bad">נשר</span>' : r.atRisk ? '<span class="chip warn">בסכנה</span>' : '<span class="chip ok">פעיל</span>'}</td><td class="n" data-k="תוצאות">${r.n}</td><td class="n" data-k="ממוצע">${r.avg != null ? `${r.avg.toFixed(2)}×` : '–'}</td><td data-k="אחרונות">${r.last.length ? bars(r.last) : '–'}</td></tr>`)
       .join('')}</tbody></table></section>`
   )
-  .join('')}`;
-  const trendsPanel = `<section class="panel"><header><h2>פורמטים שעובדים עכשיו</h2><span class="end muted small">שורטס ביוטיוב, עם המספרים של יוטיוב עצמו</span></header>${d.trends.length ? `<ul class="factlist">${d.trends.map((x) => `<li>${accDot(x.account_id)} ${x.status === 'kept' ? '<span class="chip ok">נכנס לניסיון</span>' : '<span class="chip ghost">נדחה</span>'} <a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${k(x.views)} צפיות ${icon('ext')}</a>${x.card?.hookShape ? ` <b>${esc(x.card.hookShape)}</b>` : ''}<div class="muted small">${esc(x.why || x.card?.why || '')}</div></li>`).join('')}</ul>` : '<p class="muted">עוד לא נבדק. עם YOUTUBE_API_KEY המנוע מחפש פעם בשבוע שורטס שעובדים בנישה של כל חשבון, לומד מהם את הפורמט בלבד, ומכניס אותו לניסיון.</p>'}</section>`;
-  return layout({ ...ctx, title: 'תוצאות', active: 'results' }, body + trendsPanel);
+  .join('')}
+<section class="panel"><header><h2>פורמטים שעובדים עכשיו</h2><span class="end muted small">שורטס ביוטיוב, עם המספרים של יוטיוב עצמו</span></header>${d.trends.length ? `<ul class="factlist">${d.trends.map((x) => `<li>${accDot(x.account_id)} ${x.status === 'kept' ? '<span class="chip ok">נכנס לניסיון</span>' : '<span class="chip ghost">נדחה</span>'} <a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${k(x.views)} צפיות ${icon('ext')}</a>${x.card?.hookShape ? ` <b>${esc(x.card.hookShape)}</b>` : ''}<div class="muted small">${esc(x.why || x.card?.why || '')}</div></li>`).join('')}</ul>` : '<p class="muted">עוד לא נבדק. עם YOUTUBE_API_KEY המנוע מחפש פעם בשבוע שורטס שעובדים בנישה של כל חשבון, לומד מהם את הפורמט בלבד, ומכניס אותו לניסיון.</p>'}</section>`;
+  const blocks = blocksPanel(d.blocks);
+  const fold = (id, ic, label, inner) => `<details class="more" id="${id}"><summary class="btn sm">${icon(ic)}${label}</summary><div class="more-in">${inner}</div></details>`;
+  const body = `<div class="head"><h1>תוצאות</h1><span class="sub">30 הימים האחרונים</span></div>
+${d.demo ? `<div class="banner info">${icon('alert')}<div><b>נתוני הדגמה בדויים.</b><p>המספרים בדף הזה נזרעו לחשבון הדמו כדי להראות איך הדף נראה. מספרים אמיתיים מגיעים רק מ-Zernio, 72 שעות אחרי פרסום.</p></div></div>` : ''}
+${kpis}
+${posts}
+${feedbackPanels(d.feedback || [])}
+<div class="mores">${fold('formats', 'results', 'פורמטים', formats)}${blocks ? fold('blocks-fold', 'alert', 'מה חוסם פוסטים', blocks) : ''}</div>`;
+  return layout({ ...ctx, title: 'תוצאות', active: 'results' }, body);
 }
 
 /* ------------------------------------------------------------ sources */

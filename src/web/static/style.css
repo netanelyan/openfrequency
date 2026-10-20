@@ -726,8 +726,8 @@ details.rivaledit > summary { cursor: pointer; min-height: 44px; display: flex; 
 a.kpi.lead:hover { text-decoration: none; background: var(--inset); }
 .kpi.lead .s { color: var(--ink-3); font-size: 14px; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kpi.side { padding: 4px 20px; justify-content: center; }
-.kpi.side a { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 52px; color: inherit; border-bottom: 1px solid var(--line); }
-.kpi.side a:last-child { border-bottom: 0; }
+.kpi.side > a, .kpi.side > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 52px; color: inherit; border-bottom: 1px solid var(--line); }
+.kpi.side > :last-child { border-bottom: 0; }
 .kpi.side a:hover { text-decoration: none; }
 .kpi.side .l { color: var(--ink-2); font-size: 15px; }
 .kpi.side .cnt { font: 700 24px/1 var(--display); }
@@ -780,3 +780,28 @@ a.kpi.lead:hover { text-decoration: none; background: var(--inset); }
 
 /* Settings: the push forms swap with this device's state (app.js). */
 [hidden] { display: none !important; }
+
+/* Results: each published post's views as a bar against the most viewed, beside the number. Ten widths, as
+   classes: the policy allows no inline style. */
+.resposts td.views { min-width: 120px; }
+.vbar { display: inline-block; width: 64px; height: 6px; margin-inline-end: 8px; border-radius: 3px; background: var(--fill); vertical-align: middle; overflow: hidden; }
+.vbar i { display: block; height: 100%; border-radius: 3px; background: var(--ok); }
+.vbar i.w1 { width: 10%; } .vbar i.w2 { width: 20%; } .vbar i.w3 { width: 30%; } .vbar i.w4 { width: 40%; } .vbar i.w5 { width: 50%; }
+.vbar i.w6 { width: 60%; } .vbar i.w7 { width: 70%; } .vbar i.w8 { width: 80%; } .vbar i.w9 { width: 90%; } .vbar i.w10 { width: 100%; }
+
+/* What is not the posts' own numbers waits behind small buttons in a row; an open one takes the row. */
+.mores { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
+details.more > summary { list-style: none; gap: 6px; }
+details.more > summary::-webkit-details-marker { display: none; }
+details.more > summary svg.i { width: 16px; height: 16px; }
+details.more[open] { flex-basis: 100%; }
+details.more[open] > summary { background: var(--fill-2); }
+.more-in { margin-top: 16px; }
+/* On a phone a post's numbers are one wrapped line under its title, not a row each. */
+@media (max-width: 699px) {
+  .table.stack.resposts tr { display: flex; flex-wrap: wrap; align-items: center; column-gap: 14px; }
+  .table.stack.resposts td { width: auto; }
+  .table.stack.resposts td.title { width: 100%; padding-bottom: 6px; }
+  .resposts td.views { min-width: 0; }
+  .resposts .vbar { width: 48px; }
+}
