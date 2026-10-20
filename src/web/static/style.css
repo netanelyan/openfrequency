@@ -805,3 +805,23 @@ details.more[open] > summary { background: var(--fill-2); }
   .resposts td.views { min-width: 0; }
   .resposts .vbar { width: 48px; }
 }
+
+/* Results charts: SVG bars that stretch with the panel, labels in HTML beside them. TikTok is the green of what
+   went out, Instagram a lighter green; over the median green, under it grey. */
+.charts { margin-bottom: 20px; }
+.charts .panel + .panel { margin-top: 0; }
+.chart { position: relative; padding: 18px 0 0; padding-inline-end: 34px; }
+.chart svg { display: block; width: 100%; height: 180px; overflow: visible; }
+.chart .ymax, .chart .ymid { position: absolute; inset-inline-end: 0; top: 10px; width: 30px; text-align: center; font-size: 11px; color: var(--ink-3); }
+.chart.rel2 .ymid { top: calc(18px + 90px - 7px); }
+.chart .xt { display: flex; justify-content: space-between; margin-top: 6px; font-size: 11px; color: var(--ink-3); }
+.c-grid { stroke: var(--line); stroke-width: 1; }
+.c-base { stroke: var(--line-2); stroke-width: 1; }
+.c-tt, .c-up { fill: var(--ok); background: var(--ok); }
+.c-ig { fill: color-mix(in srgb, var(--ok) 40%, transparent); background: color-mix(in srgb, var(--ok) 40%, transparent); }
+.c-down { fill: var(--ink-3); background: var(--ink-3); opacity: 0.55; }
+.chart a rect:hover, .chart g:hover rect { opacity: 0.75; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 12px 0 0; font-size: 13px; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 10px; height: 10px; border-radius: 3px; }
+.legend b { font-weight: 600; color: var(--ink); }

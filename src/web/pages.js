@@ -452,6 +452,59 @@ ${plans}</section>`;
 const bars = (last) =>
   `<span class="rel" aria-label="שלוש התוצאות האחרונות ביחס לחציון">${last.map((r) => `<i class="${r.rel >= 1 ? 'win' : r.rel < 0.7 ? 'lose' : ''} h${Math.max(1, Math.min(4, Math.round(r.rel * 2)))}" title="${r.rel.toFixed(2)}"></i>`).join('')}</span>`;
 
+// The charts are SVG drawn here: the policy allows no script from elsewhere and no inline style. Bars stretch with
+// the panel (preserveAspectRatio none) and every label is HTML around them, so it stays sharp on a phone.
+const DAY_MS = 86_400_000;
+const CHART_DAYS = 30;
+
+/** Views of the posts that went out each day of the last 30, TikTok under Instagram; oldest on the right. */
+function viewsChart(posts, t = Date.now()) {
+  const days = Array.from({ length: CHART_DAYS }, (_, i) => ({ key: dayHe(t - (CHART_DAYS - 1 - i) * DAY_MS), at: t - (CHART_DAYS - 1 - i) * DAY_MS, tiktok: 0, instagram: 0, n: 0 }));
+  const byKey = new Map(days.map((x) => [x.key, x]));
+  for (const p of posts) {
+    const x = byKey.get(dayHe(p.published_at));
+    if (!x) continue;
+    x.n++;
+    for (const pl of ['tiktok', 'instagram']) x[pl] += p.metrics[pl]?.views || 0;
+  }
+  const max = Math.max(1, ...days.map((x) => x.tiktok + x.instagram));
+  const W = 10;
+  const h = (v) => (v / max) * 96;
+  const bars = days
+    .map((x, i) => {
+      if (!x.tiktok && !x.instagram) return '';
+      const at = (CHART_DAYS - 1 - i) * W + 1.5;
+      const tt = h(x.tiktok);
+      const ig = h(x.instagram);
+      return `<g><title>${esc(shortDate(x.at))}: ${x.n} ${x.n === 1 ? 'פוסט' : 'פוסטים'}, ${k(x.tiktok + x.instagram)} צפיות (טיקטוק ${k(x.tiktok)}, אינסטגרם ${k(x.instagram)})</title><rect class="c-tt" x="${at}" y="${(100 - tt).toFixed(2)}" width="7" height="${tt.toFixed(2)}"/><rect class="c-ig" x="${at}" y="${(100 - tt - ig).toFixed(2)}" width="7" height="${ig.toFixed(2)}"/></g>`;
+    })
+    .join('');
+  const grid = [25, 50, 75].map((y) => `<line class="c-grid" x1="0" x2="${CHART_DAYS * W}" y1="${y}" y2="${y}" vector-effect="non-scaling-stroke"/>`).join('');
+  const ticks = [0, 10, 20, CHART_DAYS - 1].map((i) => `<span>${esc(shortDate(days[i].at))}</span>`).join('');
+  const sum = (pl) => days.reduce((a, x) => a + x[pl], 0);
+  return `<div class="chart"><span class="ymax num">${k(max)}</span><svg viewBox="0 0 ${CHART_DAYS * W} 100" preserveAspectRatio="none" role="img" aria-label="צפיות לפי יום הפרסום">${grid}${bars}<line class="c-base" x1="0" x2="${CHART_DAYS * W}" y1="100" y2="100" vector-effect="non-scaling-stroke"/></svg><div class="xt">${ticks}</div></div>
+<p class="legend"><span><i class="c-tt"></i>טיקטוק <b class="num">${k(sum('tiktok'))}</b></span><span><i class="c-ig"></i>אינסטגרם <b class="num">${k(sum('instagram'))}</b></span></p>`;
+}
+
+/** Each measured post against the median, oldest on the right: green over 1×, grey under; a bar is its post's link. */
+function relChart(scored) {
+  const posts = scored.slice().sort((a, b) => String(a.published_at).localeCompare(String(b.published_at)));
+  const W = 10;
+  const n = posts.length;
+  // 0× at the bottom, 2× at the top, the median in the middle; a post over 2× reaches the top (its title says how far).
+  const y = (r) => 100 - Math.min(2, r) * 50;
+  const bars = posts
+    .map((p, i) => {
+      const at = (n - 1 - i) * W + 2;
+      const top = Math.min(y(p.rel), 50);
+      const hgt = Math.abs(y(p.rel) - 50);
+      return `<a href="/post/${esc(p.id)}"><title>${esc(p.hook)}: ${p.rel.toFixed(2)}× (${esc(shortDate(p.published_at))})</title><rect class="${p.rel >= 1 ? 'c-up' : 'c-down'}" x="${at}" y="${top.toFixed(2)}" width="6" height="${Math.max(0.8, hgt).toFixed(2)}"/></a>`;
+    })
+    .join('');
+  return `<div class="chart rel2"><span class="ymax num" dir="ltr">2×</span><span class="ymid num" dir="ltr">1×</span><svg viewBox="0 0 ${Math.max(1, n) * W} 100" preserveAspectRatio="none" role="img" aria-label="כל פוסט מול החציון"><line class="c-base" x1="0" x2="${n * W}" y1="50" y2="50" vector-effect="non-scaling-stroke"/>${bars}</svg>${n ? `<div class="xt"><span>${esc(shortDate(posts[0].published_at))}</span><span>${esc(shortDate(posts[n - 1].published_at))}</span></div>` : ''}</div>
+<p class="legend"><span><i class="c-up"></i>מעל החציון <b class="num">${posts.filter((p) => p.rel >= 1).length}</b></span><span><i class="c-down"></i>מתחת <b class="num">${posts.filter((p) => p.rel < 1).length}</b></span></p>`;
+}
+
 export function resultsPage(ctx, d) {
   // What the published posts did leads. The formats, and what the checks stopped, wait behind a button each.
   const sum = (p, f) => ['tiktok', 'instagram'].reduce((a, pl) => a + (p.metrics[pl]?.[f] || 0), 0);
@@ -477,7 +530,7 @@ export function resultsPage(ctx, d) {
   const posts = d.posts.length
     ? `<section class="panel"><header><h2>הפוסטים שפורסמו</h2><span class="end muted small">${d.posts.length}</span></header>
 <table class="table stack resposts"><thead><tr><th>פוסט</th><th>צפיות</th><th>לייקים</th><th>שיתופים</th><th>תגובות</th><th>מול החציון</th></tr></thead><tbody>${d.posts.map(postRow).join('')}</tbody></table>
-<p class="muted small">כל פוסט נמדד 72 שעות אחרי שעלה, מול החציון של אותה פלטפורמה: בטיקטוק שיתופים ולייקים לצפייה (טיקטוק לא מדווחת שמירות), באינסטגרם שמירות לחשיפה.</p></section>`
+<p class="muted small">כל פוסט נמדד 72 שעות אחרי שעלה, מול החציון של אותה פלטפורמה: בטיקטוק שיתופים ולייקים לצפייה, באינסטגרם שמירות לחשיפה.</p></section>`
     : `<div class="empty">${icon('results')}<b>אין עדיין מספרים</b>המספרים נקראים מ-Zernio רק מפוסטים שפורסמו בפועל, והציון נקבע 72 שעות אחרי הפרסום.</div>`;
   const dropped = d.formats.flatMap((f) => f.rows.filter((r) => r.status === 'dropped' || r.atRisk).map((r) => ({ ...r, pack: f.pack })));
   const formats = `<p class="lede">70% מהפוסטים בפורמטים מוכחים, 30% בניסיונות, ופורמט נושר אחרי 3 תוצאות ברצף מתחת ל-70% מהחציון.</p>
@@ -504,6 +557,7 @@ ${d.formats
   const body = `<div class="head"><h1>תוצאות</h1><span class="sub">30 הימים האחרונים</span></div>
 ${d.demo ? `<div class="banner info">${icon('alert')}<div><b>נתוני הדגמה בדויים.</b><p>המספרים בדף הזה נזרעו לחשבון הדמו כדי להראות איך הדף נראה. מספרים אמיתיים מגיעים רק מ-Zernio, 72 שעות אחרי פרסום.</p></div></div>` : ''}
 ${kpis}
+${measured.length ? `<div class="cols even charts"><section class="panel"><header><h2>צפיות לפי יום הפרסום</h2></header>${viewsChart(measured)}</section><section class="panel"><header><h2>מול החציון</h2></header>${d.scored.length ? relChart(d.scored) : '<p class="muted">עוד אין פוסט עם ציון: הציון נקבע 72 שעות אחרי הפרסום.</p>'}</section></div>` : ''}
 ${posts}
 ${feedbackPanels(d.feedback || [])}
 <div class="mores">${fold('formats', 'results', 'פורמטים', formats)}${blocks ? fold('blocks-fold', 'alert', 'מה חוסם פוסטים', blocks) : ''}</div>`;
