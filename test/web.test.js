@@ -82,11 +82,13 @@ test('every page is Hebrew, right to left, and escapes what it shows (hard rule 
   assert.match(loginHtml, /<html lang="he" dir="rtl"/);
 });
 
-test('home is the overview: what waits for you leads, what needs you, one row per account; the cards are on Posts', async () => {
+test('home is the overview: what went out leads, what needs you, one row per account; the cards are on Posts', async () => {
   const cookie = await login();
   const home = await (await get('/', cookie)).text();
   assert.match(home, /class="kpis"/);
-  assert.match(home, /class="kpi lead sig"><span class="l">מחכים לאישור<\/span><span class="v num">1<\/span>/, 'what waits for the owner leads');
+  assert.match(home, /class="kpi lead" href="\/posts#published"><span class="l">פורסמו היום<\/span><span class="v num">0<\/span>/, 'what went out leads');
+  assert.match(home, /<span class="l">מחכים לאישור<\/span><b class="cnt num sig">1<\/b>/);
+  assert.doesNotMatch(home, /נחסמו/, 'what the checks stopped is not on home');
   assert.match(home, /<footer class="foot">.*OpenFrequency<sup>™<\/sup><\/span><\/footer>/s, 'the foot is the mark and the trademark');
   assert.doesNotMatch(home, /מצב הקלטות|מצב חי/, 'no mode or user name as a watermark');
   assert.match(home, new RegExp(`href="/posts#post-${postId}"`), 'the waiting post is one line that leads to its card');

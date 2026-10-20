@@ -714,17 +714,17 @@ details.rivaledit > summary { cursor: pointer; min-height: 44px; display: flex; 
 
 /* ------------------------------------------------------------ Home: the overview */
 
-/* One number leads, what waits for the owner, large and with its button; the other three are rows of one tile
-   beside it. Stacked on a phone. */
-.kpis { display: grid; gap: 12px; margin: 0 0 20px; }
-@media (min-width: 700px) { .kpis { grid-template-columns: 3fr 2fr; } }
+/* One number leads, what went out today, large, with the latest of it; what waits and what is scheduled are rows
+   of one tile beside it. Stacked on a phone. */
+.kpis { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin: 0 0 20px; }
+@media (min-width: 700px) { .kpis { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); } }
 .kpi { display: flex; flex-direction: column; color: inherit; border-radius: var(--r); background: linear-gradient(180deg, var(--surface-hi), var(--surface)); box-shadow: var(--shadow-tile), inset 0 0 0 1px var(--edge), inset 0 1px 0 var(--rim); }
 .kpi.lead { gap: 2px; padding: 20px 24px; align-items: flex-start; }
 .kpi.lead .l { color: var(--ink-2); font-size: 15px; font-weight: 600; }
 .kpi.lead .v { font: 700 64px/1 var(--display); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; margin: 6px 0 2px; }
-.kpi.lead.sig .v { color: var(--accent); }
-.kpi.lead .s { color: var(--ink-3); font-size: 14px; }
-.kpi.lead .btn { margin-top: 14px; }
+.kpi.lead.ok .v { color: var(--ok); }
+a.kpi.lead:hover { text-decoration: none; background: var(--inset); }
+.kpi.lead .s { color: var(--ink-3); font-size: 14px; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kpi.side { padding: 4px 20px; justify-content: center; }
 .kpi.side a { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 52px; color: inherit; border-bottom: 1px solid var(--line); }
 .kpi.side a:last-child { border-bottom: 0; }
@@ -732,16 +732,15 @@ details.rivaledit > summary { cursor: pointer; min-height: 44px; display: flex; 
 .kpi.side .l { color: var(--ink-2); font-size: 15px; }
 .kpi.side .cnt { font: 700 24px/1 var(--display); }
 
-/* A count in its state's colour (the n() helper in pages.js): blue waits, green went out, red was stopped, a zero grey. */
+/* A count in its state's colour (the n() helper in pages.js): blue waits, green went out, a zero grey. */
 .cnt { font-weight: 600; font-variant-numeric: tabular-nums; }
 .cnt.sig { color: var(--accent); }
 .cnt.ok { color: var(--ok); }
-.cnt.bad { color: var(--bad); }
 .cnt.zero { color: var(--ink-3); font-weight: 400; }
 
-/* The accounts on home: a table, one row per account, the same four counts under labelled columns. */
+/* The accounts on home: a table, one row per account, the same three counts under labelled columns. */
 .acctab { display: grid; }
-.acctab .r { display: grid; grid-template-columns: minmax(0, 1fr) repeat(4, 64px); align-items: center; gap: 8px; min-height: 56px; padding: 6px 0; color: inherit; border-top: 1px solid var(--line); }
+.acctab .r { display: grid; grid-template-columns: minmax(0, 1fr) repeat(3, 72px); align-items: center; gap: 8px; min-height: 56px; padding: 6px 0; color: inherit; border-top: 1px solid var(--line); }
 .acctab .r > span:not(.who) { text-align: center; font-size: 18px; }
 .acctab .r.h { min-height: 0; padding: 0 0 8px; border-top: 0; color: var(--ink-3); font-size: 12px; }
 .acctab .r.h > span { font-size: 12px; }
@@ -751,7 +750,7 @@ details.rivaledit > summary { cursor: pointer; min-height: 44px; display: flex; 
 .acctab .who > span { display: grid; min-width: 0; }
 .acctab .who b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .acctab .who small { color: var(--ink-3); font-size: 12px; }
-@media (max-width: 480px) { .acctab .r { grid-template-columns: minmax(0, 1fr) repeat(4, 46px); gap: 4px; } .acctab .r.h > span { font-size: 11px; } }
+@media (max-width: 480px) { .acctab .r { grid-template-columns: minmax(0, 1fr) repeat(3, 56px); gap: 4px; } .acctab .r.h > span { font-size: 11px; } }
 .sumtab td:not(:first-child), .sumtab th:not(:first-child) { text-align: center; }
 .home-panel { margin: 0 0 20px; }
 .todo a { min-height: 60px; }

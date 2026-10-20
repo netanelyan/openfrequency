@@ -153,8 +153,8 @@ function stopBanners(ctx, d) {
   return out.join('');
 }
 
-// A count in its state's colour: blue waits for you, green went out, red was stopped. A zero is grey whatever it counts.
-const TONE = { waiting: 'sig', scheduled: '', published: 'ok', blocked: 'bad' };
+// A count in its state's colour: blue waits for you, green went out. A zero is grey whatever it counts.
+const TONE = { waiting: 'sig', scheduled: '', published: 'ok' };
 const n = (count, tone) => `<b class="cnt num${count && tone ? ` ${tone}` : ''}${count ? '' : ' zero'}">${count}</b>`;
 
 /** What needs the owner, most urgent first: a takedown to delete by hand, a picture to look at, the posts waiting. */
@@ -185,8 +185,8 @@ function summaryPanel(d) {
   const rows = d.summaryRows || [];
   const name = (id) => d.groups.find((g) => g.pack.id === id)?.pack.meta.displayName || id;
   const table = rows.length
-    ? `<table class="table sumtab"><thead><tr><th>חשבון</th><th>פורסמו</th><th>נחסמו</th><th>הוצאה</th></tr></thead><tbody>${rows
-        .map((r) => `<tr><td>${accDot(r.account_id)} ${esc(name(r.account_id))}</td><td>${n(r.data.published?.length || 0, 'ok')}</td><td>${n(r.data.blocked?.length || 0, 'bad')}</td><td>${usd(r.data.spend)}</td></tr>`)
+    ? `<table class="table sumtab"><thead><tr><th>חשבון</th><th>פורסמו</th><th>הוצאה</th></tr></thead><tbody>${rows
+        .map((r) => `<tr><td>${accDot(r.account_id)} ${esc(name(r.account_id))}</td><td>${n(r.data.published?.length || 0, 'ok')}</td><td>${usd(r.data.spend)}</td></tr>`)
         .join('')}</tbody></table>`
     : `<p class="lede">${esc(d.summary.text).replace(/\n/g, '<br>')}</p>`;
   return `<details class="panel home-panel"><summary><h2 class="inline">סיכום ${esc(shortDate(`${d.summary.day}T12:00:00Z`))}</h2></summary>${table}</details>`;
@@ -215,15 +215,18 @@ function tiktokPanel(d) {
 export function todayPage(ctx, d) {
   const count = (k) => d.groups.reduce((s, g) => s + g[k].length, 0);
   const todo = needsYou(d);
-  // One number leads: what waits for the owner, with the hour of the first of them. The other three sit beside it.
-  const waiting = count('waiting');
-  const first = d.groups.flatMap((g) => g.waiting).map((p) => p.slot_at).filter(Boolean).sort()[0];
+  // One number leads: what went out today, with the latest of it. What waits for the owner and what is scheduled sit
+  // beside it. What the checks stopped is not on home: it is on Posts and Results.
+  const out = count('published');
+  const last = d.groups.flatMap((g) => g.published).sort((a, b) => String(b.published_at).localeCompare(String(a.published_at)))[0];
+  const next = d.groups.flatMap((g) => g.scheduled).map((p) => p.slot_at).filter(Boolean).sort()[0];
+  const when = (t) => (dayHe(t) === dayHe(Date.now()) ? timeHe(t) : `${shortDate(t)}, ${timeHe(t)}`);
   const side = (href, k, label) => `<a href="${href}"><span class="l">${label}</span>${n(count(k), TONE[k])}</a>`;
   const body = `<div class="head"><h1>היום</h1><span class="sub">${esc(dayHe(Date.now()))}</span></div>
 ${stopBanners(ctx, d)}
 <section class="kpis" aria-label="היום במספרים">
-<div class="kpi lead${waiting ? ' sig' : ''}"><span class="l">מחכים לאישור</span><span class="v num">${waiting}</span><span class="s">${waiting ? (first ? `הראשון אמור לעלות ב-${esc(timeHe(first))}` : 'עוד בלי שעה') : 'הפוסטים הבאים ייכתבו בשעת הייצור היומית'}</span>${waiting ? `<a class="btn primary sm" href="/posts">לאישור</a>` : ''}</div>
-<div class="kpi side">${side('/posts#scheduled', 'scheduled', 'מתוזמנים')}${side('/posts#published', 'published', 'פורסמו היום')}${side('/results#blocks', 'blocked', 'נחסמו היום')}</div>
+<a class="kpi lead${out ? ' ok' : ''}" href="/posts#published"><span class="l">פורסמו היום</span><span class="v num">${out}</span><span class="s">${last ? `האחרון ב-${esc(timeHe(last.published_at))}: ${esc(last.hook)}` : next ? `הבא עולה ב-${esc(when(next))}` : 'אין פוסט מתוזמן'}</span></a>
+<div class="kpi side">${side('/posts', 'waiting', 'מחכים לאישור')}${side('/posts#scheduled', 'scheduled', 'מתוזמנים')}</div>
 </section>
 <section class="panel home-panel"><header><h2>צריך אותך</h2>${todo.total ? '<a class="end small" href="/posts">כל הפוסטים</a>' : ''}</header>
 ${todo.rows.length ? `${postLines(todo.rows)}${todo.more ? `<p class="small"><a href="/posts">ועוד ${todo.more}</a></p>` : ''}` : '<p class="muted">אין מה לאשר כרגע. הפוסטים הבאים ייכתבו בשעת הייצור היומית.</p>'}
@@ -231,8 +234,8 @@ ${todo.rows.length ? `${postLines(todo.rows)}${todo.more ? `<p class="small"><a 
 ${tiktokPanel(d)}
 <section class="panel home-panel"><header><h2>חשבונות</h2><a class="end small" href="/accounts">ניהול</a></header>
 <div class="acctab" role="table" aria-label="היום בכל חשבון">
-<div class="r h" role="row"><span role="columnheader">חשבון</span><span role="columnheader">מחכים</span><span role="columnheader">מתוזמנים</span><span role="columnheader">פורסמו</span><span role="columnheader">נחסמו</span></div>
-${d.groups.map((g) => `<a class="r" role="row" href="/posts#g-${esc(g.pack.id)}"><span class="who" role="cell">${accDot(g.pack.id)}<span><b>${esc(g.pack.meta.displayName)}</b><small>${esc(MODE_HE[g.acc?.mode || 'approve'][0])}</small></span></span>${['waiting', 'scheduled', 'published', 'blocked'].map((k) => `<span role="cell">${n(g[k].length, TONE[k])}</span>`).join('')}</a>`).join('')}
+<div class="r h" role="row"><span role="columnheader">חשבון</span><span role="columnheader">מחכים</span><span role="columnheader">מתוזמנים</span><span role="columnheader">פורסמו</span></div>
+${d.groups.map((g) => `<a class="r" role="row" href="/posts#g-${esc(g.pack.id)}"><span class="who" role="cell">${accDot(g.pack.id)}<span><b>${esc(g.pack.meta.displayName)}</b><small>${esc(MODE_HE[g.acc?.mode || 'approve'][0])}</small></span></span>${['waiting', 'scheduled', 'published'].map((k) => `<span role="cell">${n(g[k].length, TONE[k])}</span>`).join('')}</a>`).join('')}
 </div>
 </section>
 ${d.summary ? summaryPanel(d) : ''}`;
