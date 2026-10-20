@@ -144,7 +144,7 @@ ${SPRITE}
 <main class="wrap" id="main">
 ${budgetBanner(ctx.budget)}
 ${body}
-<p class="foot">תדר · ${esc(ctx.footer || '')}</p>
+<footer class="foot">${mark()}<span class="ltr">OpenFrequency<sup>™</sup></span></footer>
 </main>
 <nav class="tabbar" aria-label="ניווט">${tabs}</nav>
 <div id="toast" role="status" aria-live="polite"></div>

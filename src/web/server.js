@@ -242,7 +242,7 @@ export function createHandler(ctx, { port, env = process.env, limiter = createLi
       const clearFlash = flashMsg ? { 'set-cookie': 'of_flash=; Path=/; Max-Age=0; SameSite=Strict' } : {};
       function pageCtx() {
         // The desk's sidebar, collapsed to its icons or not: a cookie the toggle sets, so the page arrives already in shape.
-        return { csrf, user, theme, side: jar.of_side === 'mini' ? 'mini' : null, v: V, ...h, flash: flashMsg, footer: `${user.name} · ${ctx.mode === 'live' ? 'מצב חי' : 'מצב הקלטות'}` };
+        return { csrf, user, theme, side: jar.of_side === 'mini' ? 'mini' : null, v: V, ...h, flash: flashMsg };
       }
       const pc = pageCtx();
       const page = (html, status = 200) => send(req, res, status, flashMsg ? html.replace('<div id="toast" role="status" aria-live="polite"></div>', `<div id="toast" role="status" aria-live="polite" data-flash="${String(flashMsg).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)}"></div>`) : html, 'text/html; charset=utf-8', clearFlash);

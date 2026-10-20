@@ -81,7 +81,14 @@ export function today(ctx, t = now()) {
     };
   });
   const summary = ctx.db.get('SELECT * FROM summaries WHERE account_id IS NULL ORDER BY day DESC LIMIT 1');
-  return { day, groups, summary, attention: attention(ctx) };
+  const live = new Set(groups.map((g) => g.pack.id));
+  const summaryRows = summary
+    ? ctx.db
+        .all('SELECT account_id, data_json FROM summaries WHERE day = ? AND account_id IS NOT NULL', summary.day)
+        .filter((r) => live.has(r.account_id))
+        .map((r) => ({ account_id: r.account_id, data: j(r.data_json, {}) }))
+    : [];
+  return { day, groups, summary, summaryRows, attention: attention(ctx) };
 }
 
 /** The last 7 Israel days for one account: posts published per day, and reach where it is known. */

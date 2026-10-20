@@ -406,39 +406,13 @@ meter::-moz-meter-bar { background: var(--accent-fill); border-radius: 3px; }
 /* ------------------------------------------------------------ tiles */
 
 /* A tile is a pane of frosted glass: translucent, blurred, whiter at the top, with a lit edge. */
-.card, .panel, .day, .list {
+.card, .panel, .list {
   background: linear-gradient(180deg, var(--surface-hi), var(--surface));
   backdrop-filter: saturate(180%) blur(24px);
   -webkit-backdrop-filter: saturate(180%) blur(24px);
   border-radius: var(--r);
   box-shadow: var(--shadow-tile), inset 0 0 0 1px var(--edge), inset 0 1px 0 var(--rim);
 }
-
-/* ------------------------------------------------------------ Today: the day in dots */
-
-/* The signature: each account's day as a row of dots, in the mark's own language. A shape for every state, so
-   colour is never the only difference: a ring waits for you, a ring with a centre is scheduled, a disc went out,
-   a square was stopped by the checks. */
-.day { padding: 24px 24px 20px; margin: 0 0 40px; }
-.day .lead { font: 700 22px/1.2 var(--display); }
-.day .rest { color: var(--ink-3); font-size: 13px; margin: 6px 0 18px; }
-.lines { display: grid; border-top: 1px solid var(--line); }
-.lines a { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 6px 0; border-bottom: 1px solid var(--line); }
-.lines a:hover { text-decoration: none; }
-.lines a:last-child { border-bottom: 0; }
-.lines .nm { font-weight: 500; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.lines .end { margin-inline-start: auto; display: flex; align-items: center; gap: 10px; flex: none; }
-.pulse { display: inline-flex; flex-wrap: wrap; gap: 5px; align-items: center; }
-.pulse i { width: 13px; height: 13px; border-radius: 50%; display: block; }
-.pulse i.w { box-shadow: inset 0 0 0 2.5px var(--accent-fill); }
-.pulse i.s { box-shadow: inset 0 0 0 2.5px var(--ink-3); background: radial-gradient(circle, var(--ink-3) 0 2.5px, transparent 3px); }
-.pulse i.p { background: var(--accent-fill); }
-.pulse i.b { border-radius: 3px; background: var(--bad); transform: scale(0.85); }
-.pulse .none { font-size: 12px; color: var(--ink-3); }
-.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 14px 0 0; font-size: 12px; color: var(--ink-3); }
-.legend span { display: inline-flex; align-items: center; gap: 6px; }
-.legend .pulse i { width: 11px; height: 11px; }
-@media (prefers-color-scheme: dark) { .pulse i.w { box-shadow: inset 0 0 0 2.5px var(--accent); } .pulse i.p { background: var(--accent); } }
 
 /* ------------------------------------------------------------ account groups and post cards */
 
@@ -672,13 +646,17 @@ body.login { min-height: 100vh; display: grid; place-items: center; padding: 24p
 #toast.bad { background: var(--bad); color: var(--bad-ink); }
 @media (min-width: 900px) { #toast { bottom: 28px; } }
 
-.foot { color: var(--ink-p); font-size: 11px; text-align: center; padding: 40px 0 8px; }
+/* The foot: the mark and the trademark, nothing else. */
+.foot { display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--ink-p); font-size: 12px; padding: 48px 0 8px; }
+.foot .mark { width: 20px; height: 20px; border-radius: 6px; }
+.foot .mark svg { width: 14px; height: 14px; }
+.foot sup { font-size: 0.7em; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
 }
 @media (prefers-reduced-transparency: reduce) {
-  .top .wrap, .tabbar, .actionbar, #toast, .strip a .n, .strip a .has, .card, .panel, .day, .list { backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .top .wrap, .tabbar, .actionbar, #toast, .strip a .n, .strip a .has, .card, .panel, .list { backdrop-filter: none; -webkit-backdrop-filter: none; }
 }
 
 /* small utilities, so no page needs an inline style (the CSP forbids them) */
@@ -716,12 +694,6 @@ h2.inline { display: inline; }
 .post > details.facts:last-child { margin-bottom: 6px; }
 /* An account whose own colour is dark (a brown, a navy) keeps its dot visible on the dark tiles. */
 @media (prefers-color-scheme: dark) { .dot { box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.28); } }
-/* On a desk the accounts sit side by side, each with its dots next to its name. */
-@media (min-width: 900px) {
-  .lines { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); column-gap: 32px; border-top: 0; }
-  .lines a { border-bottom: 0; border-top: 1px solid var(--line); }
-  .lines a:last-child { border-bottom: 0; }
-}
 /* A source's address is a link: a full-height row to tap, not a 21 px line. */
 .srccard > a.small { display: inline-flex; align-items: center; min-height: 40px; overflow-wrap: anywhere; }
 /* The morning's feedback: four boxes, views by what the post led people to do. The box that asks for more of the same leads. */
@@ -742,15 +714,45 @@ details.rivaledit > summary { cursor: pointer; min-height: 44px; display: flex; 
 
 /* ------------------------------------------------------------ Home: the overview */
 
-/* Four numbers in a row, each a door to the page behind it; two by two on a phone. */
-.kpis { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin: 0 0 20px; }
-@media (min-width: 700px) { .kpis { grid-template-columns: repeat(4, 1fr); } }
-.kpi { display: flex; flex-direction: column; gap: 4px; padding: 16px 18px; color: inherit; border-radius: var(--r); background: linear-gradient(180deg, var(--surface-hi), var(--surface)); box-shadow: var(--shadow-tile), inset 0 0 0 1px var(--edge), inset 0 1px 0 var(--rim); }
-.kpi:hover { text-decoration: none; background: var(--inset); }
-.kpi .v { font: 700 24px/1.1 var(--display); font-variant-numeric: tabular-nums; }
-.kpi .l { color: var(--ink-3); font-size: 12px; }
-.kpi.sig .v { color: var(--accent); }
-.kpi.bad .v { color: var(--bad); }
+/* One number leads, what waits for the owner, large and with its button; the other three are rows of one tile
+   beside it. Stacked on a phone. */
+.kpis { display: grid; gap: 12px; margin: 0 0 20px; }
+@media (min-width: 700px) { .kpis { grid-template-columns: 3fr 2fr; } }
+.kpi { display: flex; flex-direction: column; color: inherit; border-radius: var(--r); background: linear-gradient(180deg, var(--surface-hi), var(--surface)); box-shadow: var(--shadow-tile), inset 0 0 0 1px var(--edge), inset 0 1px 0 var(--rim); }
+.kpi.lead { gap: 2px; padding: 20px 24px; align-items: flex-start; }
+.kpi.lead .l { color: var(--ink-2); font-size: 15px; font-weight: 600; }
+.kpi.lead .v { font: 700 64px/1 var(--display); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; margin: 6px 0 2px; }
+.kpi.lead.sig .v { color: var(--accent); }
+.kpi.lead .s { color: var(--ink-3); font-size: 14px; }
+.kpi.lead .btn { margin-top: 14px; }
+.kpi.side { padding: 4px 20px; justify-content: center; }
+.kpi.side a { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 52px; color: inherit; border-bottom: 1px solid var(--line); }
+.kpi.side a:last-child { border-bottom: 0; }
+.kpi.side a:hover { text-decoration: none; }
+.kpi.side .l { color: var(--ink-2); font-size: 15px; }
+.kpi.side .cnt { font: 700 24px/1 var(--display); }
+
+/* A count in its state's colour (the n() helper in pages.js): blue waits, green went out, red was stopped, a zero grey. */
+.cnt { font-weight: 600; font-variant-numeric: tabular-nums; }
+.cnt.sig { color: var(--accent); }
+.cnt.ok { color: var(--ok); }
+.cnt.bad { color: var(--bad); }
+.cnt.zero { color: var(--ink-3); font-weight: 400; }
+
+/* The accounts on home: a table, one row per account, the same four counts under labelled columns. */
+.acctab { display: grid; }
+.acctab .r { display: grid; grid-template-columns: minmax(0, 1fr) repeat(4, 64px); align-items: center; gap: 8px; min-height: 56px; padding: 6px 0; color: inherit; border-top: 1px solid var(--line); }
+.acctab .r > span:not(.who) { text-align: center; font-size: 18px; }
+.acctab .r.h { min-height: 0; padding: 0 0 8px; border-top: 0; color: var(--ink-3); font-size: 12px; }
+.acctab .r.h > span { font-size: 12px; }
+.acctab .r.h > span:first-child { text-align: start; }
+.acctab a.r:hover { text-decoration: none; background: var(--inset); }
+.acctab .who { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.acctab .who > span { display: grid; min-width: 0; }
+.acctab .who b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.acctab .who small { color: var(--ink-3); font-size: 12px; }
+@media (max-width: 480px) { .acctab .r { grid-template-columns: minmax(0, 1fr) repeat(4, 46px); gap: 4px; } .acctab .r.h > span { font-size: 11px; } }
+.sumtab td:not(:first-child), .sumtab th:not(:first-child) { text-align: center; }
 .home-panel { margin: 0 0 20px; }
 .todo a { min-height: 60px; }
 .todo .tx { display: grid; gap: 2px; min-width: 0; flex: 1; }
@@ -773,7 +775,6 @@ details.rivaledit > summary { cursor: pointer; min-height: 44px; display: flex; 
   .btn { min-height: 36px; padding: 0 16px; }
   .btn.sm { min-height: 30px; padding: 0 12px; }
   .btn svg.i { width: 16px; height: 16px; }
-  .kpi { padding: 12px 16px; }
   .todo a { min-height: 52px; }
   details.facts > summary { min-height: 42px; }
 }
