@@ -87,14 +87,7 @@ export const linesOf = (text) => String(text || '').replace(/\r/g, '').split('\n
  * length. Only the last line may come out under min. Pure.
  */
 export function breakLine(line, [min, max]) {
-  const toks = String(line).trim().split(/\s+/).filter(Boolean);
-  const isWord = (w) => /[\p{L}\p{N}]/u.test(w);
-  // A dash or an emoji standing alone rides with the word before it, so it never starts a line.
-  const words = [];
-  for (const t of toks) {
-    if (!isWord(t) && words.length) words[words.length - 1] += ` ${t}`;
-    else words.push(t);
-  }
+  const words = wordsForBreak(line);
   const n = words.length;
   if (n <= max) return [words.join(' ')];
   const goal = n / Math.ceil(n / max);
@@ -109,12 +102,7 @@ export function breakLine(line, [min, max]) {
       if (len < min && !last) continue;
       let cost = best[j] + 100 + (len - goal) ** 2;
       if (last && len < min) cost += 6;
-      if (!last) {
-        const end = words[i - 1];
-        if (!/[,.;:!?…]$/.test(end)) cost += 4;
-        // Dearer than a line more: "ל-10" at a line's end and "מתוך 12" at the next one's start reads as two numbers.
-        if (/\d$/.test(end) && /^[\p{L}]/u.test(words[i])) cost += 150;
-      }
+      if (!last) cost += breakCost(words, i);
       if (cost < best[i]) {
         best[i] = cost;
         from[i] = j;
@@ -127,10 +115,70 @@ export function breakLine(line, [min, max]) {
   return out;
 }
 
-/** A block with every overlong line broken. Lines the writer broke are kept as they are. */
+/**
+ * A line's words broken into exactly k lines of [min, max] words, or null when they do not fit. Only the last line
+ * may come out under min, and never as one word alone. The breaks go where breakLine puts them. Pure.
+ */
+export function breakInto(line, [min, max], k) {
+  const words = wordsForBreak(line);
+  const n = words.length;
+  if (k === 1) return n <= max ? [words.join(' ')] : null;
+  if (n < min * (k - 1) + 2 || n > max * k) return null;
+  const goal = n / k;
+  // best[c][i]: the cheapest c lines that end after word i.
+  const best = Array.from({ length: k + 1 }, () => new Array(n + 1).fill(Infinity));
+  const from = Array.from({ length: k + 1 }, () => new Array(n + 1).fill(-1));
+  best[0][0] = 0;
+  for (let c = 1; c <= k; c++) {
+    for (let i = 1; i <= n; i++) {
+      const last = c === k;
+      if (last && i !== n) continue;
+      for (let j = Math.max(0, i - max); j < i; j++) {
+        if (best[c - 1][j] === Infinity) continue;
+        const len = i - j;
+        if (last ? len < 2 : len < min) continue;
+        let cost = best[c - 1][j] + (len - goal) ** 2;
+        if (!last) cost += breakCost(words, i);
+        if (cost < best[c][i]) {
+          best[c][i] = cost;
+          from[c][i] = j;
+        }
+      }
+    }
+  }
+  if (best[k][n] === Infinity) return null;
+  const out = [];
+  for (let c = k, i = n; c > 0; i = from[c][i], c--) out.unshift(words.slice(from[c][i], i).join(' '));
+  return out;
+}
+
+// A dash or an emoji standing alone rides with the word before it, so it never starts a line.
+function wordsForBreak(line) {
+  const words = [];
+  for (const t of String(line).trim().split(/\s+/).filter(Boolean)) {
+    if (!/[\p{L}\p{N}]/u.test(t) && words.length) words[words.length - 1] += ` ${t}`;
+    else words.push(t);
+  }
+  return words;
+}
+
+// What a break after word i costs: dear where a reader does not pause; dearer than a line more between a number and
+// what it counts ("ל-10" at a line's end and "מתוך 12" at the next one's start reads as two numbers).
+function breakCost(words, i) {
+  const end = words[i - 1];
+  return (/[,.;:!?…]$/.test(end) ? 0 : 4) + (/\d$/.test(end) && /^[\p{L}]/u.test(words[i]) ? 150 : 0);
+}
+
+/**
+ * A block with every overlong line broken. Lines the writer broke are kept as they are while they keep the rule;
+ * a block with a line under min before its last is broken again as a whole: in as many lines when its words fit
+ * them, else in as few as breakLine makes.
+ */
 export function breakBlock(text, range) {
-  const lines = linesOf(text);
-  return lines.flatMap((l) => (wordsOf(l).length > range[1] ? breakLine(l, range) : [l])).join('\n');
+  const lines = linesOf(text).flatMap((l) => (wordsOf(l).length > range[1] ? breakLine(l, range) : [l]));
+  if (lines.slice(0, -1).every((l) => wordsOf(l).length >= range[0])) return lines.join('\n');
+  const all = lines.join(' ');
+  return (breakInto(all, range, lines.length) || breakLine(all, range)).join('\n');
 }
 
 /** The overlay blocks of a draft, per slide: [{ slide, where, blocks: [{ where, get, set }] }]. */

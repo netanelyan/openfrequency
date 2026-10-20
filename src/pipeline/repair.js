@@ -43,6 +43,8 @@ const slideIndex = (target) => Number(/^slide (\d+)$/.exec(target)?.[1] ?? -1);
  */
 export function targetsOf(draft, p) {
   if (NEVER.test(p.code || '')) return null;
+  // The cover's lines are counted with the line under it, and either can carry the line it is short of.
+  if (p.where === 'cover' && / lines? of text: /.test(p.msg)) return ['cover', 'cover line 2'];
   if (TEXTS.includes(p.where)) return [p.where];
   const own = /^slide (\d+)(?: (?:title|text))?$/.exec(p.where);
   if (own) return isItem(draft, own[1]) ? [`slide ${own[1]}`] : null;

@@ -72,6 +72,9 @@ test('each refused check is traced to the one text it is about; the law, honesty
   assert.deepEqual(targetsOf(draft, { where: 'facts', code: 'verify', msg: 'the cover: the number 9 is not in any cited quote' }), ['cover']);
   assert.deepEqual(targetsOf(draft, { where: 'caption', code: 'caption', msg: 'the TikTok caption is a story in 4 lines' }), ['caption']);
   assert.deepEqual(targetsOf(draft, { where: 'shape', code: 'shape', msg: 'slide 1: a stat slide needs both values (a and b)' }), ['slide 1']);
+  // The cover short of lines can take the missing line in the line under it.
+  assert.deepEqual(targetsOf(draft, { where: 'cover', code: 'overlay', msg: '2 lines of text: at least 3 on a slide (title and text together)' }), ['cover', 'cover line 2']);
+  assert.deepEqual(targetsOf(draft, { where: 'facts', code: 'verify', msg: "slide 2: the visual's number 90 is not in the quotes the slide cites" }), ['slide 2']);
   for (const p of [
     { where: 'slide 1 text', code: 'compliance:financial', msg: 'a recommendation' },
     { where: 'cover', code: 'honesty:experience', msg: 'claims to have tried it' },
@@ -144,6 +147,24 @@ test('a slide refused by the fact gate is repaired in place; a repair that swaps
     assert.match(ctx.db.get('SELECT body FROM slides WHERE post_id = ? AND idx = 2', res.postId).body, /3 גבעולים/);
     // Each repair call is reserved and recorded against the caps like any other call.
     assert.equal(ctx.db.get("SELECT COUNT(*) AS n FROM spend WHERE post_id = ? AND tag = 'repair'", res.postId).n, 2);
+  } finally {
+    cleanup();
+  }
+});
+
+test('a graphic that draws a number its slide\'s quotes do not hold is dropped when the writer cannot mend it', async () => {
+  const { home, cleanup } = tempHome();
+  try {
+    const ctx = contextFor(home);
+    const stat = { type: 'stat', title: '', a: '', b: '', style: '', items: [{ label: 'גבעולים ירוקים', value: '90', value2: '', sub: '' }] };
+    // The writer is not shown the graphic: it sends the slide back as it was.
+    const w = writer(ctx, (d) => (d.slides[1].visual = stat), [() => [slide('slide 2', JUNE)]]);
+    const res = await build(ctx, w.llm);
+    assert.equal(res.status, 'sample', res.reason);
+    assert.equal(w.calls.repair, 1);
+    const [round] = stepsOf(ctx, res.postId, 'repair');
+    assert.deepEqual(round.visualsDropped, ['slide 2']);
+    assert.doesNotMatch(ctx.db.get('SELECT data_json FROM slides WHERE post_id = ? AND idx = 2', res.postId).data_json || '', /"90"/);
   } finally {
     cleanup();
   }

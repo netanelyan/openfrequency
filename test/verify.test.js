@@ -72,6 +72,10 @@ test('a count written in Hebrew words is a number too, and ordinary Hebrew is no
   assert.deepEqual([...numbersIn('the fourteenth title, five goals', { words: true })], ['14', '5']);
   // "One of", "Monday" and a city that ends in "seven" state no number.
   assert.deepEqual([...numbersIn('אחד הצמחים, ביום שני, בבאר שבע', { hebrew: true })], []);
+  // "מליון" alone is from Lyon (a true fact about Benzema was refused as a million); after a number it is a million.
+  assert.deepEqual([...numbersIn('90 שערים ב-152 הופעות, מליון ועד ריאל מדריד', { hebrew: true })], ['90', '152']);
+  assert.deepEqual([...numbersIn('שני מליון צופים', { hebrew: true })], ['2000000']);
+  assert.deepEqual([...numbersIn('מיליון צופים', { hebrew: true })], ['1000000']);
   const facts = [{ key: 'f1', quote: 'Basil needs at least 6 hours of direct sunlight a day.', verified: true }];
   const cover = { kind: 'cover', title: '', body: '', factKeys: [] };
   const words = gate({ slides: [cover, { kind: 'item', title: 'שמונה שעות שמש', body: '', factKeys: ['f1'] }], facts });

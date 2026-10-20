@@ -134,6 +134,8 @@ export function numberWords(text, { hebrew = false, english = false } = {}) {
       // "באר שבע" is a city, not the number seven; "המאה ה-20" is a century, not 100.
       if (words.length === 1 && /שבע$/.test(m[0]) && /באר\s*$/.test(s.slice(0, m.index))) continue;
       if (words.length === 1 && /מאה$/.test(m[0]) && /^\s*ה[-־]?(?:\d|[א-ת])/.test(s.slice(m.index + m[0].length))) continue;
+      // "מליון ועד ריאל" is from Lyon: the short spelling of a million alone is the city, a million is spelled "מיליון".
+      if (words.length === 1 && /^ו?מליון$/.test(m[0])) continue;
       // One or two alone states no number ("אחד הצמחים", "יום שני", "ארבע שנים").
       for (const v of runValues(words, { small: false })) out.push([m.index, v]);
     }

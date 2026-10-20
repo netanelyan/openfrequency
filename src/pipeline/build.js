@@ -551,7 +551,22 @@ export async function repairDraft(ctx, pack, { draft, checked, format, facts, it
       checked = next;
       kept.push({ target: r.target, cleared });
     }
-    rounds.push({ round, targets: targets.map((t) => t.target), kept, refused, left: checked.problems.map(say), usd: res.usd });
+    // The writer is not given a slide's graphic. One that still draws a number no quote its slide cites holds is
+    // dropped, as a malformed one is, when the post keeps enough graphics without it.
+    const unheld = new Set(checked.problems.map((p) => /^slide (\d+): the visual's number /.exec(p.msg)?.[1]).filter(Boolean));
+    let dropped;
+    if (unheld.size) {
+      const next = structuredClone(draft);
+      for (const i of unheld) next.slides[Number(i)].visual = null;
+      const after = checkDraft(ctx, pack, { draft: next, format, facts, items, attempt });
+      const before = new Set(checked.problems.map(say));
+      if (after.problems.every((p) => before.has(say(p)))) {
+        draft = next;
+        checked = after;
+        dropped = [...unheld].map((i) => `slide ${i}`);
+      }
+    }
+    rounds.push({ round, targets: targets.map((t) => t.target), kept, refused, ...(dropped ? { dropped } : {}), left: checked.problems.map(say), usd: res.usd });
   }
   return { draft, checked, rounds };
 }
@@ -969,7 +984,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     let repairs = 0;
     if (checked.problems.length) {
       const fixed = await repairDraft(pctx, pack, { draft, checked, format, facts, items, outline, attempt: 1, ttl, meta: { recordingsDir: pack.recordingsDir, docKey: cand.key, format: format.base || format.id } });
-      for (const r of fixed.rounds) step(db, postId, 'repair', r.left.length ? 'failed' : 'ok', { round: r.round, targets: r.targets, kept: r.kept, refused: r.refused, problems: r.left }, r.usd);
+      for (const r of fixed.rounds) step(db, postId, 'repair', r.left.length ? 'failed' : 'ok', { round: r.round, targets: r.targets, kept: r.kept, refused: r.refused, ...(r.dropped ? { visualsDropped: r.dropped } : {}), problems: r.left }, r.usd);
       repairs = fixed.rounds.length;
       draft = fixed.draft;
       checked = fixed.checked;

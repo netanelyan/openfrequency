@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { breakBlock, breakLine, labelIn, lineDraft, OVERLAY, overlayOf, overlayProblems, wordsOf } from '../src/rules/overlay.js';
+import { breakBlock, breakInto, breakLine, labelIn, lineDraft, OVERLAY, overlayOf, overlayProblems, wordsOf } from '../src/rules/overlay.js';
 import { readPack } from '../src/packs/load.js';
 import { validatePack } from '../src/packs/validate.js';
 import { tellsIn } from '../src/voice/tells.js';
@@ -44,8 +44,19 @@ test('a long line is broken in code: within the range, after a comma when it can
   assert.ok(breakLine('אחת שתיים שלוש ארבע חמש שש - שבע שמונה', [4, 6]).every((l) => !l.startsWith('-')));
 });
 
+test('a line under the minimum before the last is broken again with the block, in as many lines when they fit', () => {
+  // The football cover the repair could not mend in two rounds: line 1 of 3 words.
+  assert.equal(breakBlock('הכובשים הגדולים של\nליגת האלופות בכל הזמנים', [4, 6]), 'הכובשים הגדולים של ליגת\nהאלופות בכל הזמנים');
+  // Five words in two lines would leave one alone: one line, then.
+  assert.equal(breakBlock('שורה אחת קצרה\nושורה שנייה', [4, 6]), 'שורה אחת קצרה ושורה שנייה');
+  const out = breakBlock('אחת שתיים שלוש\nארבע חמש שש שבע\nשמונה תשע עשר', [4, 6]).split('\n');
+  assert.equal(out.length, 3);
+  assert.ok(out.slice(0, -1).every((l) => wordsOf(l).length >= 4) && wordsOf(out[2]).length >= 2, out.join(' | '));
+  assert.equal(breakInto('אחת שתיים שלוש ארבע חמש שש שבע שמונה תשע', [4, 6], 3), null, 'a third line of one word is not a line');
+});
+
 test('the lines the writer broke are kept; only an overlong one is broken again', () => {
-  assert.equal(breakBlock('שורה אחת קצרה\nושורה שנייה', [4, 6]), 'שורה אחת קצרה\nושורה שנייה');
+  assert.equal(breakBlock('שורה אחת ארוכה מספיק\nושורה שנייה', [4, 6]), 'שורה אחת ארוכה מספיק\nושורה שנייה');
   const out = breakBlock('שורה ראשונה שהכותב שבר\nושורה שנייה שהיא ארוכה מדי בשביל שקופית אחת', [4, 6]).split('\n');
   assert.equal(out[0], 'שורה ראשונה שהכותב שבר');
   assert.ok(out.length >= 3 && out.every((l) => wordsOf(l).length <= 6));
