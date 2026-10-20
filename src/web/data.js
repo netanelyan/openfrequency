@@ -37,8 +37,8 @@ export function scoped(ctx, pack) {
   return s;
 }
 
-/** The ids of the accounts a context shows, and the SQL that keeps a query to them. */
-const inAccounts = (ctx, col = 'account_id') => [`${col} IN (${ctx.packs.map(() => '?').join(', ') || 'NULL'})`, ctx.packs.map((p) => p.id)];
+/** The ids of the accounts a context shows, and the SQL that keeps a query to them; a context without packs is every one. */
+const inAccounts = (ctx, col = 'account_id') => (ctx.packs ? [`${col} IN (${ctx.packs.map(() => '?').join(', ') || 'NULL'})`, ctx.packs.map((p) => p.id)] : ['1 = 1', []]);
 
 /** The month's budget plan, computed at most every few seconds (a page asks for it more than once). */
 const planOf = (ctx) => {
