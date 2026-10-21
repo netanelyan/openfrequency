@@ -84,3 +84,25 @@ test('a switch keeps the page it was made on, and a post or ?account= switches t
   const bad = await fetch(`${base}/account/switch`, { method: 'POST', redirect: 'manual', headers: { cookie, 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ _csrf: csrf, to: 'nope' }).toString() });
   assert.equal(acct(bad), null);
 });
+
+test('the page of every account lists them all and approves what it listed, nothing drafted since', async () => {
+  const cookie = await login();
+  const html = await (await get('/all', cookie)).text();
+  assert.match(html, /<summary aria-label="כל החשבונות\. מעבר לחשבון אחד">/, 'the switcher says it is every account');
+  for (const id of ['demo', 'second']) assert.ok(html.includes(`<a class="r" role="row" href="/?account=${id}">`), `${id} has its line`);
+  assert.match(html, new RegExp(`id="all-${otherPost}" data-post`), "another account's post waits on this page");
+  assert.match(await (await get('/', cookie)).text(), /<a class="to" href="\/all">/, 'the switcher opens it');
+
+  const listed = [...html.matchAll(/<div class="qrow" id="all-([\w-]+)"/g)].map((m) => m[1]);
+  assert.ok(listed.length >= 1);
+  const csrf = /name="_csrf" value="([^"]+)"/.exec(html)[1];
+  const send = (ids) => fetch(`${base}/posts/approve-all`, { method: 'POST', redirect: 'manual', headers: { cookie, 'x-of-ajax': '1', 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ _csrf: csrf, ids }).toString() });
+  const res = await send([...listed, 'not-a-post', '../x'].join(','));
+  const out = await res.json();
+  assert.equal(res.status, 200, out.message);
+  assert.match(out.message, new RegExp(listed.length === 1 ? 'פוסט אחד אושר' : `${listed.length} פוסטים אושרו`));
+  assert.doesNotMatch(await (await get('/all', cookie)).text(), /<div class="qrow"/, 'nothing waits once all are approved');
+  // Sent again, nothing waits any more: an answer, not a second approval.
+  const again = await send(listed.join(','));
+  assert.equal(again.status, 400);
+});

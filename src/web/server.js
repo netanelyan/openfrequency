@@ -85,6 +85,7 @@ export function createHandler(ctx, { port, env = process.env, limiter = createLi
 
   const ROUTES = [
     ['POST', /^\/post\/([\w-]+)\/approve$/, (u, m) => act.approve(ctx, u, { id: m[1] })],
+    ['POST', /^\/posts\/approve-all$/, (u, m, f) => act.approveAll(ctx, u, {}, f)],
     ['POST', /^\/post\/([\w-]+)\/unapprove$/, (u, m) => act.unapprove(ctx, u, { id: m[1] })],
     ['POST', /^\/post\/([\w-]+)\/reject$/, (u, m, f) => act.reject(ctx, u, { id: m[1] }, f)],
     ['POST', /^\/post\/([\w-]+)\/edit$/, (u, m, f) => act.edit(ctx, u, { id: m[1] }, f)],
@@ -292,6 +293,8 @@ export function createHandler(ctx, { port, env = process.env, limiter = createLi
 
       if (p === '/') return page(pages.todayPage(pc, data.today(sc)));
       if (p === '/posts') return page(pages.postsPage(pc, data.today(sc)));
+      // The one page that is not one account's: every account, and what waits in all of them.
+      if (p === '/all') return page(pages.allPage(pc, data.today(ctx)));
       const pm = /^\/post\/([\w-]+)$/.exec(p);
       if (pm) {
         const d = data.postFull(ctx, pm[1]);

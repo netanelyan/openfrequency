@@ -151,7 +151,7 @@ function stopBanners(ctx, d) {
   const out = [];
   if (ctx.globalKill) out.push(`<div class="banner bad">${icon('power')}<div><b>מתג הכיבוי הכללי מופעל.</b><p>שום חשבון לא מייצר ולא מפרסם.</p></div>${postButton(ctx, '/settings/kill', 'הפעל מחדש', { cls: 'btn sm', fields: { on: '0' } })}</div>`);
   for (const g of d.groups) {
-    if (g.acc?.status === 'paused') out.push(`<div class="banner warn">${icon('alert')}<div><b>${esc(g.pack.meta.displayName)} מושהה: ${esc(PAUSE_REASONS[g.acc.paused_reason] || g.acc.paused_reason)}</b>${g.acc.paused_detail ? `<p>${esc(g.acc.paused_detail)}</p>` : ''}</div><a class="btn sm" href="/accounts#acc-${esc(g.pack.id)}">לחשבון</a></div>`);
+    if (g.acc?.status === 'paused') out.push(`<div class="banner warn">${icon('alert')}<div><b>${esc(g.pack.meta.displayName)} מושהה: ${esc(PAUSE_REASONS[g.acc.paused_reason] || g.acc.paused_reason)}</b>${g.acc.paused_detail ? `<p>${esc(g.acc.paused_detail)}</p>` : ''}</div><a class="btn sm" href="/accounts?account=${esc(g.pack.id)}#acc-${esc(g.pack.id)}">לחשבון</a></div>`);
     else if (g.reached) out.push(`<div class="banner warn">${icon('alert')}<div><b>${esc(g.pack.meta.displayName)}: הנתח שלו מהתקציב נגמר.</b><p>לא נכתבים בו פוסטים חדשים עד שהתוכנית החודשית מפנה לו כסף, או עד החודש הבא.</p></div></div>`);
   }
   return out.join('');
@@ -238,6 +238,39 @@ ${todo.rows.length ? `${postLines(todo.rows)}${todo.more ? `<p class="small"><a 
 ${tiktokPanel(d)}
 ${d.summary ? summaryPanel(d) : ''}`;
   return layout({ ...ctx, title: 'היום', active: 'today' }, body);
+}
+
+/* ------------------------------------------------------------ every account */
+
+// The one page that is not one account's: every account on a line, and what waits in all of them, to approve at
+// once. The owner opens it from the switcher. The approve-all button carries the posts the page listed, so a post
+// drafted after the page was opened is never approved unseen.
+
+export function allPage(ctx, d) {
+  const waiting = d.groups.flatMap((g) => g.waiting);
+  const ids = (posts) => posts.map((p) => p.id).join(',');
+  const others = needsYou(d, 100).rows.filter((r) => !r.acc);
+  const accounts = `<div class="acctab" role="table" aria-label="היום בכל חשבון">
+<div class="r h" role="row"><span role="columnheader">חשבון</span><span role="columnheader">מחכים</span><span role="columnheader">מתוזמנים</span><span role="columnheader">פורסמו</span></div>
+${d.groups.map((g) => `<a class="r" role="row" href="/?account=${esc(g.pack.id)}"><span class="who" role="cell">${accDot(g.pack.id)}<span><b>${esc(g.pack.meta.displayName)}</b><small>${esc(g.acc?.status === 'paused' ? 'מושהה' : MODE_HE[g.acc?.mode || 'approve'][0])} · ${tokenNum(g.spend)} טוקנים</small></span></span>${['waiting', 'scheduled', 'published'].map((key) => `<span role="cell">${n(g[key].length, TONE[key])}</span>`).join('')}</a>`).join('')}
+</div>`;
+  const row = (p, g) => {
+    const cover = p.media?.tiktok?.length ? `<img class="thumb" src="${media(p, 'tiktok', 0)}" alt="" width="36" height="64" loading="lazy" decoding="async">` : '<span class="thumb"></span>';
+    return `<div class="qrow" id="all-${esc(p.id)}" data-post>${cover}<a class="tx" href="/post/${esc(p.id)}"><b>${esc(p.hook)}</b><span class="muted small">${esc(formatName(g.pack, p.format_id))} · ${esc(p.slot_at ? timeHe(p.slot_at) : 'בלי שעה')}</span></a>${postButton(ctx, `/post/${p.id}/approve`, `${icon('check')}אשר`, { cls: 'btn sm', ajax: 'remove' })}</div>`;
+  };
+  const several = d.groups.filter((g) => g.waiting.length).length > 1;
+  const queue = d.groups
+    .filter((g) => g.waiting.length)
+    .map((g) => `<div class="qgroup"><header>${accDot(g.pack.id)}<h3>${esc(g.pack.meta.displayName)}</h3><span class="muted small num">${g.waiting.length}</span>${several && g.waiting.length > 1 ? `<span class="end">${postButton(ctx, '/posts/approve-all', `אשר את ${g.waiting.length}`, { cls: 'btn sm ghost', fields: { ids: ids(g.waiting) } })}</span>` : ''}</header>${g.waiting.map((p) => row(p, g)).join('')}</div>`)
+    .join('');
+  const body = `<div class="head"><h1>כל החשבונות</h1><span class="sub">${esc(dayHe(Date.now()))}</span></div>
+${stopBanners(ctx, d)}
+<section class="panel home-panel">${accounts}</section>
+<section class="panel home-panel" id="waiting"><header><h2>מחכים לאישור</h2>${waiting.length > 1 ? `<span class="end">${postButton(ctx, '/posts/approve-all', `${icon('check')}אשר את כל ${waiting.length}`, { cls: 'btn primary', fields: { ids: ids(waiting) }, confirm: `לחצו שוב לאישור ${waiting.length} פוסטים` })}</span>` : ''}</header>
+${queue || '<p class="muted">אף חשבון לא מחכה לאישור.</p>'}
+</section>
+${others.length ? `<section class="panel home-panel"><header><h2>עוד דברים שמחכים לך</h2></header>${postLines(others)}</section>` : ''}`;
+  return layout({ ...ctx, title: 'כל החשבונות', active: 'all' }, body);
 }
 
 /* ------------------------------------------------------------ Posts */

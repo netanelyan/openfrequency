@@ -54,6 +54,7 @@ try {
       const postId = await page.evaluate(() => document.querySelector('[data-post]')?.id?.replace('post-', ''));
       const pages = [
         ['today', '/'],
+        ['all', '/all'],
         ['post', `/post/${postId}`],
         ['accounts', '/accounts'],
         ['results', '/results'],

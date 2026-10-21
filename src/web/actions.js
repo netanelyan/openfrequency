@@ -71,6 +71,30 @@ export function approve(ctx, user, { id }) {
   return { ok: true, message: post.slot_at ? 'אושר. ייצא בשעה שלו.' : 'אושר.' };
 }
 
+/**
+ * Approve many at once (the page of every account): the posts the page listed, in `ids`, that still wait. A post
+ * drafted after the page was opened is not in the list, so it is never approved unseen. `job` is every draft sent.
+ */
+export function approveAll(ctx, user, params, form) {
+  const ids = [...new Set(String(form.ids || '').split(',').map((s) => s.trim()).filter((s) => /^[\w-]+$/.test(s)))].slice(0, 500);
+  if (!ids.length) throw new ActionError('אין פוסטים לאשר');
+  const jobs = [];
+  let done = 0;
+  for (const id of ids) {
+    if (ctx.db.get('SELECT status FROM posts WHERE id = ?', id)?.status !== 'queued') continue;
+    const r = approve(ctx, user, { id });
+    done++;
+    if (r.job) jobs.push(r.job);
+  }
+  if (!done) throw new ActionError('אף אחד מהפוסטים האלה כבר לא מחכה לאישור');
+  const skipped = ids.length - done;
+  const rest = jobs.length ? restAt(now()) : null;
+  const next = jobs.length ? (rest ? ` הטיוטות יישלחו לטיקטוק כש${rest} ייגמר.` : ' הטיוטות נשלחות לטיקטוק.') : ' כל פוסט ייצא בשעה שלו.';
+  const result = { ok: true, message: `${done === 1 ? 'פוסט אחד אושר' : `${done} פוסטים אושרו`}${skipped ? ` (${skipped} כבר לא חיכו)` : ''}.${next}` };
+  Object.defineProperty(result, 'job', { value: Promise.all(jobs) });
+  return result;
+}
+
 export function unapprove(ctx, user, { id }) {
   const post = mustPost(ctx, id);
   if (post.status !== 'approved') throw new ActionError('הפוסט לא מאושר');

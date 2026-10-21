@@ -116,14 +116,26 @@ export function budgetBanner(b) {
 export function accountSwitch(ctx) {
   const all = ctx.accounts || [];
   const cur = all.find((a) => a.id === ctx.current);
+  const badge = (n, label) => (n ? `<b class="badge num" aria-label="${n} ${label}">${n}</b>` : '');
+  const newRow = `<a class="new" href="/new"><span class="ic">${icon('plus')}</span><span class="nm">חשבון חדש</span></a>`;
+  // On the page of every account (/all) the switcher says so, and each account is a link to its own home.
+  if (ctx.active === 'all' && all.length) {
+    const link = (a) => `<a class="to" href="/?account=${encodeURIComponent(a.id)}" title="@${esc(a.handle)}"><span class="ic">${accDot(a.id)}</span><span class="nm"><b>${esc(a.name)}</b></span>${badge(a.waiting, 'מחכים')}</a>`;
+    return `<details class="acctswitch">
+<summary aria-label="כל החשבונות. מעבר לחשבון אחד"><span class="ic">${icon('accounts')}</span><span class="nm"><b>כל החשבונות</b><small>${all.length === 1 ? 'חשבון אחד' : `${all.length} חשבונות`}</small></span>${icon('chev')}</summary>
+<div class="menu">${all.map(link).join('')}${newRow}</div>
+</details>`;
+  }
   if (!cur) return '';
   const others = all.filter((a) => a.id !== cur.id);
   const waitingElsewhere = others.reduce((s, a) => s + a.waiting, 0);
-  // The other accounts, as rows like the sections under them: one line, the same height and the same indent.
-  const item = (a) => `<form method="post" action="/account/switch">${csrfField(ctx)}<input type="hidden" name="to" value="${esc(a.id)}"><button type="submit" title="@${esc(a.handle)}"><span class="ic">${accDot(a.id)}</span><span class="nm"><b>${esc(a.name)}</b></span>${a.waiting ? `<b class="badge num" aria-label="${a.waiting} מחכים">${a.waiting}</b>` : ''}</button></form>`;
+  // The other accounts, as rows like the sections under them: one line, the same height and the same indent. Above
+  // them, the page of every account.
+  const item = (a) => `<form method="post" action="/account/switch">${csrfField(ctx)}<input type="hidden" name="to" value="${esc(a.id)}"><button type="submit" title="@${esc(a.handle)}"><span class="ic">${accDot(a.id)}</span><span class="nm"><b>${esc(a.name)}</b></span>${badge(a.waiting, 'מחכים')}</button></form>`;
+  const everyRow = others.length ? `<a class="to" href="/all"><span class="ic">${icon('accounts')}</span><span class="nm"><b>כל החשבונות</b></span>${badge(cur.waiting + waitingElsewhere, 'מחכים בכל החשבונות')}</a>` : '';
   return `<details class="acctswitch">
 <summary aria-label="החשבון: ${esc(cur.name)}. החלפת חשבון"><span class="ic">${accDot(cur.id)}</span><span class="nm"><b>${esc(cur.name)}</b><small class="ltr">@${esc(cur.handle)}</small></span>${waitingElsewhere ? `<b class="badge num" title="מחכים לאישור בחשבונות האחרים" aria-label="${waitingElsewhere} מחכים בחשבונות האחרים">${waitingElsewhere}</b>` : ''}${icon('chev')}</summary>
-<div class="menu">${others.map(item).join('')}<a class="new" href="/new"><span class="ic">${icon('plus')}</span><span class="nm">חשבון חדש</span></a></div>
+<div class="menu">${everyRow}${others.map(item).join('')}${newRow}</div>
 </details>`;
 }
 

@@ -240,16 +240,17 @@ svg.i { width: 20px; height: 20px; flex: none; stroke: currentColor; fill: none;
 .acctswitch .menu { position: absolute; z-index: 30; top: calc(100% + 8px); inset-inline-start: 0; display: grid; gap: 2px; min-width: 240px; padding: 6px; border-radius: 16px; background: #fbfbfd; box-shadow: var(--shadow-float), inset 0 0 0 1px var(--edge); }
 @media (prefers-color-scheme: dark) { .acctswitch .menu { background: #1e1e20; } }
 .acctswitch .menu form { margin: 0; }
-.acctswitch .menu button, .acctswitch .menu .new { width: 100%; display: flex; align-items: center; gap: 12px; min-height: 42px; padding: 0 12px; border: 0; border-radius: 12px; background: none; color: var(--ink-2); font: inherit; font-size: 13px; text-align: start; cursor: pointer; }
+.acctswitch .menu button, .acctswitch .menu .new, .acctswitch .menu .to { width: 100%; display: flex; align-items: center; gap: 12px; min-height: 42px; padding: 0 12px; border: 0; border-radius: 12px; background: none; color: var(--ink-2); font: inherit; font-size: 13px; text-align: start; cursor: pointer; }
 .acctswitch .menu .nm b { font-weight: 500; }
-.acctswitch .menu button:hover, .acctswitch .menu .new:hover { background: var(--fill); color: var(--ink); text-decoration: none; }
+.acctswitch .menu button:hover, .acctswitch .menu .new:hover, .acctswitch .menu .to:hover { background: var(--fill); color: var(--ink); text-decoration: none; }
 .acctswitch .badge { margin-inline-start: auto; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--badge); color: var(--badge-ink); font-size: 11px; font-weight: 600; line-height: 18px; text-align: center; }
 
 /* On a phone the bar is the logo, the account and the spend: the logo's word gives the account's name its room. */
 @media (max-width: 899px) { .acctswitch > summary .nm small { display: none; } .acctswitch > summary { max-width: 58vw; } .top .wrap:has(.acctswitch) .brand b { display: none; } }
 .acctswitch .menu form { margin: 0; }
-.acctswitch .menu button, .acctswitch .menu .new { width: 100%; display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 12px; border: 0; border-radius: 10px; background: none; color: inherit; font: inherit; text-align: start; cursor: pointer; }
-.acctswitch .menu button:hover, .acctswitch .menu .new:hover { background: var(--fill); text-decoration: none; }
+.acctswitch .menu button, .acctswitch .menu .new, .acctswitch .menu .to { width: 100%; display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 12px; border: 0; border-radius: 10px; background: none; color: inherit; font: inherit; text-align: start; cursor: pointer; }
+.acctswitch .menu button:hover, .acctswitch .menu .new:hover, .acctswitch .menu .to:hover { background: var(--fill); text-decoration: none; }
+.acctswitch .menu .to[aria-current] { background: var(--fill); }
 .acctswitch .menu button[aria-current] { background: var(--fill); }
 .acctswitch .menu .new { color: var(--ink-2); font-size: 13px; }
 .acctswitch .menu .new svg.i { width: 18px; height: 18px; }
@@ -294,7 +295,7 @@ svg.i { width: 20px; height: 20px; flex: none; stroke: currentColor; fill: none;
   .side-mini .acctswitch > summary { justify-content: center; padding: 0; min-height: 44px; border-radius: 12px; }
   .side-mini .acctswitch .nm, .side-mini .acctswitch > summary > svg.i { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .side-mini .acctswitch .menu { padding: 0; }
-  .side-mini .acctswitch .menu button, .side-mini .acctswitch .menu .new { justify-content: center; padding: 0; position: relative; }
+  .side-mini .acctswitch .menu button, .side-mini .acctswitch .menu .new, .side-mini .acctswitch .menu .to { justify-content: center; padding: 0; position: relative; }
   .side-mini .acctswitch .menu .badge { position: absolute; top: 4px; inset-inline-start: calc(50% + 2px); min-width: 16px; height: 16px; line-height: 16px; font-size: 10px; padding: 0 4px; }
   .side-mini .brand { padding: 0; }
   .side-mini .brand b { display: none; }
@@ -799,6 +800,20 @@ a.kpi.lead:hover { text-decoration: none; background: var(--inset); }
 @media (max-width: 480px) { .acctab .r { grid-template-columns: minmax(0, 1fr) repeat(3, 56px); gap: 4px; } .acctab .r.h > span { font-size: 11px; } }
 .sumtab td:not(:first-child), .sumtab th:not(:first-child) { text-align: center; }
 .home-panel { margin: 0 0 20px; }
+/* The page of every account: what waits, account by account, a line a post with its cover and one approve. */
+.qgroup + .qgroup { margin-top: 20px; }
+.qgroup > header { display: flex; align-items: center; gap: 8px; min-height: 36px; margin-bottom: 4px; }
+.qgroup > header h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.qgroup > header .end { margin-inline-start: auto; }
+.qrow { display: flex; align-items: center; gap: 12px; min-height: 76px; padding: 6px 0; border-top: 1px solid var(--line); overflow: hidden; transition: opacity 0.25s ease, max-height 0.35s ease, padding 0.35s ease; max-height: 200px; }
+.qrow.leaving { opacity: 0; }
+.qrow.gone { max-height: 0 !important; min-height: 0; padding: 0; border: 0; }
+.qrow .thumb { flex: none; width: 36px; height: 64px; border-radius: 6px; object-fit: cover; background: var(--fill); }
+.qrow .tx { display: grid; gap: 2px; min-width: 0; flex: 1; color: inherit; }
+.qrow .tx:hover { text-decoration: none; }
+.qrow .tx b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.qrow .tx .small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.qrow form { flex: none; margin: 0; }
 .todo a { min-height: 60px; }
 .todo .tx { display: grid; gap: 2px; min-width: 0; flex: 1; }
 .todo .tx b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
