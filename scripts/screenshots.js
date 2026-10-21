@@ -51,7 +51,10 @@ try {
       await page.fill('input[name=user]', 'demo');
       await page.fill('input[name=password]', 'demo-password-2026');
       await Promise.all([page.waitForNavigation(), page.click('button[type=submit]')]);
+      // Home is an overview with no cards; the cards, and so a post to picture, are on Posts.
+      await page.goto(`${base}/posts`);
       const postId = await page.evaluate(() => document.querySelector('[data-post]')?.id?.replace('post-', ''));
+      if (!postId) throw new Error('no post on /posts to picture');
       const pages = [
         ['today', '/'],
         ['all', '/all'],
@@ -99,6 +102,8 @@ async function shot(page, name) {
     imgs.forEach((i) => (i.loading = 'eager'));
     for (let t = 0; t < 50 && imgs.some((i) => !i.naturalWidth); t++) await new Promise((r) => setTimeout(r, 100));
     await document.fonts.ready;
+    // The login's wave draws itself in: picture it drawn.
+    await Promise.all(document.getAnimations().map((a) => a.finished.catch(() => {})));
   });
   const file = path.join(out, `${name}.png`);
   await page.screenshot({ path: file, fullPage: true });

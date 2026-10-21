@@ -22,7 +22,7 @@
 *.sqlite
 *.sqlite3
 
-# Rendered and downloaded media. docs/screenshots/ is the one exception.
+# Rendered and downloaded media. docs/screenshots/, the site's icons and the brand marks are the exceptions.
 /out/
 *.jpg
 *.jpeg
@@ -35,6 +35,7 @@
 !docs/screenshots/*.jpg
 !docs/screenshots/*.png
 !src/web/static/*.png
+!assets/brand/png/*.png
 
 node_modules/
 npm-debug.log*

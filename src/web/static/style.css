@@ -6,8 +6,9 @@
    web idiom: the system typeface (SF on Apple devices) with large bold headlines, one filled
    blue button per decision and grey glass pills for the rest, labels as plain text. The colour
    on the page is the colour that means something: blue for the action, green, orange and red
-   for status, and each account's dot. The mark is a level meter in dots, and the same dots
-   tell each account's day on the Today page.
+   for status, and each account's dot. The marks are the only other colour, each on its own
+   tile from assets/brand: Teder's wave on violet in the header and the login, the company's
+   halftone on blue in the footer. The dots that tell each account's day on Today are not a mark.
 
    Contrast, measured (WCAG) at the darkest band under the clearest glass: on a tile, ink 15:1,
    secondary 9.1:1, tertiary 4.6:1, link blue 5.0:1, status 4.9:1 or more; on the page, ink
@@ -169,8 +170,12 @@ svg.i { width: 20px; height: 20px; flex: none; stroke: currentColor; fill: none;
 
 /* ------------------------------------------------------------ the mark */
 
-.mark { width: 28px; height: 28px; border-radius: 7px; background: var(--accent-fill); color: #fff; display: grid; place-items: center; flex: none; }
-.mark svg { width: 20px; height: 20px; fill: currentColor; }
+/* The tile and the glyph are the brand files' (assets/brand/svg): the glyph fills the tile, rx 24 on 100, the
+   colour is the product's and never the accent. The glyphs carry their own fill and stroke in currentColor. */
+.mark { width: 28px; height: 28px; border-radius: 24%; color: #fff; display: block; flex: none; overflow: hidden; }
+.mark svg { display: block; width: 100%; height: 100%; }
+.mark.teder { background: #6a3fd6; }
+.mark.of { background: #2747d6; }
 
 /* ------------------------------------------------------------ navigation: a glass capsule on a phone, a glass sidebar on a desk */
 
@@ -197,8 +202,7 @@ svg.i { width: 20px; height: 20px; flex: none; stroke: currentColor; fill: none;
 .scrolled .top .wrap { box-shadow: var(--shadow-float), inset 0 0 0 1px var(--bar-edge), inset 0 1px 0 var(--rim); }
 .brand { display: flex; align-items: center; gap: 9px; padding-inline-end: 4px; }
 .brand:hover { text-decoration: none; }
-.brand .mark { width: 34px; height: 34px; border-radius: 10px; }
-.brand .mark svg { width: 24px; height: 24px; }
+.brand .mark { width: 34px; height: 34px; }
 .brand b { font: 700 17px/1 var(--display); }
 .nav { display: none; gap: 2px; padding: 3px; border-radius: 999px; background: var(--fill); }
 .nav a { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 16px; border-radius: 999px; color: var(--ink-2); font-size: 12px; font-weight: 500; transition: background-color 0.15s ease, color 0.15s ease; }
@@ -672,20 +676,17 @@ ol.trace li .d { color: var(--ink-3); font-size: 12px; }
 body.login { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
 .login .card { width: min(400px, 100%); border-radius: 26px; padding: 36px 28px 28px; overflow: visible; display: grid; gap: 16px; }
 .login .hero { display: grid; justify-items: center; gap: 16px; margin-bottom: 4px; }
-.login .hero .mark { width: 72px; height: 72px; border-radius: 16px; }
-.login .hero .mark svg { width: 52px; height: 52px; }
+.login .hero .mark { width: 72px; height: 72px; }
 .login .hero b { font: 700 30px/1.1 var(--display); }
 .login p { margin: 0 0 8px; text-align: center; color: var(--ink-3); font-size: 14px; }
 .login .err { color: var(--bad); background: var(--bad-bg); padding: 12px 14px; border-radius: var(--r-m); font-size: 13px; text-align: start; }
 .login input { min-height: 52px; }
 .login .btn { width: 100%; min-height: 50px; margin-top: 8px; }
-/* The one orchestrated moment: the meter rises once, from the centre out, as the desk opens. */
+/* The one orchestrated moment: the wave draws itself in once, as the desk opens (its path is 100 long). */
 @media (prefers-reduced-motion: no-preference) {
-  .login .hero .mark circle { animation: rise 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both; transform-box: fill-box; transform-origin: center; }
-  .login .hero .mark circle:nth-child(3n) { animation-delay: 0.08s; }
-  .login .hero .mark circle:nth-child(3n + 1) { animation-delay: 0.16s; }
+  .login .hero .mark path { stroke-dasharray: 100 120; animation: draw 0.8s cubic-bezier(0.65, 0, 0.35, 1) 0.1s both; }
 }
-@keyframes rise { from { opacity: 0; transform: scale(0.2); } to { opacity: 1; transform: scale(1); } }
+@keyframes draw { from { stroke-dashoffset: 101; } to { stroke-dashoffset: 0; } }
 
 /* toast: what a tap did, where the thumb is */
 #toast { position: fixed; inset-inline: 16px; bottom: calc(var(--tab) + 24px + env(safe-area-inset-bottom)); margin: 0 auto; max-width: 420px; background: var(--toast); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); color: #fff; padding: 14px 18px; border-radius: 14px; font-weight: 500; font-size: 13px; box-shadow: var(--shadow-float); opacity: 0; transform: translateY(8px); pointer-events: none; transition: opacity 0.2s ease, transform 0.2s ease; z-index: 50; }
@@ -693,10 +694,9 @@ body.login { min-height: 100vh; display: grid; place-items: center; padding: 24p
 #toast.bad { background: var(--bad); color: var(--bad-ink); }
 @media (min-width: 900px) { #toast { bottom: 28px; } }
 
-/* The foot: the mark and the trademark, nothing else. */
+/* The foot: the company's mark and the trademark, nothing else. */
 .foot { display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--ink-p); font-size: 12px; padding: 48px 0 8px; }
-.foot .mark { width: 20px; height: 20px; border-radius: 6px; }
-.foot .mark svg { width: 14px; height: 14px; }
+.foot .mark { width: 28px; height: 28px; }
 .foot sup { font-size: 0.7em; }
 
 @media (prefers-reduced-motion: reduce) {

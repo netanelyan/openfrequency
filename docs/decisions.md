@@ -1383,3 +1383,14 @@ engine can act on, and what changed:
   post is drafted from the day's documents as before, so a day is never empty. The
   signals are read only live, never invented offline; in the demo only the bank works.
 
+- **Teder gets its own mark; the dots become the company's (2026-10-21, the owner's
+  call).** The level meter in dots is no longer Teder's mark: redrawn as a halftone,
+  dots growing toward the centre, it is now OpenFrequency's, on blue (#2747D6). Teder's
+  is one wave, like a tilde, white on violet (#6A3FD6), in the header, on the login and
+  as the app icon; a third product, Toran, has three dots on green (#0F7A54). The files
+  are in `assets/brand` and the site reads its glyphs from there, so a mark is never
+  redrawn by hand; the 5x5 halftone stands in for the company's where it is small (the
+  footer is its only place here). Only the logo turned violet: the accent of buttons,
+  links and the selected tab stays blue. On the login the wave draws itself in once,
+  instead of the meter rising. The dots that tell each account's day on Today were never
+  the mark and keep their look.

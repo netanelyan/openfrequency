@@ -6,6 +6,10 @@
 // (a handle, a URL, a product name) sits in <bdi> or .ltr so bidi cannot
 // scramble the punctuation around it.
 
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { assetsDir } from '../core/paths.js';
+
 export const esc = (s) =>
   String(s ?? '')
     .replace(/&/g, '&amp;')
@@ -38,14 +42,16 @@ export const tok = (usdAmount) => `<span class="num">${tokenNum(usdAmount)} טו
 export const k = (n) => (n == null ? '–' : n >= 10_000 ? `${Math.round(n / 1000)}K` : n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(n));
 export const pct = (x) => (x == null ? '–' : `${Math.round(x * 100)}%`);
 
-/** The mark's dots, viewBox 0 0 100 100: the full meter (1-2-4-6-4-2-1) where it is large, five columns (1-3-5-3-1) small. */
-export function markDots(full = false) {
-  const cols = full ? [1, 2, 4, 6, 4, 2, 1] : [1, 3, 5, 3, 1];
-  const [dx, dy, r] = full ? [10, 9.5, 3.4] : [13, 12.5, 5];
-  const x0 = 50 - ((cols.length - 1) / 2) * dx;
-  return cols.flatMap((n, c) => Array.from({ length: n }, (_, k) => `<circle cx="${x0 + c * dx}" cy="${(50 + (k - (n - 1) / 2) * dy).toFixed(2)}" r="${r}"/>`)).join('');
-}
-export const mark = (full = false) => `<span class="mark" aria-hidden="true"><svg viewBox="0 0 100 100">${markDots(full)}</svg></span>`;
+/** A brand mark's glyph, as drawn in assets/brand/svg (viewBox 0 0 100 100, currentColor): never redrawn here. */
+const glyph = (name) => readFileSync(path.join(assetsDir, 'brand', 'svg', `${name}.svg`), 'utf8').replace(/^\s*<svg[^>]*>|<\/svg>\s*$/g, '');
+// pathLength lets the login draw the wave in without knowing how long it is; it changes nothing on the page.
+const TEDER_GLYPH = glyph('teder-glyph').replace('<path ', '<path pathLength="100" ');
+const OF_GLYPH = glyph('openfrequency-glyph-small');
+const markTile = (cls, inner) => `<span class="mark ${cls}" aria-hidden="true"><svg viewBox="0 0 100 100">${inner}</svg></span>`;
+/** Teder's mark: one wave on violet. The header and the login. */
+export const tederMark = () => markTile('teder', TEDER_GLYPH);
+/** The company's mark: a halftone on blue. Only the footer, next to the name. */
+export const ofMark = () => markTile('of', OF_GLYPH);
 
 export const icon = (name, cls = 'i') => `<svg class="${cls}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
 
@@ -171,7 +177,7 @@ export function layout(ctx, body) {
 <body>
 ${SPRITE}
 <header class="top"><div class="wrap">
-  <a class="brand" href="/" aria-label="תדר, להיום">${mark()}<b>תדר</b></a>
+  <a class="brand" href="/" aria-label="תדר, להיום">${tederMark()}<b>תדר</b></a>
   ${accountSwitch(ctx)}
   <button class="sidetoggle" type="button" data-side aria-label="${ctx.side === 'mini' ? 'הרחב את סרגל הצד' : 'כווץ את סרגל הצד'}" aria-expanded="${ctx.side === 'mini' ? 'false' : 'true'}" title="${ctx.side === 'mini' ? 'הרחב' : 'כווץ'}">${icon('sidebar')}</button>
   <nav class="nav" aria-label="ראשי">${nav}</nav>
@@ -182,7 +188,7 @@ ${SPRITE}
 <main class="wrap" id="main">
 ${budgetBanner(ctx.budget)}
 ${body}
-<footer class="foot">${mark()}<span class="ltr">OpenFrequency<sup>™</sup></span></footer>
+<footer class="foot">${ofMark()}<span class="ltr">OpenFrequency<sup>™</sup></span></footer>
 </main>
 <nav class="tabbar" aria-label="ניווט">${tabs}</nav>
 <div id="toast" role="status" aria-live="polite"></div>

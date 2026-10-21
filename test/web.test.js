@@ -80,6 +80,7 @@ test('every page is Hebrew, right to left, and escapes what it shows (hard rule 
   }
   const loginHtml = await (await get('/login')).text();
   assert.match(loginHtml, /<html lang="he" dir="rtl"/);
+  assert.match(loginHtml, /<div class="hero"><span class="mark teder"[^>]*><svg viewBox="0 0 100 100"><path [^>]*stroke="currentColor"/, "the login shows Teder's wave");
 });
 
 test('results lead with what the published posts did; the formats and the blocks wait behind a button each', async () => {
@@ -98,7 +99,8 @@ test('home is the overview: what went out leads, what needs you, one row per acc
   assert.match(home, /class="kpi lead" href="\/posts#published"><span class="l">פורסמו היום<\/span><span class="v num">0<\/span>/, 'what went out leads');
   assert.match(home, /<span class="l">מחכים לאישור<\/span><b class="cnt num sig">1<\/b>/);
   assert.doesNotMatch(home, /נחסמו/, 'what the checks stopped is not on home');
-  assert.match(home, /<footer class="foot">.*OpenFrequency<sup>™<\/sup><\/span><\/footer>/s, 'the foot is the mark and the trademark');
+  assert.match(home, /<footer class="foot"><span class="mark of"[^>]*>.*OpenFrequency<sup>™<\/sup><\/span><\/footer>/s, "the foot is the company's mark and the trademark");
+  assert.match(home, /<a class="brand"[^>]*><span class="mark teder"/, "the header carries Teder's mark");
   assert.doesNotMatch(home, /מצב הקלטות|מצב חי/, 'no mode or user name as a watermark');
   assert.match(home, new RegExp(`href="/posts#post-${postId}"`), 'the waiting post is one line that leads to its card');
   assert.doesNotMatch(home, /data-post/, 'no post card, no slides, no captions on home');

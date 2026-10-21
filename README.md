@@ -75,7 +75,9 @@ Five sections, the same on a phone and a desk:
 
 A post's own page shows the whole trace: every slide, its facts, their quotes, the
 stored document and the source. The site follows the system's light or dark setting,
-works without JavaScript, and adds to a phone's home screen.
+works without JavaScript, and adds to a phone's home screen. Its mark is Teder's
+wave on violet; the footer carries the company's, OpenFrequency's halftone on blue
+(both from [`assets/brand`](assets/brand/README.md)).
 
 ## How a post is made
 
@@ -440,6 +442,7 @@ src/trends      formats that work on YouTube Shorts
 src/autonomy    the runner and its rails
 src/onboarding  source discovery, the API catalogue, writing a new pack
 src/web         Teder: server, login, pages, actions, one stylesheet, one script
+assets/        the bundled fonts and the brand marks (assets/brand)
 examples/       the fictional demo pack and the blank pack
 scripts/        the commands above
 test/           node:test, one file per area

@@ -1,4 +1,4 @@
-import { accDot, csrfField, dayHe, esc, icon, k, layout, markDots, MODE_HE, postButton, shortDate, stamp, statusChip, timeHe, tok, tokenNum, TOKENS_PER_USD, usd, weekdayNarrow } from './ui.js';
+import { accDot, csrfField, dayHe, esc, icon, k, layout, MODE_HE, postButton, shortDate, stamp, statusChip, tederMark, timeHe, tok, tokenNum, TOKENS_PER_USD, usd, weekdayNarrow } from './ui.js';
 import { PAUSE_REASONS } from '../autonomy/rails.js';
 import { FLOW_HE, draftNote, flowState } from '../publish/draft.js';
 import { CATALOG } from '../sources/catalog.js';
@@ -797,7 +797,7 @@ ${row('/settings', 'settings', 'הגדרות', 'כיבוי כללי, תקציב,
 export function loginPage({ error = null } = {}) {
   return `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="color-scheme" content="light dark"><meta name="theme-color" content="#eeeff2" media="(prefers-color-scheme: light)"><meta name="theme-color" content="#111113" media="(prefers-color-scheme: dark)"><title>כניסה · תדר</title><link rel="stylesheet" href="/static/style.css"><link rel="icon" href="/static/icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/static/icon-180.png"><link rel="manifest" href="/static/manifest.webmanifest"></head>
 <body class="login"><form class="card" method="post" action="/login">
-<div class="hero"><span class="mark" aria-hidden="true"><svg viewBox="0 0 100 100">${markDots(true)}</svg></span><b>תדר</b></div>
+<div class="hero">${tederMark()}<b>תדר</b></div>
 <p>היכנסו כדי לאשר את הפוסטים של היום.</p>
 ${error ? `<div class="err" role="alert">${esc(error)}</div>` : ''}
 <label class="f">שם משתמש<input type="text" name="user" autocomplete="username" autocapitalize="off" spellcheck="false" required dir="ltr"></label>

@@ -8,7 +8,8 @@
 //   - a .env file other than .env.example, or a key-shaped string anywhere
 //   - a database (by extension or by the SQLite header)
 //   - a pack outside examples/ (a pack.json, or a folder with theme.json and sources.json)
-//   - rendered or downloaded media outside docs/screenshots/
+//   - rendered or downloaded media outside docs/screenshots/ (the site's icons and the
+//     brand marks in assets/brand/ are public too)
 //   - the name of a real account: every pack in $OF_HOME/packs (and the archived
 //     ones in packs/_archive) contributes its id, handle, display name, Zernio ids
 //     and Instagram ids, and $OF_HOME/public-denylist.txt adds any other words (a
@@ -63,7 +64,7 @@ const problems = [];
 const fail = (file, why) => problems.push(`${file}: ${why}`);
 
 const MEDIA = /\.(jpe?g|png|webp|gif|mp4|mov|webm|heic)$/i;
-const MEDIA_OK = [/^docs\/screenshots\//, /^src\/web\/static\//];
+const MEDIA_OK = [/^docs\/screenshots\//, /^src\/web\/static\//, /^assets\/brand\/png\//];
 const KEY_NAMES = ['ANTHROPIC_API_KEY', 'ANTHROPIC_WORKSPACE_ID', 'ZERNIO_API_KEY', 'BRAVE_API_KEY', 'YOUTUBE_API_KEY', 'PEXELS_API_KEY', 'UNSPLASH_ACCESS_KEY', 'SESSION_SECRET', 'OF_ADMIN_PASSWORD', 'META_APP_SECRET', 'IG_TOKEN_[A-Z0-9_]+'];
 const KEY_SHAPES = [
   [/sk-ant-[A-Za-z0-9_-]{20,}/, 'an Anthropic key'],
