@@ -170,8 +170,8 @@ export function layout(ctx, body) {
 <title>${esc(ctx.title)} · תדר</title>
 <link rel="stylesheet" href="/static/style.css?v=${ctx.v || 1}">
 <link rel="stylesheet" href="/static/accounts.css?v=${ctx.v || 1}">
-<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="/static/icon-180.png">
+<link rel="icon" href="/static/icon.svg?v=${ctx.v || 1}" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/icon-180.png?v=${ctx.v || 1}">
 <link rel="manifest" href="/static/manifest.webmanifest">
 </head>
 <body>

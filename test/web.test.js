@@ -80,6 +80,10 @@ test('every page is Hebrew, right to left, and escapes what it shows (hard rule 
   }
   const loginHtml = await (await get('/login')).text();
   assert.match(loginHtml, /<html lang="he" dir="rtl"/);
+  assert.match(loginHtml, /<link rel="icon" href="\/static\/icon\.svg\?v=\w+"/, 'the favicon link carries the version, so a new icon is fetched');
+  const fav = await get('/favicon.ico');
+  assert.equal(fav.status, 200, 'the favicon is served without a session, not redirected to the login');
+  assert.equal(fav.headers.get('content-type'), 'image/png');
   assert.match(loginHtml, /<div class="hero"><span class="mark teder"[^>]*><svg viewBox="0 0 100 100"><path [^>]*stroke="currentColor"/, "the login shows Teder's wave");
 });
 

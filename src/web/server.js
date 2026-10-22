@@ -135,6 +135,8 @@ export function createHandler(ctx, { port, env = process.env, limiter = createLi
       if (req.method === 'GET' || req.method === 'HEAD') {
         if (p === '/static/style.css') return send(req, res, 200, readFileSync(path.join(STATIC, 'style.css')), 'text/css; charset=utf-8', { 'cache-control': 'public, max-age=3600' });
         if (p === '/static/app.js') return send(req, res, 200, readFileSync(path.join(STATIC, 'app.js')), 'text/javascript; charset=utf-8', { 'cache-control': 'public, max-age=3600' });
+        // A browser asks for /favicon.ico on its own (Safari always): answer with the icon, not the login page.
+        if (p === '/favicon.ico') return send(req, res, 200, readFileSync(path.join(STATIC, 'icon-180.png')), 'image/png', { 'cache-control': 'public, max-age=86400' });
         if (p === '/static/icon.svg') return send(req, res, 200, readFileSync(path.join(STATIC, 'icon.svg')), 'image/svg+xml', { 'cache-control': 'public, max-age=86400' });
         if (p === '/static/icon-180.png' || p === '/static/icon-512.png') return send(req, res, 200, readFileSync(path.join(STATIC, path.basename(p))), 'image/png', { 'cache-control': 'public, max-age=86400' });
         if (p === '/static/manifest.webmanifest') return send(req, res, 200, readFileSync(path.join(STATIC, 'manifest.webmanifest')), 'application/manifest+json; charset=utf-8', { 'cache-control': 'public, max-age=86400' });
@@ -149,7 +151,7 @@ export function createHandler(ctx, { port, env = process.env, limiter = createLi
         if (req.method === 'POST') {
           const ip = clientIp(req);
           const wait = limiter.check(ip);
-          if (wait) return send(req, res, 429, pages.loginPage({ error: `יותר מדי ניסיונות. נסו שוב בעוד ${Math.ceil(wait / 60)} דקות.`, theme }), 'text/html; charset=utf-8', { 'retry-after': String(wait) });
+          if (wait) return send(req, res, 429, pages.loginPage({ v: V, error: `יותר מדי ניסיונות. נסו שוב בעוד ${Math.ceil(wait / 60)} דקות.`, theme }), 'text/html; charset=utf-8', { 'retry-after': String(wait) });
           const origin = req.headers.origin;
           if (origin && !origins.has(origin)) return send(req, res, 403, 'cross-origin', 'text/plain; charset=utf-8');
           const form = await readForm(req, 4000);
@@ -163,9 +165,9 @@ export function createHandler(ctx, { port, env = process.env, limiter = createLi
           limiter.fail(ip);
           await new Promise((r) => setTimeout(r, failDelayMs));
           const none = !ctx.db.get('SELECT COUNT(*) AS n FROM users').n;
-          return send(req, res, 401, pages.loginPage({ error: none ? 'עוד אין משתמש. הגדירו OF_ADMIN_PASSWORD ב-.env והפעילו מחדש, או הריצו npm run user:add.' : 'שם המשתמש או הסיסמה לא נכונים.', theme }));
+          return send(req, res, 401, pages.loginPage({ v: V, error: none ? 'עוד אין משתמש. הגדירו OF_ADMIN_PASSWORD ב-.env והפעילו מחדש, או הריצו npm run user:add.' : 'שם המשתמש או הסיסמה לא נכונים.', theme }));
         }
-        return send(req, res, 200, pages.loginPage({ theme }));
+        return send(req, res, 200, pages.loginPage({ v: V, theme }));
       }
 
       // ---- everything else needs a session
