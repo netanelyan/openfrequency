@@ -15,21 +15,28 @@ import { accDot, csrfField, esc, icon, k, layout, postButton, stamp } from './ui
 //         ->  live, in Approve mode
 //
 // Nothing goes live before five samples exist and the owner has looked at them.
+//
+// A new account is its workspace's: the one of the session that started it (src/web/workspace.js). Every route gets
+// the request's context; the engine's work in the background (discovery, the pack, the samples) gets the engine's
+// whole context, so a new account's look and handle are checked against every account on the server.
 
 const STATUS_HE = { discovering: 'מחפש מקורות', review: 'לבחירת מקורות', failed: 'נכשל', samples: 'פוסטים לדוגמה', ready: 'מוכן לעלות', live: 'באוויר' };
 const TERMS_HE = { ok: 'תנאים בסדר', check: 'לבדוק תנאי שימוש', no: 'אסור לשימוש' };
 const TYPE_HE = { rss: 'פיד', web: 'דף', api: 'API' };
 const running = new Map();
 
+const engine = (ctx) => ctx.global || ctx;
+
 const row = (ctx, id) => {
   const r = ctx.db.get('SELECT * FROM onboarding WHERE id = ?', id);
-  if (!r) throw new ActionError('אין תהליך כזה', 404);
+  if (!r || (ctx.workspaceId != null && r.workspace_id !== ctx.workspaceId)) throw new ActionError('אין תהליך כזה', 404);
   return { ...r, seed: j(r.seed_json, {}), found: j(r.candidates_json, {}), notes: j(r.notes_json, []) };
 };
 
 function startDiscovery(ctx, id) {
   if (running.has(id)) return;
   const r = row(ctx, id);
+  ctx = engine(ctx);
   const job = discover(ctx, r.seed)
     .then((out) => ctx.db.update('onboarding', id, { status: 'review', candidates_json: { candidates: out.candidates, formats: out.formats }, notes_json: out.notes, updated_at: nowIso() }))
     .catch((e) => ctx.db.update('onboarding', id, { status: 'failed', notes_json: [String(e.message)], updated_at: nowIso() }))
@@ -40,6 +47,7 @@ function startDiscovery(ctx, id) {
 function startSamples(ctx, id) {
   if (running.has(id)) return;
   const r = row(ctx, id);
+  ctx = engine(ctx);
   const pack = ctx.pack(r.pack_id);
   const job = (async () => {
     const notes = [];
@@ -57,7 +65,7 @@ function startSamples(ctx, id) {
 }
 
 function listPage(ctx, pc) {
-  const rows = ctx.db.all('SELECT * FROM onboarding ORDER BY updated_at DESC LIMIT 20').map((r) => ({ ...r, seed: j(r.seed_json, {}) }));
+  const rows = (ctx.workspaceId == null ? ctx.db.all('SELECT * FROM onboarding ORDER BY updated_at DESC LIMIT 20') : ctx.db.all('SELECT * FROM onboarding WHERE workspace_id = ? ORDER BY updated_at DESC LIMIT 20', ctx.workspaceId)).map((r) => ({ ...r, seed: j(r.seed_json, {}) }));
   return layout(
     { ...pc, title: 'חשבון חדש', active: 'new' },
     `<div class="head"><h1>חשבון חדש</h1><span class="sub">בוחרים נישה ודוגמאות, מאשרים מקורות, ומקבלים חמישה פוסטים לדוגמה.</span></div>
@@ -123,19 +131,20 @@ ${r.status === 'live' ? '<span class="chip ok">באוויר</span>' : ''}</div>
   );
 }
 
-export function onboardingRoutes(ctx) {
+/** The routes, each (ctx, user, match, form or query, page context) with the request's context. */
+export function onboardingRoutes() {
   return [
-    ['GET', /^\/new$/, (_u, _m, _q, pc) => listPage(ctx, pc)],
-    ['GET', /^\/new\/([\w-]+)$/, (_u, m, _q, pc) => detailPage(ctx, pc, row(ctx, m[1]))],
+    ['GET', /^\/new$/, (ctx, _u, _m, _q, pc) => listPage(ctx, pc)],
+    ['GET', /^\/new\/([\w-]+)$/, (ctx, _u, m, _q, pc) => detailPage(ctx, pc, row(ctx, m[1]))],
     [
       'POST',
       /^\/new$/,
-      (user, _m, f) => {
+      (ctx, user, _m, f) => {
         const niche = String(f.niche || '').trim();
         if (niche.length < 2) throw new ActionError('צריך לכתוב את הנישה');
         const id = newId('o');
         const seed = { niche, nicheEn: String(f.nicheEn || '').trim(), language: 'he', audience: String(f.audience || '').trim(), topics: String(f.topics || '').split(/[,،]/).map((x) => x.trim()).filter(Boolean), examples: String(f.examples || '').split(/\r?\n/).map((x) => x.trim()).filter(Boolean).slice(0, 10) };
-        ctx.db.insert('onboarding', { id, seed_json: seed, status: 'discovering', created_at: nowIso(), updated_at: nowIso() });
+        ctx.db.insert('onboarding', { id, seed_json: seed, status: 'discovering', workspace_id: ctx.workspaceId ?? null, created_at: nowIso(), updated_at: nowIso() });
         audit(ctx.db, { actor: user.name, action: 'onboarding', detail: { niche } });
         startDiscovery(ctx, id);
         return { ok: true, message: 'מחפש מקורות.', redirect: `/new/${id}` };
@@ -144,17 +153,19 @@ export function onboardingRoutes(ctx) {
     [
       'POST',
       /^\/new\/([\w-]+)\/create$/,
-      async (user, m, f) => {
+      async (ctx, user, m, f) => {
         const r = row(ctx, m[1]);
         const candidates = (r.found.candidates || []).map((c) => ({ ...c, approved: f[`approve_${c.id}`] === 'on', why: String(f[`why_${c.id}`] || c.why || c.score?.reason || '').trim() }));
         let made;
         try {
-          made = await createPack(ctx, { seed: r.seed, candidates, displayName: f.displayName, handle: f.handle, examplesFromOwner: r.seed.examples });
+          made = await createPack(engine(ctx), { seed: r.seed, candidates, displayName: f.displayName, handle: f.handle, examplesFromOwner: r.seed.examples });
         } catch (e) {
+          // Pack ids are the server's, so a handle another workspace has is refused without naming whose it is.
+          if (/already exists/.test(e.message)) throw new ActionError('שם המשתמש הזה כבר תפוס. בחרו שם אחר.');
           throw new ActionError([e.message, ...(e.problems || [])].join(' · '));
         }
         // The account starts in onboarding: the runner leaves it alone until it goes live.
-        ctx.db.insert('accounts', { id: made.id, display_name: made.pack.meta.displayName, handle: made.pack.meta.handle, mode: 'approve', status: 'onboarding', created_at: nowIso(), updated_at: nowIso() });
+        ctx.db.insert('accounts', { id: made.id, display_name: made.pack.meta.displayName, handle: made.pack.meta.handle, mode: 'approve', status: 'onboarding', workspace_id: r.workspace_id ?? null, created_at: nowIso(), updated_at: nowIso() });
         ctx.reloadPacks();
         ctx.db.update('onboarding', r.id, { status: 'samples', pack_id: made.id, candidates_json: { ...r.found, candidates }, updated_at: nowIso() });
         audit(ctx.db, { actor: user.name, action: 'onboarding', accountId: made.id, detail: { sources: candidates.filter((c) => c.approved).length } });
@@ -164,7 +175,7 @@ export function onboardingRoutes(ctx) {
     [
       'POST',
       /^\/new\/([\w-]+)\/samples$/,
-      (_user, m) => {
+      (ctx, _user, m) => {
         const r = row(ctx, m[1]);
         if (!r.pack_id) throw new ActionError('קודם יוצרים את החבילה');
         startSamples(ctx, r.id);
@@ -174,7 +185,7 @@ export function onboardingRoutes(ctx) {
     [
       'POST',
       /^\/new\/([\w-]+)\/reviewed$/,
-      (user, m) => {
+      (ctx, user, m) => {
         const r = row(ctx, m[1]);
         const n = ctx.db.get("SELECT COUNT(*) AS n FROM posts WHERE account_id = ? AND status = 'sample'", r.pack_id).n;
         if (n < 5) throw new ActionError(`צריך חמש דוגמאות שעברו את הבדיקות, יש ${n}`);
@@ -186,7 +197,7 @@ export function onboardingRoutes(ctx) {
     [
       'POST',
       /^\/new\/([\w-]+)\/live$/,
-      (user, m) => {
+      (ctx, user, m) => {
         const r = row(ctx, m[1]);
         if (r.status !== 'ready') throw new ActionError('קודם עוברים על חמש הדוגמאות');
         ctx.db.update('accounts', r.pack_id, { status: 'active', mode: 'approve', updated_at: nowIso() });

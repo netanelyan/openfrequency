@@ -24,6 +24,7 @@ import { vapid } from '../notify/index.js';
 import path from 'node:path';
 import { PASS, topicById, topicsOf, watchList } from '../topics/index.js';
 import { youtubeConfigured } from '../trends/index.js';
+import { owns } from './workspace.js';
 
 // What each page shows, as plain queries. Pages never touch the database
 // themselves, so what a page can see is listed here.
@@ -42,11 +43,33 @@ export function scoped(ctx, pack) {
 /** The ids of the accounts a context shows, and the SQL that keeps a query to them; a context without packs is every one. */
 const inAccounts = (ctx, col = 'account_id') => (ctx.packs ? [`${col} IN (${ctx.packs.map(() => '?').join(', ') || 'NULL'})`, ctx.packs.map((p) => p.id)] : ['1 = 1', []]);
 
-/** The month's budget plan, computed at most every few seconds (a page asks for it more than once). */
+/**
+ * The month's budget plan, computed at most every few seconds (a page asks for it more than once). It is made for
+ * every account on the server, since they share one cap. A workspace sees its own part of it: its accounts, what
+ * they spent and hold, and the sum of their shares as its cap. The server's total and the other accounts are the
+ * operator's alone.
+ */
 const planOf = (ctx) => {
-  const r = ctx.root || ctx;
-  if (!r._plan || Date.now() - r._plan.at > 5000) r._plan = { at: Date.now(), plan: planMonth(r.db, r.packs) };
-  return r._plan.plan;
+  const g = (ctx.root || ctx).global || ctx.root || ctx;
+  if (!g._plan || Date.now() - g._plan.at > 5000) g._plan = { at: Date.now(), plan: planMonth(g.db, g.packs) };
+  const plan = g._plan.plan;
+  if (ctx.workspaceId == null) return plan;
+  const mine = new Set((ctx.root || ctx).packs.map((p) => p.id));
+  const accounts = plan.accounts.filter((a) => mine.has(a.id));
+  const sum = (k) => accounts.reduce((s, a) => s + (Number(a[k]) || 0), 0);
+  const cap = sum('alloc');
+  const spent = sum('spent');
+  const reserved = sum('reserved');
+  return {
+    ...plan,
+    accounts,
+    cap,
+    spent,
+    reserved,
+    forecast: sum('forecast'),
+    left: Math.max(0, cap - spent - reserved),
+    postsLeft: sum('remainingPosts'),
+  };
 };
 
 export function header(ctx) {
@@ -54,6 +77,7 @@ export function header(ctx) {
   const plan = planOf(ctx);
   // What waits, per account: the switcher says it beside each name, the Posts tab for the account shown.
   const per = Object.fromEntries(ctx.db.all("SELECT account_id, COUNT(*) AS n FROM posts WHERE status = 'queued' AND sample = 0 GROUP BY account_id").map((r) => [r.account_id, r.n]));
+  // The switcher lists the context's accounts: a workspace's, or every one for the operator.
   const waiting = ctx.packs.reduce((a, p) => a + (per[p.id] || 0), 0);
   const all = (ctx.root || ctx).packs;
   const accounts = all.map((p) => ({ id: p.id, name: p.meta.displayName, handle: p.meta.handle, waiting: per[p.id] || 0 }));
@@ -103,14 +127,16 @@ export function today(ctx, t = now()) {
         .map((p) => ({ id: p.id, hook: p.hook, slotAt: p.slot_at || p.published_at, flow: j(p.publish_json, {}).tiktok?.flow || {} })),
     };
   });
-  const summary = ctx.db.get('SELECT * FROM summaries WHERE account_id IS NULL ORDER BY day DESC LIMIT 1');
+  const overall = ctx.db.get('SELECT * FROM summaries WHERE account_id IS NULL ORDER BY day DESC LIMIT 1');
   const live = new Set(groups.map((g) => g.pack.id));
-  const summaryRows = summary
+  const summaryRows = overall
     ? ctx.db
-        .all('SELECT account_id, data_json FROM summaries WHERE day = ? AND account_id IS NOT NULL', summary.day)
+        .all('SELECT account_id, data_json FROM summaries WHERE day = ? AND account_id IS NOT NULL', overall.day)
         .filter((r) => live.has(r.account_id))
         .map((r) => ({ account_id: r.account_id, data: j(r.data_json, {}) }))
     : [];
+  // The overall summary's text names every account on the server: a workspace gets its own rows, or no summary.
+  const summary = ctx.workspaceId == null ? overall : summaryRows.length ? { ...overall, text: '' } : null;
   return { day, groups, summary, summaryRows, attention: attention(ctx) };
 }
 
@@ -247,12 +273,16 @@ export function sourcesFor(ctx, accountId) {
   return ctx.db.all("SELECT s.*, (SELECT COUNT(*) FROM documents d WHERE d.source_id = s.id) AS docs FROM sources s WHERE s.account_id = ? ORDER BY CASE s.status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END, s.name", accountId).map((s) => ({ ...s, score: j(s.score_json, null), config: j(s.config_json, {}) }));
 }
 
+/** Settings. A workspace sees its own accounts, browsers and spend; the server's keys, engine and log are the operator's. */
 export function settingsData(ctx) {
   const s = settings(ctx.db);
   const envCap = Number(process.env.OF_BUDGET_MONTHLY_USD) > 0 ? Number(process.env.OF_BUDGET_MONTHLY_USD) : DEFAULT_MONTHLY_USD;
+  const operator = ctx.workspaceId == null;
+  // Every account of the workspace, not only the one shown.
+  const mine = (ctx.root || ctx).packs.map((p) => p.id);
   return {
     settings: s,
-    spend: monthSpend(ctx.db, undefined),
+    spend: operator ? monthSpend(ctx.db, undefined) : { usd: mine.reduce((a, id) => a + monthSpend(ctx.db, id).usd, 0), month: monthKey() },
     month: monthKey(),
     plan: planOf(ctx),
     envCap,
@@ -270,15 +300,15 @@ export function settingsData(ctx) {
       }),
     zernio: zernioConfigured(),
     liveSwitch: process.env.PUBLISH_MODE === 'live',
-    users: ctx.db.all('SELECT id, name, role, created_at, last_login_at FROM users ORDER BY id'),
-    push: { key: vapid(ctx.db).publicKey, browsers: ctx.db.get('SELECT COUNT(*) AS n FROM push_subs WHERE failed < 5').n },
-    audit: ctx.db.all('SELECT * FROM audit ORDER BY id DESC LIMIT 40').map((a) => ({ ...a, detail: j(a.detail_json, null) })),
+    push: { key: vapid(ctx.db).publicKey, browsers: operator ? ctx.db.get('SELECT COUNT(*) AS n FROM push_subs WHERE failed < 5').n : ctx.db.get('SELECT COUNT(*) AS n FROM push_subs WHERE failed < 5 AND workspace_id = ?', ctx.workspaceId).n },
+    audit: operator ? ctx.db.all('SELECT * FROM audit ORDER BY id DESC LIMIT 40').map((a) => ({ ...a, detail: j(a.detail_json, null) })) : [],
   };
 }
 
 export const postFull = (ctx, id) => {
   const post = loadPost(ctx.db, id);
-  if (!post) return null;
+  // Another workspace's post is not found, as one that never was.
+  if (!post || !owns(ctx, post.account_id)) return null;
   return {
     post,
     pack: ctx.pack(post.account_id),

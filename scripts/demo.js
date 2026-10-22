@@ -35,7 +35,7 @@ for (const x of EXTRAS) {
 const { makeContext } = await import('../src/engine.js');
 const { buildPost } = await import('../src/pipeline/build.js');
 const { publishPost } = await import('../src/publish/index.js');
-const { addUser } = await import('../src/web/auth.js');
+const { DEMO_WORKSPACE, startDemoAccounts } = await import('./demo-accounts.js');
 const { learn } = await import('../src/metrics/collect.js');
 const { morningFeedback } = await import('../src/metrics/feedback.js');
 const { saveRival } = await import('../src/pipeline/rivals.js');
@@ -55,8 +55,8 @@ const { writeSummaries } = await import('../src/autonomy/runner.js');
 const ctx = makeContext({ log: () => {} });
 const db = ctx.db;
 const pack = ctx.pack('demo');
-const PASSWORD = 'demo-password-2026';
-addUser(db, 'demo', PASSWORD, 'owner');
+// Every demo account is the fictional workspace's, the one the stand-in for accounts signs the browser in to.
+db.run('UPDATE accounts SET workspace_id = ?', DEMO_WORKSPACE.id);
 
 const now = Date.now();
 const today = israelDate(now);
@@ -142,6 +142,8 @@ console.log(`demo: ${db.get('SELECT COUNT(*) AS n FROM posts').n} posts in ${hom
 if (!args.includes('--no-serve')) {
   const { listen } = await import('../src/web/server.js');
   const port = args.includes('--port') ? Number(args[args.indexOf('--port') + 1]) : Number(process.env.PORT) || 4700;
-  const s = await listen(ctx, { port });
-  console.log(`\nopen http://127.0.0.1:${s.port}\n  user: demo\n  password: ${PASSWORD}\n(fictional demo data; nothing here is real)`);
+  // No accounts service here: a stand-in signs the browser in (scripts/demo-accounts.js).
+  const accounts = await startDemoAccounts();
+  const s = await listen(ctx, { port, env: { ...process.env, ...accounts.env } });
+  console.log(`\nopen http://localhost:${s.port}\n  the first visit signs you in, as the owner of a fictional workspace\n(fictional demo data; nothing here is real)`);
 }

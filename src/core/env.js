@@ -52,6 +52,6 @@ export const KEYS = [
   { name: 'YOUTUBE_API_KEY', group: 'discovery', what: 'YouTube Data API: formats that work now', he: 'YouTube: פורמטים שעובדים עכשיו, עם מספרים אמיתיים' },
   { name: 'PEXELS_API_KEY', group: 'images', what: 'Pexels photographs', he: 'Pexels: תמונות ברישיון' },
   { name: 'UNSPLASH_ACCESS_KEY', group: 'images', what: 'Unsplash photographs', he: 'Unsplash: תמונות ברישיון' },
-  { name: 'SESSION_SECRET', group: 'website', what: 'signs the login cookie', he: 'חתימה על עוגיית הכניסה' },
-  { name: 'OF_ADMIN_PASSWORD', group: 'website', what: "the first user's password, used once to create it", he: 'הסיסמה של המשתמש הראשון, פעם אחת' },
+  { name: 'SESSION_SECRET', group: 'website', what: "signs the forms' CSRF tokens", he: 'חתימה על הטפסים באתר' },
+  { name: 'OF_INTERNAL_TOKEN', group: 'website', what: 'asks openfrequency-accounts who is signed in', he: 'הבדיקה מול שירות הכניסה מי נכנס' },
 ];

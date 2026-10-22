@@ -22,9 +22,12 @@ const { startRunner } = await import('../src/autonomy/runner.js');
 const ctx = makeContext({ log: (m) => console.log(`[${new Date().toISOString()}] ${m}`) });
 const { port } = await listen(ctx);
 console.log(`open-frequency: http://127.0.0.1:${port}  (${ctx.packs.length} accounts, mode ${ctx.mode})`);
-if (!ctx.db.get('SELECT COUNT(*) AS n FROM users').n) {
-  console.log('No user yet: set OF_ADMIN_USER and OF_ADMIN_PASSWORD (12+ characters) in $OF_HOME/.env and restart, or run `npm run user:add -- <name>`.');
+// Sign-in is openfrequency-accounts' (src/web/accounts.js): without the shared token nobody gets in.
+if (String(process.env.OF_INTERNAL_TOKEN || '').trim().length < 32) {
+  console.log('OF_INTERNAL_TOKEN is not set (32+ characters, the same value as in openfrequency-accounts): nobody can sign in.');
 }
+const loose = ctx.db.all('SELECT id FROM accounts WHERE workspace_id IS NULL').map((r) => r.id);
+if (loose.length) console.log(`In no workspace yet, seen only by the operator: ${loose.join(', ')}. npm run workspace:assign gives them one.`);
 if (process.argv.includes('--runner')) {
   startRunner(ctx);
   console.log('runner: on (one tick a minute)');

@@ -508,4 +508,15 @@ export const MIGRATIONS = [
   CREATE INDEX topics_ready ON topics(account_id, status);
   ALTER TABLE posts ADD COLUMN topic_id INTEGER;
   `,
+  `
+  -- The login moved to openfrequency-accounts (src/web/accounts.js): an account belongs to one workspace there, and
+  -- a session sees only its workspace's accounts. NULL is no workspace: only the operator (the superadmin outside
+  -- view-as) sees it, until npm run workspace:assign gives it one. A browser's push subscription is its workspace's;
+  -- NULL is the operator's. The users table and its passwords go: accounts owns who people are.
+  ALTER TABLE accounts ADD COLUMN workspace_id INTEGER;
+  CREATE INDEX accounts_workspace ON accounts(workspace_id);
+  ALTER TABLE onboarding ADD COLUMN workspace_id INTEGER;
+  ALTER TABLE push_subs ADD COLUMN workspace_id INTEGER;
+  DROP TABLE users;
+  `,
 ];

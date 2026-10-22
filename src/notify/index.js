@@ -12,6 +12,10 @@ import { doorFetch } from '../core/net.js';
 // its API is a social host, and the network door refuses every write to one (HARD RULE 1).
 //
 // The push services a browser can name are the only hosts this writes to (src/core/net.js lists them).
+//
+// A browser is subscribed in one workspace (the session's, when it asked): it is woken only for that workspace's
+// accounts, and the latest notification it is shown is that workspace's. A subscription with no workspace is the
+// operator's, woken for every account.
 
 const b64url = (buf) => Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
@@ -38,7 +42,7 @@ export function vapidAuth(db, endpoint, { t = Date.now() } = {}) {
 }
 
 /** A browser's subscription, kept by its endpoint. Returns { ok } or { problem }. */
-export function subscribe(db, { endpoint }, { userId = null } = {}) {
+export function subscribe(db, { endpoint }, { userId = null, workspaceId = null } = {}) {
   let u;
   try {
     u = new URL(String(endpoint || ''));
@@ -46,12 +50,14 @@ export function subscribe(db, { endpoint }, { userId = null } = {}) {
     return { problem: 'not a push endpoint' };
   }
   if (u.protocol !== 'https:') return { problem: 'not a push endpoint' };
-  db.run('INSERT INTO push_subs (endpoint, user_id, created_at) VALUES (?, ?, ?) ON CONFLICT(endpoint) DO UPDATE SET failed = 0', u.href, userId, nowIso());
+  // The same browser asking again from another session moves to that session's workspace.
+  db.run('INSERT INTO push_subs (endpoint, user_id, workspace_id, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(endpoint) DO UPDATE SET failed = 0, user_id = excluded.user_id, workspace_id = excluded.workspace_id', u.href, userId, workspaceId, nowIso());
   return { ok: true };
 }
 
-/** A browser that turned notifications off. Returns how many were forgotten (0 for one never kept). */
-export const unsubscribe = (db, { endpoint }) => db.run('DELETE FROM push_subs WHERE endpoint = ?', String(endpoint || '')).changes || 0;
+/** A browser that turned notifications off, in the session's workspace (null: the operator, any). Returns how many were forgotten. */
+export const unsubscribe = (db, { endpoint }, { workspaceId = null } = {}) =>
+  (workspaceId == null ? db.run('DELETE FROM push_subs WHERE endpoint = ?', String(endpoint || '')) : db.run('DELETE FROM push_subs WHERE endpoint = ? AND workspace_id = ?', String(endpoint || ''), workspaceId)).changes || 0;
 
 /**
  * Tell the owner: kept, then pushed to every browser that asked. `send` replaces the network for the tests.
@@ -60,7 +66,10 @@ export const unsubscribe = (db, { endpoint }) => db.run('DELETE FROM push_subs W
 export async function notify(ctx, { accountId = null, postId = null, kind, title, body, url = '/' }, { send = null } = {}) {
   const { db } = ctx;
   const id = db.insert('notifications', { account_id: accountId, post_id: postId, kind, title, body, url, created_at: nowIso() });
-  const subs = db.all('SELECT * FROM push_subs WHERE failed < 5');
+  // The account's workspace's browsers, and the operator's; a notification of no account (or of an account in no
+  // workspace yet) wakes the operator's alone.
+  const ws = accountId ? (db.get('SELECT workspace_id FROM accounts WHERE id = ?', accountId)?.workspace_id ?? null) : null;
+  const subs = ws == null ? db.all('SELECT * FROM push_subs WHERE failed < 5 AND workspace_id IS NULL') : db.all('SELECT * FROM push_subs WHERE failed < 5 AND (workspace_id IS NULL OR workspace_id = ?)', ws);
   let pushed = 0;
   for (const s of subs) {
     try {
@@ -82,8 +91,13 @@ async function pushOne(db, endpoint) {
   return doorFetch(endpoint, { method: 'POST', headers: { authorization: vapidAuth(db, endpoint), ttl: '86400', urgency: 'high', 'content-length': '0' }, timeoutMs: 15_000 });
 }
 
-/** The newest notification, for the service worker to show. */
-export const latestNotification = (db) => db.get('SELECT id, title, body, url, created_at FROM notifications ORDER BY id DESC LIMIT 1') || null;
+/** The newest notification, for the service worker to show: of these accounts only, or of any (null, the operator). */
+export function latestNotification(db, accountIds = null) {
+  if (accountIds == null) return db.get('SELECT id, title, body, url, created_at FROM notifications ORDER BY id DESC LIMIT 1') || null;
+  const ids = [...accountIds];
+  if (!ids.length) return null;
+  return db.get(`SELECT id, title, body, url, created_at FROM notifications WHERE account_id IN (${ids.map(() => '?').join(', ')}) ORDER BY id DESC LIMIT 1`, ...ids) || null;
+}
 
 /** The last few, for Teder's own pages. */
 export const recentNotifications = (db, { limit = 10, since = null } = {}) =>

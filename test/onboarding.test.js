@@ -10,10 +10,9 @@ import { suggestApis } from '../src/onboarding/apis.js';
 import { createPack, newTheme, paletteFor } from '../src/onboarding/pack.js';
 import { contrast } from '../src/render/color.js';
 import { listen } from '../src/web/server.js';
-import { addUser } from '../src/web/auth.js';
 import { __onboarding } from '../src/web/onboarding.js';
 import { closeBrowser } from '../src/render/render.js';
-import { opened, tempHome } from './helpers.js';
+import { customer, fakeAccounts, opened, tempHome } from './helpers.js';
 
 after(() => closeBrowser());
 
@@ -89,14 +88,15 @@ test('adding an account needs no code: the onboarding writes a valid, distinct p
 test('the website flow: seed, discovery, approve sources, the pack is created, and it cannot go live without five samples', async () => {
   const { home, cleanup } = tempHome();
   let server;
+  let fake;
   try {
     const ctx = contextFor(home);
-    addUser(ctx.db, 'owner', 'a-long-test-password');
-    const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'y'.repeat(40) } });
+    fake = await fakeAccounts();
+    const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'y'.repeat(40), ...fake.env } });
     server = s.server;
     const base = `http://127.0.0.1:${s.port}`;
-    const login = await fetch(`${base}/login`, { method: 'POST', redirect: 'manual', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: 'user=owner&password=a-long-test-password' });
-    const cookie = login.headers.get('set-cookie').split(';')[0];
+    // The owner of workspace 7 starts the account: it is that workspace's.
+    const { cookie } = fake.session(customer(7));
     const csrf = /name="_csrf" value="([^"]+)"/.exec(await (await fetch(`${base}/new`, { headers: { cookie } })).text())[1];
     const post = (p, body) => fetch(`${base}${p}`, { method: 'POST', redirect: 'manual', headers: { cookie, 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ _csrf: csrf, ...body }).toString() });
 
@@ -114,6 +114,8 @@ test('the website flow: seed, discovery, approve sources, the pack is created, a
     const row = ctx.db.get('SELECT status, pack_id FROM onboarding WHERE id = ?', id);
     assert.equal(row.status, 'samples');
     assert.equal(ctx.db.get('SELECT status FROM accounts WHERE id = ?', row.pack_id).status, 'onboarding');
+    assert.equal(ctx.db.get('SELECT workspace_id FROM accounts WHERE id = ?', row.pack_id).workspace_id, 7, 'the new account is the workspace\'s that started it');
+    assert.equal(ctx.db.get('SELECT workspace_id FROM onboarding WHERE id = ?', id).workspace_id, 7);
     assert.ok(ctx.pack(row.pack_id), 'the engine picked up the new pack without a restart');
     await post(`/new/${id}/samples`, {});
     await Promise.all([...__onboarding.running.values()]);
@@ -123,6 +125,7 @@ test('the website flow: seed, discovery, approve sources, the pack is created, a
     assert.equal(ctx.db.get('SELECT status FROM accounts WHERE id = ?', row.pack_id).status, 'onboarding', 'no going live without five reviewed samples');
   } finally {
     server?.close();
+    await fake?.close();
     cleanup();
   }
 });

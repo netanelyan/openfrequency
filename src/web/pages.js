@@ -46,7 +46,6 @@ const ROLE_NAME = {
 };
 const PLATFORM_DELETE = { deleted: 'נמחק דרך ה-API', deleted_by_hand: 'נמחק ידנית', by_hand: 'צריך למחוק ידנית', not_published: 'לא פורסם שם', failed: 'נכשל' };
 const PLATFORM_HE = { tiktok: 'טיקטוק', instagram: 'אינסטגרם' };
-const ROLE_HE = { owner: 'בעלים', editor: 'עורך', viewer: 'צופה' };
 const AUDIT_HE = {
   login: 'כניסה', approve: 'אישור פוסט', unapprove: 'ביטול אישור', reject: 'דחיית פוסט', edit: 'עריכה', publish_now: 'פרסום ידני', published: 'פורסם', publish_failed: 'פרסום נכשל',
   auto_approved: 'אושר אוטומטית', dev_mode: 'מצב מפתח נפתח', topic_added: 'נושא נוסף לבנק', topic_removed: 'נושא הוסר', watch_saved: 'רשימת מעקב נשמרה', mode: 'שינוי מצב', pause: 'השהיה', resume: 'חידוש', global_kill_on: 'כיבוי כללי', global_kill_off: 'הפעלה מחדש', global_budget: 'תקציב כללי',
@@ -149,7 +148,7 @@ ${factsBlock(post)}
 /** The banners that stop the engine: the kill switch, a paused account, an account out of its share of the budget. */
 function stopBanners(ctx, d) {
   const out = [];
-  if (ctx.globalKill) out.push(`<div class="banner bad">${icon('power')}<div><b>מתג הכיבוי הכללי מופעל.</b><p>אף חשבון לא כותב פוסטים ולא מפרסם עד שמפעילים מחדש.</p></div>${postButton(ctx, '/settings/kill', 'הפעלה מחדש', { cls: 'btn sm', fields: { on: '0' } })}</div>`);
+  if (ctx.globalKill) out.push(`<div class="banner bad">${icon('power')}<div><b>מתג הכיבוי הכללי מופעל.</b><p>אף חשבון לא כותב פוסטים ולא מפרסם עד שמפעילים מחדש.</p></div>${ctx.operator ? postButton(ctx, '/settings/kill', 'הפעלה מחדש', { cls: 'btn sm', fields: { on: '0' } }) : ''}</div>`);
   for (const g of d.groups) {
     if (g.acc?.status === 'paused') out.push(`<div class="banner warn">${icon('alert')}<div><b>${esc(g.pack.meta.displayName)} מושהה (${esc(PAUSE_REASONS[g.acc.paused_reason] || g.acc.paused_reason)})</b>${g.acc.paused_detail ? `<p>${esc(g.acc.paused_detail)}</p>` : ''}</div><a class="btn sm" href="/accounts?account=${esc(g.pack.id)}#acc-${esc(g.pack.id)}">לחשבון</a></div>`);
     else if (g.reached) out.push(`<div class="banner warn">${icon('alert')}<div><b>הנתח של ${esc(g.pack.meta.displayName)} מהתקציב נגמר.</b><p>פוסטים חדשים לא ייכתבו בו עד שהתוכנית החודשית תפנה לו כסף, או עד החודש הבא.</p></div></div>`);
@@ -734,13 +733,14 @@ export function budgetPanel(ctx, d, { dev = false } = {}) {
 ${dev ? `<dl class="kv mt12"><dt>שמור לקריאות שעוד רצות</dt><dd>${usd(p.reserved, 3)}</dd><dt>לפוסט</dt><dd>${usd(p.costPerPost, 3)}</dd></dl>
 <div class="scrollx mt12"><table class="table stack"><thead><tr><th>חשבון</th><th>נתח</th><th>הוצאה</th><th>לפוסט</th><th>ביום</th><th>נשארו החודש</th><th>חוזק</th></tr></thead><tbody>${rows}</tbody></table></div>
 <p class="muted small">התקרה היא <code class="ltr">OF_BUDGET_MONTHLY_USD</code> ב-<code class="ltr">.env</code> (${capUsd}), לכל שירות בתשלום חוץ מ-Zernio. כל קריאה שומרת קודם את המחיר הגבוה ביותר שהיא יכולה לעלות, ולכן שום דבר לא עובר את התקרה.</p>` : ''}
-<form method="post" action="/settings/budget" class="formgrid mt12">${csrfField(ctx)}<label class="f">תקרה נמוכה יותר לחודש הזה <small>עד ${tokenNum(d.envCap)} טוקנים, ו-0 מבטל אותה</small><input type="number" name="budget" min="0" max="${Math.round(d.envCap * TOKENS_PER_USD)}" step="50" value="${esc(Math.round(lower * TOKENS_PER_USD))}"></label><button class="btn" type="submit">שמירה</button></form></section>`;
+${ctx.operator ? `<form method="post" action="/settings/budget" class="formgrid mt12">${csrfField(ctx)}<label class="f">תקרה נמוכה יותר לחודש הזה <small>עד ${tokenNum(d.envCap)} טוקנים, ו-0 מבטל אותה</small><input type="number" name="budget" min="0" max="${Math.round(d.envCap * TOKENS_PER_USD)}" step="50" value="${esc(Math.round(lower * TOKENS_PER_USD))}"></label><button class="btn" type="submit">שמירה</button></form>` : ''}</section>`;
 }
 
 /**
- * Settings, for the owner: notifications, when the day's posts are written, the team, the budget, and the stop for
- * everything. What a developer needs (keys, the engine, the publishers, the log) is developer mode: seven taps on the
- * version line, by an owner, kept in a cookie on that browser (server.js).
+ * Settings. Everyone: notifications, the budget (a workspace sees its own accounts' part) and who is signed in. The
+ * operator alone (the server's settings): when the day's posts are written, the budget's cap, and the stop for
+ * everything; and developer mode (keys, the engine, the publishers, the log), seven taps on the version line, kept
+ * in a cookie on that browser (server.js). People and sign-in are accounts' (openfrequency-accounts).
  */
 export function settingsPage(ctx, d) {
   const s = d.settings;
@@ -754,7 +754,6 @@ export function settingsPage(ctx, d) {
 <dt>מתג פרסום חי</dt><dd>${d.liveSwitch ? '<span class="chip ok">PUBLISH_MODE=live</span>' : '<span class="chip ghost">כבוי: הכל יבש</span>'}</dd>
 ${d.publishers.map((p) => `<dt>${esc(p.name)}</dt><dd>${p.platforms.map((x) => `${PLATFORM_HE[x.platform] || x.platform}: ${publisherHe(x)}`).join(' · ')}</dd>`).join('')}</dl></section>
 ${d.instagram.length ? `<section class="panel"><header><h2>אינסטגרם ישירות (Meta Graph API)</h2></header><ul class="factlist">${d.instagram.map((x) => `<li>${accDot(x.id)} <b>${esc(x.name)}</b> ${x.configured ? '<span class="chip ok">מחובר</span>' : `<span class="chip ghost">חסר ${!x.userId ? 'instagram.userId ב-pack.json' : `<code class="ltr">${esc(x.tokenEnv)}</code>`}</span>`} <span class="muted small">${x.auth === 'instagram' ? 'Instagram Login' : 'Facebook Login (עמוד פייסבוק)'}${x.daysLeft != null ? ` · האסימון בתוקף עוד ${x.daysLeft} ימים` : ''}</span></li>`).join('')}</ul><p class="muted small">בדיקה מלאה של האסימון, החשבון ונתוני ה-insights: <code class="ltr">npm run instagram:check</code></p></section>` : ''}
-<section class="panel"><header><h2>משתמש נוסף</h2></header><p class="muted small m0"><code class="ltr">npm run user:add -- name</code></p></section>
 </div>
 <div>
 <section class="panel"><header><h2>יומן פעולות</h2></header><ol class="trace">${d.audit.map((a) => `<li class="ok"><b>${esc(AUDIT_HE[a.action] || a.action)}</b> <span class="muted small">${esc(a.actor)} · ${esc(stamp(a.at))}${a.account_id ? ` · ${esc(a.account_id)}` : ''}</span></li>`).join('')}</ol></section>
@@ -769,19 +768,18 @@ ${d.instagram.length ? `<section class="panel"><header><h2>אינסטגרם יש
 <form method="post" action="/push/subscribe" data-ajax="reload" data-push="${esc(d.push?.key || '')}">${csrfField(ctx)}<input type="hidden" name="endpoint" value=""><button class="btn" type="button" data-push-enable>${icon('spark')}להפעיל התראות במכשיר הזה</button></form>
 <form method="post" action="/push/unsubscribe" data-ajax="reload" data-push-off hidden>${csrfField(ctx)}<input type="hidden" name="endpoint" value=""><button class="btn ghost" type="button" data-push-disable>לכבות התראות במכשיר הזה</button></form>
 </section>
-<section class="panel"><header><h2>מתי נכתבים הפוסטים</h2></header><p class="muted">כל יום בשעה הזו תדר כותב את הפוסטים של היום ושולח אותם לאישור.</p><form method="post" action="/settings/generate-at" class="formgrid">${csrfField(ctx)}<label class="f">שעה<input type="time" name="at" value="${esc(s.generateAt)}" dir="ltr"></label><button class="btn" type="submit">שמירה</button></form></section>
-<section class="panel"><header><h2>צוות</h2></header><ul class="factlist">${d.users.map((u) => `<li><b>${esc(u.name)}</b> <span class="chip ghost">${esc(ROLE_HE[u.role] || u.role)}</span> <span class="muted small">${u.last_login_at ? `נכנס ${esc(stamp(u.last_login_at))}` : 'עוד לא נכנס'}</span></li>`).join('')}</ul></section>
+${ctx.operator ? `<section class="panel"><header><h2>מתי נכתבים הפוסטים</h2></header><p class="muted">כל יום בשעה הזו תדר כותב את הפוסטים של היום ושולח אותם לאישור.</p><form method="post" action="/settings/generate-at" class="formgrid">${csrfField(ctx)}<label class="f">שעה<input type="time" name="at" value="${esc(s.generateAt)}" dir="ltr"></label><button class="btn" type="submit">שמירה</button></form></section>` : ''}
 </div>
 <div>
 ${budgetPanel(ctx, d, { dev })}
-<section class="panel"><header><h2>החשבון שלך</h2></header><p class="muted m0">מחוברים בתור <b>${esc(ctx.user?.name || '')}</b></p><div class="actions p0 mt12">${postButton(ctx, '/logout', `${icon('logout')}יציאה`, { cls: 'btn' })}</div></section>
-<section class="panel"><header><h2>עצירת חירום</h2><span class="end">${s.globalKill ? '<span class="chip bad">הכל עצור</span>' : ''}</span></header>
+<section class="panel"><header><h2>החשבון שלך</h2></header><p class="muted m0">נכנסתם בתור <b class="ltr">${esc(ctx.user?.email || '')}</b>${ctx.operator ? ', ורואים את החשבונות של כל הלקוחות.' : `, בחשבון <b>${esc(ctx.workspace?.name || '')}</b>.`}</p><div class="actions p0 mt12"><a class="btn" href="${esc(ctx.links?.logout || '#')}">${icon('logout')}יציאה</a></div></section>
+${ctx.operator ? `<section class="panel"><header><h2>עצירת חירום</h2><span class="end">${s.globalKill ? '<span class="chip bad">הכל עצור</span>' : ''}</span></header>
 <p class="muted">עוצר את כל החשבונות מיד. אף פוסט לא נכתב ולא מתפרסם עד שמפעילים מחדש.</p>
 ${s.globalKill ? postButton(ctx, '/settings/kill', 'להפעיל הכל מחדש', { cls: 'btn primary', fields: { on: '0' } }) : postButton(ctx, '/settings/kill', `${icon('power')}לעצור הכל`, { cls: 'btn danger', fields: { on: '1' }, confirm: 'לחצו שוב כדי לעצור הכל' })}
-</section>
+</section>` : ''}
 </div></div>
 ${devPanels}
-${dev ? '' : `<form method="post" action="/settings/dev" class="ver"${ctx.user?.role === 'owner' ? ' data-devtap' : ''}>${csrfField(ctx)}<input type="hidden" name="on" value="1"><span>תדר · גרסה ${esc(VERSION)}</span></form>`}`;
+${dev ? '' : `<form method="post" action="/settings/dev" class="ver"${ctx.operator ? ' data-devtap' : ''}>${csrfField(ctx)}<input type="hidden" name="on" value="1"><span>תדר · גרסה ${esc(VERSION)}</span></form>`}`;
   return layout({ ...ctx, title: 'הגדרות', active: 'settings' }, body);
 }
 
@@ -789,20 +787,35 @@ export function morePage(ctx) {
   const row = (href, ic, t, sub) => `<a href="${href}"><span class="ico">${icon(ic)}</span><span class="t"><b>${t}</b><small>${sub}</small></span><span class="go">${icon('chev')}</span></a>`;
   const body = `<div class="head"><h1>עוד</h1></div><nav class="list" aria-label="עוד">
 ${row('/new', 'plus', 'חשבון חדש', 'ממקור ועד חמישה פוסטים לדוגמה')}
-${row('/settings', 'settings', 'הגדרות', 'כיבוי כללי, תקציב, מפתחות, משתמשים')}
-<form method="post" action="/logout">${csrfField(ctx)}<button class="danger" type="submit"><span class="ico">${icon('logout')}</span><span class="t"><b>יציאה</b></span></button></form></nav>`;
+${row('/settings', 'settings', 'הגדרות', ctx.operator ? 'כיבוי כללי, תקציב, מפתחות' : 'התראות, תקציב, החשבון שלך')}
+<a class="danger" href="${esc(ctx.links?.logout || '#')}"><span class="ico">${icon('logout')}</span><span class="t"><b>יציאה</b></span></a></nav>`;
   return layout({ ...ctx, title: 'עוד', active: 'more' }, body);
 }
 
-export function loginPage({ error = null, v = 1 } = {}) {
-  return `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="color-scheme" content="light dark"><meta name="theme-color" content="#eeeff2" media="(prefers-color-scheme: light)"><meta name="theme-color" content="#111113" media="(prefers-color-scheme: dark)"><title>כניסה · תדר</title><link rel="stylesheet" href="/static/style.css?v=${v}"><link rel="icon" href="/static/icon.svg?v=${v}" type="image/svg+xml"><link rel="apple-touch-icon" href="/static/icon-180.png?v=${v}"><link rel="manifest" href="/static/manifest.webmanifest"></head>
-<body class="login"><form class="card" method="post" action="/login">
+/**
+ * What a session that accounts did not let in sees, when sending it to the login would not help (server.js): the
+ * workspace is closed, Teder is not in its plan, or the check itself failed. No redirect, so no loop.
+ */
+export const GATE = {
+  closed: { title: 'החשבון סגור', text: 'החשבון הזה סגור, ואי אפשר להיכנס דרכו לתדר.' },
+  not_in_plan: { title: 'תדר לא מופעל בחשבון שלכם', text: 'החשבון שלכם פתוח, אבל תדר לא כלול בו.' },
+  error: { title: 'אי אפשר לבדוק כרגע מי נכנס', text: 'שירות הכניסה לא ענה. נסו שוב בעוד דקה.' },
+};
+
+export function gatePage({ kind, links, v = 1 }) {
+  const g = GATE[kind] || GATE.error;
+  const actions =
+    kind === 'error'
+      ? '<a class="btn primary" href="">לנסות שוב</a>'
+      : kind === 'not_in_plan'
+        ? `<a class="btn primary" href="${esc(links.home)}">לחשבון שלכם</a><a class="btn" href="${esc(links.logout)}">יציאה</a>`
+        : `<a class="btn" href="${esc(links.logout)}">יציאה</a>`;
+  return `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="color-scheme" content="light dark"><meta name="theme-color" content="#eeeff2" media="(prefers-color-scheme: light)"><meta name="theme-color" content="#111113" media="(prefers-color-scheme: dark)"><title>${esc(g.title)} · תדר</title><link rel="stylesheet" href="/static/style.css?v=${v}"><link rel="icon" href="/static/icon.svg?v=${v}" type="image/svg+xml"><link rel="apple-touch-icon" href="/static/icon-180.png?v=${v}"><link rel="manifest" href="/static/manifest.webmanifest"></head>
+<body class="login"><main class="card">
 <div class="hero">${tederMark()}<b>תדר</b></div>
-<p>היכנסו כדי לאשר את הפוסטים של היום.</p>
-${error ? `<div class="err" role="alert">${esc(error)}</div>` : ''}
-<label class="f">שם משתמש<input type="text" name="user" autocomplete="username" autocapitalize="off" spellcheck="false" required dir="ltr"></label>
-<label class="f">סיסמה<input type="password" name="password" autocomplete="current-password" required dir="ltr"></label>
-<button class="btn primary" type="submit">כניסה</button></form></body></html>`;
+<h1 class="err" role="alert">${esc(g.title)}</h1>
+<p>${esc(g.text)}</p>
+<div class="links">${actions}</div></main></body></html>`;
 }
 
 export function notFoundPage(ctx) {

@@ -1394,3 +1394,25 @@ engine can act on, and what changed:
   links and the selected tab stays blue. On the login the wave draws itself in once,
   instead of the meter rising. The dots that tell each account's day on Today were never
   the mark and keep their look.
+
+- **Sign-in moves to openfrequency-accounts; everything belongs to a workspace
+  (2026-10-22, the owner's call).** Teder's own login, its users table and its password
+  hashes are gone. A browser without a session goes to
+  `accounts.openfrequency.co.il/login?next=<the page>`; Teder sends the
+  `__Secure-of_session` cookie (only that one over HTTPS, so a sibling subdomain cannot
+  plant a plain one) to accounts' `GET /internal/session` on this machine. Accounts' own
+  document says to ask on every request; the owner chose a middle way: a page may use an
+  answer up to 60 seconds old, and every POST (approve, publish, delete, any setting) asks
+  afresh, so no change ever acts on a session that has signed out, lost its membership or
+  turned read-only, and a refusal there ends the reuse at once. A check that fails
+  (accounts down, a wrong token) shows a page instead of sending the browser round to the
+  login and back. The CSRF token stays Teder's own, derived from the accounts session id.
+  Every account has a `workspace_id`, and everything else hangs off an account. A session
+  sees its workspace's accounts and nothing else; a post, source or takedown of another
+  workspace is "not found", as one that never was. Push notifications wake only the
+  account's workspace's browsers. The operator (the superadmin outside view-as) sees
+  every workspace and is the only one who changes what is the whole server's: the API
+  budget's cap, the kill switch, when posts are written, developer mode. A customer may
+  later get settings of their own workspace (its posting times, a budget inside the
+  operator's cap), never a global one. View-as is read-only on the server, with the
+  banner accounts asks for. The switch itself is `docs/workspace-move.md`.

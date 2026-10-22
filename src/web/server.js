@@ -4,10 +4,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { assetsDir, dataDir } from '../core/paths.js';
-import { now, nowIso } from '../core/clock.js';
+import { now } from '../core/clock.js';
 import { addDays, israelDate } from '../schedule/israel.js';
 import { audit } from '../core/store.js';
-import { bootstrapOwner, checkPassword, clientIp, cookies, createLimiter, csrfFor, csrfOk, isHttps, makeSession, sessionCookie, sessionFrom, sessionSecret, sessionUser } from './auth.js';
+import { cookies, csrfFor, csrfOk, isHttps, sessionSecret } from './auth.js';
+import { accountsClient, accountsLinks, refusal, sessionIdFrom } from './accounts.js';
+import { forWorkspace, owns } from './workspace.js';
 import * as data from './data.js';
 import * as pages from './pages.js';
 import * as act from './actions.js';
@@ -23,10 +25,15 @@ import { latestNotification } from '../notify/index.js';
 //   - the Host header is ours (defeats DNS rebinding)
 //   - a request under the public name came over HTTPS, which only the proxy on
 //     this machine can say
-//   - every page, image and button needs a session, except the login page and
-//     the static files
+//   - every page, image and button needs a session that openfrequency-accounts
+//     vouches for (src/web/accounts.js), except the static files; without one the
+//     browser goes to accounts' login with where it was going. A page may use an
+//     answer up to a minute old; every POST asks afresh
+//   - the session's workspace decides what exists (src/web/workspace.js): another
+//     workspace's accounts, posts and sources are not found
 //   - every POST carries the CSRF token derived from its session, and an Origin
-//     that is ours
+//     that is ours; a read-only session (the operator viewing as a customer)
+//     changes nothing
 // Server-rendered HTML with one small script; everything works without it.
 
 export const HOST = '127.0.0.1';
@@ -76,51 +83,59 @@ const factDates = () => {
   return { today, nextYear: addDays(today, 365) };
 };
 
-export function createHandler(ctx, { port, env = process.env, limiter = createLimiter(), failDelayMs = 400 } = {}) {
+/** The answer to a POST from a read-only session (accounts' view-as). */
+const READ_ONLY = 'זו צפייה בלבד, ושום שינוי לא נשמר.';
+
+/**
+ * `accounts` (src/web/accounts.js) answers who a session is; the tests give one that talks to a fake accounts.
+ * `ctx` is the engine's: every account. Each request works on its workspace's view of it.
+ */
+export function createHandler(ctx, { port, env = process.env, accounts = null } = {}) {
   const secret = sessionSecret(env);
+  const links = accountsLinks(env);
+  const who = accounts || accountsClient({ env, log: (m) => ctx.log?.(m) });
   const publicHost = String(env.PUBLIC_HOST || '').trim().toLowerCase() || null;
   const hosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`, ...(publicHost ? [publicHost] : [])]);
   const origins = new Set([`http://127.0.0.1:${port}`, `http://localhost:${port}`, ...(publicHost ? [`https://${publicHost}`] : [])]);
-  bootstrapOwner(ctx.db, env);
 
   const ROUTES = [
-    ['POST', /^\/post\/([\w-]+)\/approve$/, (u, m) => act.approve(ctx, u, { id: m[1] })],
-    ['POST', /^\/posts\/approve-all$/, (u, m, f) => act.approveAll(ctx, u, {}, f)],
-    ['POST', /^\/post\/([\w-]+)\/unapprove$/, (u, m) => act.unapprove(ctx, u, { id: m[1] })],
-    ['POST', /^\/post\/([\w-]+)\/reject$/, (u, m, f) => act.reject(ctx, u, { id: m[1] }, f)],
-    ['POST', /^\/post\/([\w-]+)\/edit$/, (u, m, f) => act.edit(ctx, u, { id: m[1] }, f)],
-    ['POST', /^\/post\/([\w-]+)\/publish-now$/, (u, m) => act.publishNow(ctx, u, { id: m[1] })],
-    ['POST', /^\/post\/([\w-]+)\/takedown$/, (u, m, f) => act.takedown(ctx, u, { id: m[1] }, f)],
-    ['POST', /^\/post\/([\w-]+)\/image-ok$/, (u, m) => act.imageOk(ctx, u, { id: m[1] })],
-    ['POST', /^\/takedowns\/(\d+)\/deleted$/, (u, m, f) => act.takedownDeleted(ctx, u, { id: m[1] }, f)],
-    ['POST', /^\/accounts\/([\w-]+)\/mode$/, (u, m, f) => act.setMode(ctx, u, { id: m[1] }, f)],
-    ['POST', /^\/accounts\/([\w-]+)\/style$/, (u, m) => act.applyStyle(ctx, u, { id: m[1] })],
-    ['POST', /^\/accounts\/([\w-]+)\/kill$/, (u, m) => act.killAccount(ctx, u, { id: m[1] })],
-    ['POST', /^\/accounts\/([\w-]+)\/resume$/, (u, m) => act.resume(ctx, u, { id: m[1] })],
-    ['POST', /^\/settings\/kill$/, (u, m, f) => act.globalKill(ctx, u, {}, f)],
-    ['POST', /^\/settings\/budget$/, (u, m, f) => act.setBudget(ctx, u, {}, f)],
-    ['POST', /^\/settings\/generate-at$/, (u, m, f) => act.setGenerateAt(ctx, u, {}, f)],
-    ['POST', /^\/sources\/(\d+)\/approve$/, (u, m, f) => act.sourceStatus(ctx, u, { id: m[1] }, f, 'approved')],
-    ['POST', /^\/sources\/(\d+)\/remove$/, (u, m, f) => act.sourceStatus(ctx, u, { id: m[1] }, f, 'removed')],
-    ['POST', /^\/sources\/add$/, (u, m, f) => act.addSource(ctx, u, {}, f)],
-    ['POST', /^\/sources\/catalog$/, (u, m, f) => act.addCatalogSource(ctx, u, {}, f)],
-    ['POST', /^\/facts\/add$/, (u, m, f) => act.addFact(ctx, u, {}, f)],
-    ['POST', /^\/facts\/confirm$/, (u, m, f) => act.confirmFact(ctx, u, {}, f)],
-    ['POST', /^\/facts\/remove$/, (u, m, f) => act.removeFactAction(ctx, u, {}, f)],
-    ['POST', /^\/topics\/add$/, (u, m, f) => act.addTopicAction(ctx, u, {}, f)],
-    ['POST', /^\/topics\/remove$/, (u, m, f) => act.removeTopicAction(ctx, u, {}, f)],
-    ['POST', /^\/topics\/watch$/, (u, m, f) => act.saveWatchAction(ctx, u, {}, f)],
-    ['POST', /^\/rivals\/save$/, (u, m, f) => act.saveRivalAction(ctx, u, {}, f)],
-    ['POST', /^\/rivals\/remove$/, (u, m, f) => act.removeRivalAction(ctx, u, {}, f)],
-    ['POST', /^\/sounds\/save$/, (u, m, f) => act.saveSoundAction(ctx, u, {}, f)],
-    ['POST', /^\/sounds\/remove$/, (u, m, f) => act.removeSoundAction(ctx, u, {}, f)],
-    ['POST', /^\/push\/subscribe$/, (u, m, f) => act.subscribePush(ctx, u, {}, f)],
-    ['POST', /^\/push\/unsubscribe$/, (u, m, f) => act.unsubscribePush(ctx, u, {}, f)],
-    ['POST', /^\/post\/([\w-]+)\/old-drafts-deleted$/, (u, m) => act.oldDraftsDeleted(ctx, u, { id: m[1] })],
-    ...onboardingRoutes(ctx),
+    ['POST', /^\/post\/([\w-]+)\/approve$/, (c, u, m) => act.approve(c, u, { id: m[1] })],
+    ['POST', /^\/posts\/approve-all$/, (c, u, m, f) => act.approveAll(c, u, {}, f)],
+    ['POST', /^\/post\/([\w-]+)\/unapprove$/, (c, u, m) => act.unapprove(c, u, { id: m[1] })],
+    ['POST', /^\/post\/([\w-]+)\/reject$/, (c, u, m, f) => act.reject(c, u, { id: m[1] }, f)],
+    ['POST', /^\/post\/([\w-]+)\/edit$/, (c, u, m, f) => act.edit(c, u, { id: m[1] }, f)],
+    ['POST', /^\/post\/([\w-]+)\/publish-now$/, (c, u, m) => act.publishNow(c, u, { id: m[1] })],
+    ['POST', /^\/post\/([\w-]+)\/takedown$/, (c, u, m, f) => act.takedown(c, u, { id: m[1] }, f)],
+    ['POST', /^\/post\/([\w-]+)\/image-ok$/, (c, u, m) => act.imageOk(c, u, { id: m[1] })],
+    ['POST', /^\/takedowns\/(\d+)\/deleted$/, (c, u, m, f) => act.takedownDeleted(c, u, { id: m[1] }, f)],
+    ['POST', /^\/accounts\/([\w-]+)\/mode$/, (c, u, m, f) => act.setMode(c, u, { id: m[1] }, f)],
+    ['POST', /^\/accounts\/([\w-]+)\/style$/, (c, u, m) => act.applyStyle(c, u, { id: m[1] })],
+    ['POST', /^\/accounts\/([\w-]+)\/kill$/, (c, u, m) => act.killAccount(c, u, { id: m[1] })],
+    ['POST', /^\/accounts\/([\w-]+)\/resume$/, (c, u, m) => act.resume(c, u, { id: m[1] })],
+    ['POST', /^\/settings\/kill$/, (c, u, m, f) => act.globalKill(c, u, {}, f)],
+    ['POST', /^\/settings\/budget$/, (c, u, m, f) => act.setBudget(c, u, {}, f)],
+    ['POST', /^\/settings\/generate-at$/, (c, u, m, f) => act.setGenerateAt(c, u, {}, f)],
+    ['POST', /^\/sources\/(\d+)\/approve$/, (c, u, m, f) => act.sourceStatus(c, u, { id: m[1] }, f, 'approved')],
+    ['POST', /^\/sources\/(\d+)\/remove$/, (c, u, m, f) => act.sourceStatus(c, u, { id: m[1] }, f, 'removed')],
+    ['POST', /^\/sources\/add$/, (c, u, m, f) => act.addSource(c, u, {}, f)],
+    ['POST', /^\/sources\/catalog$/, (c, u, m, f) => act.addCatalogSource(c, u, {}, f)],
+    ['POST', /^\/facts\/add$/, (c, u, m, f) => act.addFact(c, u, {}, f)],
+    ['POST', /^\/facts\/confirm$/, (c, u, m, f) => act.confirmFact(c, u, {}, f)],
+    ['POST', /^\/facts\/remove$/, (c, u, m, f) => act.removeFactAction(c, u, {}, f)],
+    ['POST', /^\/topics\/add$/, (c, u, m, f) => act.addTopicAction(c, u, {}, f)],
+    ['POST', /^\/topics\/remove$/, (c, u, m, f) => act.removeTopicAction(c, u, {}, f)],
+    ['POST', /^\/topics\/watch$/, (c, u, m, f) => act.saveWatchAction(c, u, {}, f)],
+    ['POST', /^\/rivals\/save$/, (c, u, m, f) => act.saveRivalAction(c, u, {}, f)],
+    ['POST', /^\/rivals\/remove$/, (c, u, m, f) => act.removeRivalAction(c, u, {}, f)],
+    ['POST', /^\/sounds\/save$/, (c, u, m, f) => act.saveSoundAction(c, u, {}, f)],
+    ['POST', /^\/sounds\/remove$/, (c, u, m, f) => act.removeSoundAction(c, u, {}, f)],
+    ['POST', /^\/push\/subscribe$/, (c, u, m, f) => act.subscribePush(c, u, {}, f)],
+    ['POST', /^\/push\/unsubscribe$/, (c, u, m, f) => act.unsubscribePush(c, u, {}, f)],
+    ['POST', /^\/post\/([\w-]+)\/old-drafts-deleted$/, (c, u, m) => act.oldDraftsDeleted(c, u, { id: m[1] })],
+    ...onboardingRoutes(),
   ];
 
-  return async function handler(req, res) {
+  const handler = async function handler(req, res) {
     try {
       const host = String(req.headers.host || '').toLowerCase();
       if (!hosts.has(host)) return send(req, res, 421, 'wrong host', 'text/plain; charset=utf-8');
@@ -146,47 +161,35 @@ export function createHandler(ctx, { port, env = process.env, limiter = createLi
         if (p === '/sw.js') return send(req, res, 200, readFileSync(path.join(STATIC, 'sw.js')), 'text/javascript; charset=utf-8', { 'cache-control': 'no-cache', 'service-worker-allowed': '/' });
       }
 
-      // ---- login
-      if (p === '/login') {
-        if (req.method === 'POST') {
-          const ip = clientIp(req);
-          const wait = limiter.check(ip);
-          if (wait) return send(req, res, 429, pages.loginPage({ v: V, error: `יותר מדי ניסיונות. נסו שוב בעוד ${Math.ceil(wait / 60)} דקות.`, theme }), 'text/html; charset=utf-8', { 'retry-after': String(wait) });
-          const origin = req.headers.origin;
-          if (origin && !origins.has(origin)) return send(req, res, 403, 'cross-origin', 'text/plain; charset=utf-8');
-          const form = await readForm(req, 4000);
-          const user = ctx.db.get('SELECT * FROM users WHERE name = ?', String(form.user || '').trim());
-          if (user && checkPassword(form.password || '', user.password_hash)) {
-            limiter.succeed(ip);
-            ctx.db.update('users', user.id, { last_login_at: nowIso() });
-            audit(ctx.db, { actor: user.name, action: 'login' });
-            return redirect(res, '/', { 'set-cookie': sessionCookie(makeSession(user.id, secret), { secure }) });
-          }
-          limiter.fail(ip);
-          await new Promise((r) => setTimeout(r, failDelayMs));
-          const none = !ctx.db.get('SELECT COUNT(*) AS n FROM users').n;
-          return send(req, res, 401, pages.loginPage({ v: V, error: none ? 'עוד אין משתמש. הגדירו OF_ADMIN_PASSWORD ב-.env והפעילו מחדש, או הריצו npm run user:add.' : 'שם המשתמש או הסיסמה לא נכונים.', theme }));
-        }
-        return send(req, res, 200, pages.loginPage({ v: V, theme }));
-      }
-
-      // ---- everything else needs a session
-      const session = sessionFrom(req);
-      const uid = sessionUser(session, secret);
-      const user = uid ? ctx.db.get('SELECT id, name, role FROM users WHERE id = ?', uid) : null;
-      if (!user) {
-        if (req.method !== 'GET') return json(req, res, 401, { ok: false, message: 'צריך להיכנס שוב.' });
-        return redirect(res, '/login');
-      }
-      const csrf = csrfFor(session, secret);
+      // ---- everything else needs a session that accounts vouches for (src/web/accounts.js). A page may use an answer
+      // up to a minute old; anything else (every POST) asks afresh, so no change acts on a session that has ended.
       const ajax = req.headers['x-of-ajax'] === '1';
+      const reading = req.method === 'GET' || req.method === 'HEAD';
+      const sid = sessionIdFrom(jar, { https: secure });
+      const answer = await who.whoIs(sid, { live: !reading });
+      if (answer.status !== 200) {
+        const kind = refusal(answer.status, answer.body?.error);
+        // Back to this page after the login: its full address, under the public name when it came through the proxy.
+        const here = `${publicHost && host === publicHost ? `https://${publicHost}` : `http://${host}`}${reading ? req.url : '/'}`;
+        if (kind === 'login') return reading ? redirect(res, links.login(here)) : json(req, res, 401, { ok: false, message: 'צריך להיכנס שוב.', login: links.login(here) });
+        const status = kind === 'error' ? 503 : 403;
+        if (!reading) return json(req, res, status, { ok: false, message: pages.GATE[kind].text });
+        return send(req, res, status, pages.gatePage({ v: V, kind, links }));
+      }
+      const a = answer.body;
+      // The operator is the superadmin outside view-as: every workspace. In view-as the superadmin is in the
+      // workspace viewed, read-only, like everyone with a workspace.
+      const operator = a.role === 'superadmin' && !a.workspace;
+      const user = { id: a.user.id, email: a.user.email, name: a.user.name || a.user.email, role: a.role, operator, readOnly: a.readOnly === true, workspace: a.workspace || null, viewAs: a.viewAs || null };
+      const c = operator ? ctx : forWorkspace(ctx, a.workspace.id);
+      const csrf = csrfFor(sid, secret);
 
       // ---- the account shown. Every page is one account's; the switcher at the top changes it, and a link that names
-      // one (a post, ?account=) switches to that one. A cookie keeps it.
+      // one (a post, ?account=) switches to that one. A cookie keeps it. Only the workspace's accounts are there to pick.
       const acctCookie = (id) => `of_acct=${encodeURIComponent(id)}; Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly${secure ? '; Secure' : ''}`;
       const setCookies = [];
-      const firstLive = () => ctx.packs.find((x) => ctx.db.get('SELECT status FROM accounts WHERE id = ?', x.id)?.status !== 'onboarding') || ctx.packs[0] || null;
-      let current = ctx.pack(jar.of_acct) || firstLive();
+      const firstLive = () => c.packs.find((x) => c.db.get('SELECT status FROM accounts WHERE id = ?', x.id)?.status !== 'onboarding') || c.packs[0] || null;
+      let current = c.pack(jar.of_acct) || firstLive();
       const switchTo = (pack) => {
         if (!pack) return;
         current = pack;
@@ -197,18 +200,21 @@ export function createHandler(ctx, { port, env = process.env, limiter = createLi
         const origin = req.headers.origin;
         if (origin && !origins.has(origin)) return json(req, res, 403, { ok: false, message: 'בקשה מאתר אחר נחסמה.' });
         const form = await readForm(req);
-        if (!csrfOk(form._csrf, session, secret)) return ajax ? json(req, res, 403, { ok: false, message: 'הדף ישן. רעננו אותו.' }) : send(req, res, 403, 'stale page, reload it', 'text/plain; charset=utf-8');
-        if (p === '/logout') return redirect(res, '/login', { 'set-cookie': sessionCookie('', { secure, clear: true }) });
-        // Developer mode: the settings a developer reads, opened by an owner from the version line, kept on this browser.
+        if (!csrfOk(form._csrf, sid, secret)) return ajax ? json(req, res, 403, { ok: false, message: 'הדף ישן. רעננו אותו.' }) : send(req, res, 403, 'stale page, reload it', 'text/plain; charset=utf-8');
+        // View-as (and any session accounts marks read-only) changes nothing, whatever the button: refused here, on
+        // the server, not only by the buttons it does not see.
+        if (user.readOnly) return ajax ? json(req, res, 403, { ok: false, message: READ_ONLY }) : send(req, res, 403, READ_ONLY, 'text/plain; charset=utf-8');
+        // Developer mode: the settings a developer reads (the server's keys, engine and log), the operator's alone,
+        // opened from the version line and kept on this browser.
         if (p === '/settings/dev') {
-          if (user.role !== 'owner') return ajax ? json(req, res, 403, { ok: false, message: 'רק הבעלים יכולים לעשות את זה' }) : redirect(res, '/settings');
+          if (!user.operator) return ajax ? json(req, res, 403, { ok: false, message: 'את זה משנה רק מי שמפעיל את תדר' }) : redirect(res, '/settings');
           const on = form.on === '1';
-          const c = `of_dev=${on ? '1' : ''}; Path=/; Max-Age=${on ? 31536000 : 0}; SameSite=Strict; HttpOnly${secure ? '; Secure' : ''}`;
-          if (on) audit(ctx.db, { actor: user.name, action: 'dev_mode' });
-          return redirect(res, on ? '/settings#dev' : '/settings', { 'set-cookie': [c, flash(on ? 'מצב מפתח פתוח' : 'מצב מפתח כבוי')] });
+          const cookie = `of_dev=${on ? '1' : ''}; Path=/; Max-Age=${on ? 31536000 : 0}; SameSite=Strict; HttpOnly${secure ? '; Secure' : ''}`;
+          if (on) audit(ctx.db, { actor: user.email, action: 'dev_mode' });
+          return redirect(res, on ? '/settings#dev' : '/settings', { 'set-cookie': [cookie, flash(on ? 'מצב מפתח פתוח' : 'מצב מפתח כבוי')] });
         }
         if (p === '/account/switch') {
-          const to = ctx.pack(String(form.to || ''));
+          const to = c.pack(String(form.to || ''));
           if (!to) return ajax ? json(req, res, 404, { ok: false, message: 'אין חשבון כזה' }) : redirect(res, '/');
           // Back to the same page of the other account; a post belongs to the account it was, so its page goes home.
           const ref = req.headers.referer && new URL(req.headers.referer).host === host ? new URL(req.headers.referer).pathname : '/';
@@ -216,14 +222,14 @@ export function createHandler(ctx, { port, env = process.env, limiter = createLi
         }
         if (p === '/theme') {
           const next = theme === 'dark' ? 'light' : 'dark';
-          const c = `of_theme=${next}; Path=/; Max-Age=31536000; SameSite=Strict`;
-          return ajax ? json(req, res, 200, { ok: true, theme: next }, { 'set-cookie': c }) : redirect(res, req.headers.referer && new URL(req.headers.referer).host === host ? new URL(req.headers.referer).pathname : '/', { 'set-cookie': c });
+          const cookie = `of_theme=${next}; Path=/; Max-Age=31536000; SameSite=Strict`;
+          return ajax ? json(req, res, 200, { ok: true, theme: next }, { 'set-cookie': cookie }) : redirect(res, req.headers.referer && new URL(req.headers.referer).host === host ? new URL(req.headers.referer).pathname : '/', { 'set-cookie': cookie });
         }
         for (const [method, re, fn] of ROUTES) {
           const m = method === 'POST' && re.exec(p);
           if (!m) continue;
           try {
-            const r = await fn(user, m, form);
+            const r = await fn(c, user, m, form);
             ctx._plan = null; // a change can move the budget plan: the next page computes it afresh
             if (ajax) return json(req, res, 200, r);
             const back = r.redirect || (req.headers.referer && new URL(req.headers.referer).host === host ? new URL(req.headers.referer).pathname + new URL(req.headers.referer).search : '/');
@@ -231,32 +237,20 @@ export function createHandler(ctx, { port, env = process.env, limiter = createLi
           } catch (e) {
             if (!(e instanceof act.ActionError)) throw e;
             if (ajax) return json(req, res, e.status, { ok: false, message: e.message, problems: e.problems || [] });
-            // A form that failed its checks comes back with the problems and what was typed.
+            // A form that failed its checks comes back with the problems and what was typed, on an account of this
+            // workspace (a form naming another one gets the redirect below).
+            const cur = c.pack(String(form.account || '')) || c.packs[0] || null;
+            const again = (html) => send(req, res, e.status, html);
             if (/\/edit$/.test(p)) {
-              const d = data.postFull(ctx, m[1]);
-              return send(req, res, e.status, pages.postPage({ ...pageCtx(), csrf }, d, { problems: e.problems || [e.message], values: e.values }));
+              const d = data.postFull(c, m[1]);
+              if (d) return again(pages.postPage({ ...pageCtx(), csrf }, d, { problems: e.problems || [e.message], values: e.values }));
             }
-            if (p === '/sources/add') {
-              const cur = ctx.pack(form.account) || ctx.packs[0];
-              return send(req, res, e.status, pages.sourcesPage({ ...pageCtx(), csrf }, { packs: [cur], current: cur, sources: data.sourcesFor(ctx, cur.id), form, problems: e.problems || [e.message] }));
-            }
-            if (p === '/facts/add') {
-              const cur = ctx.pack(form.account) || ctx.packs[0];
-              return send(req, res, e.status, pages.factsPage({ ...pageCtx(), csrf }, { packs: [cur], current: cur, topics: data.factsFor(ctx, cur), ...factDates(), form, problems: e.problems || [e.message] }));
-            }
-            if (p === '/sounds/save') {
-              const cur = ctx.pack(form.account) || ctx.packs[0];
-              return send(req, res, e.status, pages.soundsPage({ ...pageCtx(), csrf }, { ...data.soundsFor(ctx, cur), packs: [cur], form, problems: e.problems || [e.message] }));
-            }
-            if (p === '/topics/add') {
-              const cur = ctx.pack(form.account) || ctx.packs[0];
-              return send(req, res, e.status, pages.topicsPage({ ...pageCtx(), csrf }, { ...data.topicsFor(ctx, cur), form, problems: e.problems || [e.message] }));
-            }
-            if (p === '/rivals/save') {
-              const cur = ctx.pack(form.account) || ctx.packs[0];
-              return send(req, res, e.status, pages.rivalsPage({ ...pageCtx(), csrf }, { ...data.rivalsFor(ctx, cur), packs: [cur], form, problems: e.problems || [e.message] }));
-            }
-            return redirect(res, req.headers.referer ? new URL(req.headers.referer).pathname : '/', { 'set-cookie': flash(e.message) });
+            if (cur && p === '/sources/add') return again(pages.sourcesPage({ ...pageCtx(), csrf }, { packs: [cur], current: cur, sources: data.sourcesFor(c, cur.id), form, problems: e.problems || [e.message] }));
+            if (cur && p === '/facts/add') return again(pages.factsPage({ ...pageCtx(), csrf }, { packs: [cur], current: cur, topics: data.factsFor(c, cur), ...factDates(), form, problems: e.problems || [e.message] }));
+            if (cur && p === '/sounds/save') return again(pages.soundsPage({ ...pageCtx(), csrf }, { ...data.soundsFor(c, cur), packs: [cur], form, problems: e.problems || [e.message] }));
+            if (cur && p === '/topics/add') return again(pages.topicsPage({ ...pageCtx(), csrf }, { ...data.topicsFor(c, cur), form, problems: e.problems || [e.message] }));
+            if (cur && p === '/rivals/save') return again(pages.rivalsPage({ ...pageCtx(), csrf }, { ...data.rivalsFor(c, cur), packs: [cur], form, problems: e.problems || [e.message] }));
+            return redirect(res, req.headers.referer && new URL(req.headers.referer).host === host ? new URL(req.headers.referer).pathname : '/', { 'set-cookie': flash(e.message) });
           }
         }
         return json(req, res, 404, { ok: false, message: 'אין פעולה כזו' });
@@ -264,74 +258,76 @@ export function createHandler(ctx, { port, env = process.env, limiter = createLi
 
       if (req.method !== 'GET' && req.method !== 'HEAD') return send(req, res, 405, 'method not allowed', 'text/plain; charset=utf-8');
 
-      // ---- media: a post's rendered slides, read only from inside the data folder
+      // ---- media: a post's rendered slides, read only from inside the data folder, and only the workspace's own
       const mm = /^\/media\/([\w-]+)\/(tiktok|instagram)\/(\d+)$/.exec(p);
       if (mm) {
-        const post = loadPost(ctx.db, mm[1]);
-        const file = post?.media?.[mm[2]]?.[Number(mm[3])];
+        const post = loadPost(c.db, mm[1]);
+        const file = post && owns(c, post.account_id) ? post.media?.[mm[2]]?.[Number(mm[3])] : null;
         const root = path.resolve(ctx.mediaRoot || dataDir());
         if (!file || !path.resolve(file).startsWith(root) || !existsSync(file)) return send(req, res, 404, 'no such slide', 'text/plain; charset=utf-8');
         res.writeHead(200, { 'content-type': 'image/jpeg', 'content-length': statSync(file).size, 'cache-control': 'private, max-age=86400', 'x-content-type-options': 'nosniff' });
         return createReadStream(file).pipe(res);
       }
-      if (p === '/static/accounts.css') return send(req, res, 200, accountsCss(ctx), 'text/css; charset=utf-8', { 'cache-control': 'private, max-age=600' });
+      // Each account's colour; it names the accounts, so a browser keeps it per session (vary: cookie).
+      if (p === '/static/accounts.css') return send(req, res, 200, accountsCss(c), 'text/css; charset=utf-8', { 'cache-control': 'private, max-age=600', vary: 'cookie' });
 
       const named = url.searchParams.get('account');
-      if (named) switchTo(ctx.pack(named));
+      if (named) switchTo(c.pack(named));
       const opened = /^\/post\/([\w-]+)$/.exec(p);
-      if (opened) switchTo(ctx.pack(ctx.db.get('SELECT account_id FROM posts WHERE id = ?', opened[1])?.account_id));
+      if (opened) switchTo(c.pack(c.db.get('SELECT account_id FROM posts WHERE id = ?', opened[1])?.account_id));
       // What the pages read: the context seen from the account shown.
-      const sc = data.scoped(ctx, current);
+      const sc = data.scoped(c, current);
       const h = data.header(sc);
-      const flashMsg = jar.of_flash ? decodeURIComponent(jar.of_flash) : null;
+      const flashMsg = jar.of_flash ? jar.of_flash : null;
       if (flashMsg) setCookies.push('of_flash=; Path=/; Max-Age=0; SameSite=Strict');
       const clearFlash = setCookies.length ? { 'set-cookie': setCookies } : {};
       function pageCtx() {
         // The desk's sidebar, collapsed to its icons or not: a cookie the toggle sets, so the page arrives already in shape.
-        return { csrf, user, theme, side: jar.of_side === 'mini' ? 'mini' : null, v: V, ...h, flash: flashMsg, dev: jar.of_dev === '1' && user.role === 'owner' };
+        return { csrf, user, theme, side: jar.of_side === 'mini' ? 'mini' : null, v: V, ...h, flash: flashMsg, links, operator: user.operator, readOnly: user.readOnly, viewAs: user.viewAs, workspace: user.workspace, dev: jar.of_dev === '1' && user.operator };
       }
       const pc = pageCtx();
-      const page = (html, status = 200) => send(req, res, status, flashMsg ? html.replace('<div id="toast" role="status" aria-live="polite"></div>', `<div id="toast" role="status" aria-live="polite" data-flash="${String(flashMsg).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)}"></div>`) : html, 'text/html; charset=utf-8', clearFlash);
+      const page = (html, status = 200) => send(req, res, status, flashMsg ? html.replace('<div id="toast" role="status" aria-live="polite"></div>', `<div id="toast" role="status" aria-live="polite" data-flash="${String(flashMsg).replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`)}"></div>`) : html, 'text/html; charset=utf-8', clearFlash);
 
       if (p === '/') return page(pages.todayPage(pc, data.today(sc)));
       if (p === '/posts') return page(pages.postsPage(pc, data.today(sc)));
-      // The one page that is not one account's: every account, and what waits in all of them.
-      if (p === '/all') return page(pages.allPage(pc, data.today(ctx)));
+      // The one page that is not one account's: every account of the workspace, and what waits in all of them.
+      if (p === '/all') return page(pages.allPage(pc, data.today(c)));
       const pm = /^\/post\/([\w-]+)$/.exec(p);
       if (pm) {
-        const d = data.postFull(ctx, pm[1]);
+        const d = data.postFull(c, pm[1]);
         return d ? page(pages.postPage(pc, d)) : page(pages.notFoundPage(pc), 404);
       }
-      if (p === '/accounts') return page(pages.accountsPage(pc, data.accountRows(sc).map((r) => ({ ...r, week: data.week(ctx, r.pack.id), style: lockedStyle(ctx.db, r.pack, ctx.packs) }))));
+      // The look is locked against every account on the server (no two alike), so the style reads the engine's packs.
+      if (p === '/accounts') return page(pages.accountsPage(pc, data.accountRows(sc).map((r) => ({ ...r, week: data.week(c, r.pack.id), style: lockedStyle(ctx.db, r.pack, ctx.packs) }))));
       if (p === '/results') return page(pages.resultsPage(pc, data.results(sc)));
       const cur = current;
       if (p === '/sources') {
         if (!cur) return page(pages.notFoundPage(pc), 404);
-        return page(pages.sourcesPage(pc, { packs: sc.packs, current: cur, sources: data.sourcesFor(ctx, cur.id) }));
+        return page(pages.sourcesPage(pc, { packs: sc.packs, current: cur, sources: data.sourcesFor(c, cur.id) }));
       }
       if (p === '/settings') return page(pages.settingsPage(pc, data.settingsData(sc)));
       if (p === '/facts') {
         if (!cur) return page(pages.notFoundPage(pc), 404);
-        return page(pages.factsPage(pc, { packs: sc.packs, current: cur, topics: data.factsFor(ctx, cur), ...factDates() }));
+        return page(pages.factsPage(pc, { packs: sc.packs, current: cur, topics: data.factsFor(c, cur), ...factDates() }));
       }
       if (p === '/sounds') {
         if (!cur) return page(pages.notFoundPage(pc), 404);
-        return page(pages.soundsPage(pc, { ...data.soundsFor(ctx, cur), packs: sc.packs }));
+        return page(pages.soundsPage(pc, { ...data.soundsFor(c, cur), packs: sc.packs }));
       }
-      // The service worker asks what to show for a push it was woken by.
-      if (p === '/notifications/latest.json') return json(req, res, 200, latestNotification(ctx.db) || {});
+      // The service worker asks what to show for a push it was woken by: the workspace's latest, the operator's any.
+      if (p === '/notifications/latest.json') return json(req, res, 200, latestNotification(c.db, user.operator ? null : c.packs.map((x) => x.id)) || {});
       if (p === '/topics') {
         if (!cur) return page(pages.notFoundPage(pc), 404);
-        return page(pages.topicsPage(pc, data.topicsFor(ctx, cur)));
+        return page(pages.topicsPage(pc, data.topicsFor(c, cur)));
       }
       if (p === '/rivals') {
         if (!cur) return page(pages.notFoundPage(pc), 404);
-        return page(pages.rivalsPage(pc, { ...data.rivalsFor(ctx, cur), packs: sc.packs }));
+        return page(pages.rivalsPage(pc, { ...data.rivalsFor(c, cur), packs: sc.packs }));
       }
       if (p === '/more') return page(pages.morePage(pc));
       for (const [method, re, fn] of ROUTES) {
         const m = method === 'GET' && re.exec(p);
-        if (m) return page(await fn(user, m, Object.fromEntries(url.searchParams), pc));
+        if (m) return page(await fn(c, user, m, Object.fromEntries(url.searchParams), pc));
       }
       return page(pages.notFoundPage(pc), 404);
     } catch (e) {
@@ -341,17 +337,20 @@ export function createHandler(ctx, { port, env = process.env, limiter = createLi
       return send(req, res, status, status === 500 ? 'משהו השתבש. הפרטים ביומן.' : String(e.message), 'text/plain; charset=utf-8');
     }
   };
+  // Every route the site answers, for the test that each one keeps to its workspace.
+  handler.routes = ROUTES.map(([method, re]) => [method, re]);
+  return handler;
 }
 
-export function listen(ctx, { port = Number(process.env.PORT) || 4700, env = process.env } = {}) {
+export function listen(ctx, { port = Number(process.env.PORT) || 4700, env = process.env, accounts = null } = {}) {
   let inner = null;
   const server = createServer((req, res) => inner(req, res));
   return new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(port, HOST, () => {
       const actual = server.address().port;
-      inner = createHandler(ctx, { port: actual, env });
-      resolve({ server, port: actual });
+      inner = createHandler(ctx, { port: actual, env, accounts });
+      resolve({ server, port: actual, handler: inner });
     });
   });
 }

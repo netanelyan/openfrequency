@@ -123,7 +123,8 @@ export function accountSwitch(ctx) {
   const all = ctx.accounts || [];
   const cur = all.find((a) => a.id === ctx.current);
   const badge = (n, label) => (n ? `<b class="badge num" aria-label="${n} ${label}">${n}</b>` : '');
-  const newRow = `<a class="new" href="/new"><span class="ic">${icon('plus')}</span><span class="nm">חשבון חדש</span></a>`;
+  // A read-only session (the operator viewing as a customer) opens no new account.
+  const newRow = ctx.readOnly ? '' : `<a class="new" href="/new"><span class="ic">${icon('plus')}</span><span class="nm">חשבון חדש</span></a>`;
   // On the page of every account (/all) the switcher says so, and each account is a link to its own home.
   if (ctx.active === 'all' && all.length) {
     const link = (a) => `<a class="to" href="/?account=${encodeURIComponent(a.id)}" title="@${esc(a.handle)}"><span class="ic">${accDot(a.id)}</span><span class="nm"><b>${esc(a.name)}</b></span>${badge(a.waiting, 'מחכים')}</a>`;
@@ -137,12 +138,24 @@ export function accountSwitch(ctx) {
   const waitingElsewhere = others.reduce((s, a) => s + a.waiting, 0);
   // The other accounts, as rows like the sections under them: one line, the same height and the same indent. Above
   // them, the page of every account.
-  const item = (a) => `<form method="post" action="/account/switch">${csrfField(ctx)}<input type="hidden" name="to" value="${esc(a.id)}"><button type="submit" title="@${esc(a.handle)}"><span class="ic">${accDot(a.id)}</span><span class="nm"><b>${esc(a.name)}</b></span>${badge(a.waiting, 'מחכים')}</button></form>`;
+  // A read-only session sends no POST at all, so its rows are links (?account= switches as the form does).
+  const item = (a) => ctx.readOnly ? `<a class="to" href="/?account=${encodeURIComponent(a.id)}" title="@${esc(a.handle)}"><span class="ic">${accDot(a.id)}</span><span class="nm"><b>${esc(a.name)}</b></span>${badge(a.waiting, 'מחכים')}</a>` : `<form method="post" action="/account/switch">${csrfField(ctx)}<input type="hidden" name="to" value="${esc(a.id)}"><button type="submit" title="@${esc(a.handle)}"><span class="ic">${accDot(a.id)}</span><span class="nm"><b>${esc(a.name)}</b></span>${badge(a.waiting, 'מחכים')}</button></form>`;
   const everyRow = others.length ? `<a class="to" href="/all"><span class="ic">${icon('accounts')}</span><span class="nm"><b>כל החשבונות</b></span>${badge(cur.waiting + waitingElsewhere, 'מחכים בכל החשבונות')}</a>` : '';
   return `<details class="acctswitch">
 <summary aria-label="החשבון: ${esc(cur.name)}. החלפת חשבון"><span class="ic">${accDot(cur.id)}</span><span class="nm"><b>${esc(cur.name)}</b><small class="ltr">@${esc(cur.handle)}</small></span>${waitingElsewhere ? `<b class="badge num" title="מחכים לאישור בחשבונות האחרים" aria-label="${waitingElsewhere} מחכים בחשבונות האחרים">${waitingElsewhere}</b>` : ''}${icon('chev')}</summary>
 <div class="menu">${everyRow}${others.map(item).join('')}${newRow}</div>
 </details>`;
+}
+
+/**
+ * The operator viewing a workspace as its customer sees it (accounts' view-as): said at the top of every page, with
+ * the way back to the operator's console. Nothing can change while it lasts (the server refuses every POST).
+ */
+export function viewAsBanner(ctx) {
+  if (!ctx.readOnly) return '';
+  const text = ctx.viewAs ? `אתם צופים ב-${esc(ctx.workspace?.name || '')} כמו שהלקוח רואה אותו. זו צפייה בלבד, ושום שינוי לא נשמר.` : 'זו צפייה בלבד, ושום שינוי לא נשמר.';
+  const end = ctx.viewAs && ctx.links ? `<a class="btn sm" href="${esc(ctx.links.admin)}">סיום צפייה</a>` : '';
+  return `<div class="banner info viewas" role="status">${icon('shield')}<div><b>${text}</b></div>${end}</div>`;
 }
 
 /** The page around a body. ctx: { title, active, csrf, spend: { usd, cap }, budget, waiting, user, accounts, current } */
@@ -174,7 +187,7 @@ export function layout(ctx, body) {
 <link rel="apple-touch-icon" href="/static/icon-180.png?v=${ctx.v || 1}">
 <link rel="manifest" href="/static/manifest.webmanifest">
 </head>
-<body>
+<body${ctx.readOnly ? ' class="readonly"' : ''}>
 ${SPRITE}
 <header class="top"><div class="wrap">
   <a class="brand" href="/" aria-label="תדר, להיום">${tederMark()}<b>תדר</b></a>
@@ -186,6 +199,7 @@ ${SPRITE}
   </div>
 </div></header>
 <main class="wrap" id="main">
+${viewAsBanner(ctx)}
 ${budgetBanner(ctx.budget)}
 ${body}
 <footer class="foot">${ofMark()}<span class="ltr">OpenFrequency<sup>™</sup></span></footer>

@@ -18,7 +18,7 @@
     "init-private": "node scripts/init-private.js",
     "record": "node scripts/record.js",
     "screenshots": "node scripts/screenshots.js",
-    "user:add": "node scripts/user-add.js",
+    "workspace:assign": "node scripts/workspace-assign.js",
     "backup": "node scripts/backup.js",
     "prepare": "node scripts/hooks.js",
     "compare": "node scripts/compare.js",

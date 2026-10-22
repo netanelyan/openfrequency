@@ -7,18 +7,20 @@ import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
 import { buildPost } from '../src/pipeline/build.js';
 import { listen } from '../src/web/server.js';
-import { addUser } from '../src/web/auth.js';
 import { closeBrowser } from '../src/render/render.js';
-import { opened, tempHome } from './helpers.js';
+import { customer, fakeAccounts, operator, opened, tempHome } from './helpers.js';
 
-// The website: a session for everything, a CSRF token on every change, Hebrew
-// right to left on every page, and the approve and edit flows end to end.
+// The website: a session accounts vouches for on everything, a CSRF token on every change, Hebrew right to left
+// on every page, and the approve and edit flows end to end. Signed in as the owner of the workspace the demo
+// account is in, except where a setting is the operator's (the server's budget, developer mode).
 
 let home;
 let ctx;
 let server;
 let base;
 let postId;
+let fake;
+let port;
 
 before(async () => {
   home = tempHome();
@@ -27,24 +29,25 @@ before(async () => {
   ctx = makeContext({ db, packs: loadAll({ dir: path.join(home.home, 'packs') }), log: () => {} });
   ctx.mediaDir = path.join(home.home, 'media');
   ctx.mediaRoot = home.home;
-  addUser(db, 'owner', 'a-long-test-password');
+  db.run('UPDATE accounts SET workspace_id = 1');
+  fake = await fakeAccounts();
   postId = (await buildPost(ctx, { pack: ctx.pack('demo'), formatKey: 'care-guide' })).postId;
-  const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'x'.repeat(40) } });
+  const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'x'.repeat(40), ...fake.env } });
   server = s.server;
+  port = s.port;
   base = `http://127.0.0.1:${s.port}`;
 });
 
 after(async () => {
   server?.close();
+  await fake?.close();
   await closeBrowser();
   home?.cleanup();
 });
 
-async function login() {
-  const res = await fetch(`${base}/login`, { method: 'POST', redirect: 'manual', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: 'user=owner&password=a-long-test-password' });
-  assert.equal(res.status, 303);
-  return res.headers.get('set-cookie').split(';')[0];
-}
+/** A session of the demo account's workspace (or the operator's), as the browser's cookie. */
+const login = async () => fake.session(customer(1)).cookie;
+const loginOperator = async () => fake.session(operator()).cookie;
 const get = (p, cookie) => fetch(`${base}${p}`, { redirect: 'manual', headers: cookie ? { cookie } : {} });
 async function csrfOf(cookie) {
   const html = await (await get('/accounts', cookie)).text();
@@ -52,19 +55,21 @@ async function csrfOf(cookie) {
 }
 const post = (p, cookie, body) => fetch(`${base}${p}`, { method: 'POST', redirect: 'manual', headers: { cookie, 'content-type': 'application/x-www-form-urlencoded', 'x-of-ajax': '1' }, body: new URLSearchParams(body).toString() });
 
-test('every page needs a session', async () => {
-  for (const p of ['/', '/posts', '/accounts', '/results', '/sources', '/rivals', '/settings', `/post/${postId}`, `/media/${postId}/tiktok/0`]) {
+test('every page needs a session: without one the browser goes to accounts\' login, with where it was going', async () => {
+  for (const p of ['/', '/posts', '/accounts', '/results', '/sources', '/rivals', '/settings', `/post/${postId}`, `/media/${postId}/tiktok/0`, '/sources?account=demo']) {
     const res = await get(p);
     assert.equal(res.status, 303, p);
-    assert.equal(res.headers.get('location'), '/login');
+    assert.equal(res.headers.get('location'), `https://accounts.test/login?next=${encodeURIComponent(`http://127.0.0.1:${port}${p}`)}`, p);
   }
+  assert.equal((await fetch(`${base}/login`, { redirect: 'manual' })).status, 303, "Teder's own login page is gone");
 });
 
-test('a wrong password is refused, and a request for another host is refused', async () => {
-  const res = await fetch(`${base}/login`, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: 'user=owner&password=wrong-password-x' });
-  assert.equal(res.status, 401);
+test('a session accounts does not know is sent to the login, and a request for another host is refused', async () => {
+  const res = await get('/', 'of_session=not-a-session-accounts-knows-0000');
+  assert.equal(res.status, 303);
+  assert.match(res.headers.get('location'), /^https:\/\/accounts\.test\/login\?next=/);
   // fetch cannot set Host, so this one goes through node:http.
-  const status = await new Promise((resolve) => http.get(`${base}/login`, { headers: { host: 'evil.example.com' } }, (r) => (r.resume(), resolve(r.statusCode))));
+  const status = await new Promise((resolve) => http.get(`${base}/`, { headers: { host: 'evil.example.com' } }, (r) => (r.resume(), resolve(r.statusCode))));
   assert.equal(status, 421);
 });
 
@@ -78,13 +83,16 @@ test('every page is Hebrew, right to left, and escapes what it shows (hard rule 
     assert.ok(!/<script>/.test(html), `${p} has no inline script`);
     assert.match(res.headers.get('content-security-policy'), /script-src 'self'/);
   }
-  const loginHtml = await (await get('/login')).text();
-  assert.match(loginHtml, /<html lang="he" dir="rtl"/);
-  assert.match(loginHtml, /<link rel="icon" href="\/static\/icon\.svg\?v=\w+"/, 'the favicon link carries the version, so a new icon is fetched');
+  // The page a session sees when accounts says Teder is not in its plan stands alone: Hebrew, Teder's wave, no redirect.
+  const gate = await get('/', fake.session({ status: 403, body: { error: 'product_disabled' } }).cookie);
+  assert.equal(gate.status, 403);
+  const gateHtml = await gate.text();
+  assert.match(gateHtml, /<html lang="he" dir="rtl"/);
+  assert.match(gateHtml, /<link rel="icon" href="\/static\/icon\.svg\?v=\w+"/, 'the favicon link carries the version, so a new icon is fetched');
+  assert.match(gateHtml, /<div class="hero"><span class="mark teder"[^>]*><svg viewBox="0 0 100 100"><path [^>]*stroke="currentColor"/, "the page shows Teder's wave");
   const fav = await get('/favicon.ico');
   assert.equal(fav.status, 200, 'the favicon is served without a session, not redirected to the login');
   assert.equal(fav.headers.get('content-type'), 'image/png');
-  assert.match(loginHtml, /<div class="hero"><span class="mark teder"[^>]*><svg viewBox="0 0 100 100"><path [^>]*stroke="currentColor"/, "the login shows Teder's wave");
 });
 
 test('results lead with what the published posts did; the formats and the blocks wait behind a button each', async () => {
@@ -174,9 +182,9 @@ test('the kill switch and the mode are set from the Accounts page', async () => 
   assert.equal(ctx.db.get("SELECT status FROM accounts WHERE id = 'demo'").status, 'active');
 });
 
-test("Settings are the owner's; developer mode, opened from the version line, shows which keys are set, never their values", async () => {
+test("Settings are the operator's; developer mode, opened from the version line, shows which keys are set, never their values", async () => {
   process.env.PEXELS_API_KEY = 'secret-value-that-must-not-show';
-  const cookie = await login();
+  const cookie = await loginOperator();
   const plain = await (await get('/settings', cookie)).text();
   assert.ok(!plain.includes('PEXELS_API_KEY'), "no keys on the owner's page");
   assert.ok(!plain.includes('npm run'), 'no commands either');
@@ -239,7 +247,7 @@ test('rivals are typed in by hand per account: refused when malformed, shown, up
 });
 
 test('the Settings page shows the month against the cap: spent, forecast, posts left, each account\'s share; a higher cap is refused', async () => {
-  const cookie = await login();
+  const cookie = await loginOperator();
   const html = await (await get('/settings', cookie)).text();
   for (const s of ['תקציב חודשי', 'תחזית לסוף החודש', 'פוסטים']) assert.ok(html.includes(s), s);
   // Each account's share and where the cap is set are developer mode's.
@@ -292,7 +300,7 @@ test('sounds are added per account, the service worker is served from the root, 
   assert.equal(res.status, 200);
   assert.equal(ctx.db.get('SELECT COUNT(*) AS n FROM push_subs').n, 1);
   assert.match(await (await get('/settings', cookie)).text(), /data-push="[A-Za-z0-9_-]{80,}"/, 'the page carries the public key the browser subscribes with');
-  ctx.db.insert('notifications', { kind: 'draft', title: 'עציץ ושמש: טיוטה מחכה בטיקטוק', body: 'b', url: '/', created_at: new Date().toISOString() });
+  ctx.db.insert('notifications', { account_id: 'demo', kind: 'draft', title: 'עציץ ושמש: טיוטה מחכה בטיקטוק', body: 'b', url: '/', created_at: new Date().toISOString() });
   assert.equal((await get('/notifications/latest.json')).status, 303, 'what a notification says is behind the session');
   assert.match((await (await get('/notifications/latest.json', cookie)).json()).title, /טיוטה מחכה/);
 });

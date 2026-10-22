@@ -32,7 +32,8 @@ await new Promise((resolve, reject) => {
   setTimeout(() => reject(new Error('demo did not start')), 900_000);
 });
 
-const base = `http://127.0.0.1:${port}`;
+// localhost, not 127.0.0.1: the demo's sign-in cookie belongs to that name (scripts/demo-accounts.js).
+const base = `http://localhost:${port}`;
 const browser = await chromium.launch();
 const shots = [];
 try {
@@ -46,11 +47,8 @@ try {
       const errors = [];
       page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
       page.on('pageerror', (e) => errors.push(e.message));
-      await page.goto(`${base}/login`);
-      if (!only || only.includes('login')) shots.push(await shot(page, `login-${device}${theme === 'dark' ? '-dark' : ''}`));
-      await page.fill('input[name=user]', 'demo');
-      await page.fill('input[name=password]', 'demo-password-2026');
-      await Promise.all([page.waitForNavigation(), page.click('button[type=submit]')]);
+      // The first visit goes through the demo's stand-in for accounts, which signs the browser in and comes back.
+      await page.goto(`${base}/`);
       // Home is an overview with no cards; the cards, and so a post to picture, are on Posts.
       await page.goto(`${base}/posts`);
       const postId = await page.evaluate(() => document.querySelector('[data-post]')?.id?.replace('post-', ''));
@@ -102,7 +100,7 @@ async function shot(page, name) {
     imgs.forEach((i) => (i.loading = 'eager'));
     for (let t = 0; t < 50 && imgs.some((i) => !i.naturalWidth); t++) await new Promise((r) => setTimeout(r, 100));
     await document.fonts.ready;
-    // The login's wave draws itself in: picture it drawn.
+    // Anything that draws itself in: picture it drawn.
     await Promise.all(document.getAnimations().map((a) => a.finished.catch(() => {})));
   });
   const file = path.join(out, `${name}.png`);

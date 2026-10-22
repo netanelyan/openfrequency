@@ -30,8 +30,7 @@ chown -R openfrequency:openfrequency private
 step "3. private/.env, mode 600"
 {
   printf '%s=%s\n' SESSION_SECRET "$(openssl rand -hex 32)"
-  printf '%s=%s\n' OF_ADMIN_USER owner
-  printf '%s=%s\n' OF_ADMIN_PASSWORD "$(openssl rand -hex 12)"
+  printf '%s=%s\n' OF_INTERNAL_TOKEN "$(openssl rand -hex 24)"
   printf '%s=%s\n' PUBLIC_HOST teder.test
   printf '%s=%s\n' MEDIA_PUBLIC_BASE_URL https://media.test
   printf '%s=%s\n' OF_BUDGET_MONTHLY_USD 15
@@ -52,8 +51,8 @@ caddy validate --config /etc/caddy/Caddyfile >/dev/null && echo 'caddy validate:
 systemctl reload caddy || systemctl restart caddy
 sleep 2
 curl -fsk --resolve teder.test:443:127.0.0.1 https://teder.test/healthz && echo ' <- https://teder.test/healthz through Caddy'
-curl -fsk --resolve teder.test:443:127.0.0.1 -o /dev/null -w '%{http_code} <- the login page through Caddy\n' https://teder.test/login
-code=$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: teder.test' http://127.0.0.1:4700/login)
+curl -sk --resolve teder.test:443:127.0.0.1 -o /dev/null -w '%{http_code} <- a page without a session through Caddy (303 to accounts'"'"' login)\n' https://teder.test/
+code=$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: teder.test' http://127.0.0.1:4700/)
 echo "$code <- the public name over plain HTTP straight to the app (must be refused: 403)"
 [ "$code" = 403 ]
 mkdir -p private/data/public/t && echo hello > private/data/public/t/x.txt && chown -R openfrequency:openfrequency private/data/public

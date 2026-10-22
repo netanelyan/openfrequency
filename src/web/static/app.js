@@ -76,6 +76,11 @@
         credentials: 'same-origin',
       });
       const out = await res.json().catch(() => ({ ok: false, message: 'תשובה לא צפויה מהשרת' }));
+      // The session ended (signed out elsewhere, or expired): off to accounts' login, which brings the browser back.
+      if (res.status === 401 && typeof out.login === 'string' && /^https?:\/\//.test(out.login)) {
+        location.href = out.login;
+        return;
+      }
       const kind = form.dataset.ajax;
       if (kind === 'theme' && out.theme) {
         document.documentElement.dataset.theme = out.theme;

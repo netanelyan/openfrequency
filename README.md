@@ -32,11 +32,12 @@ keys live in a private folder, `$OF_HOME`, that is never committed
 ```bash
 npm install
 npx playwright install chromium
-npm run demo        # three fictional brands, then the website on 127.0.0.1:4700
+npm run demo        # three fictional brands, then the website on localhost:4700
 ```
 
 `npm run demo` builds a throwaway home in `./.demo`, makes posts in every state from
-the demo pack's recordings (no network, no keys, no model), and prints a login.
+the demo pack's recordings (no network, no keys, no model), and serves the website
+with a stand-in for openfrequency-accounts that signs the browser in on the first visit.
 Nothing in it is real, and the Results page says so.
 
 Requires Node 22.13 or newer (for `node:sqlite`); developed on 24.
@@ -310,7 +311,7 @@ fetches each slide from `MEDIA_PUBLIC_BASE_URL`, which must be live first.
 | `npm run visuals -- [--pack <id>]` | every graphic the engine draws, in a pack's theme |
 | `npm run screenshots [-- --dark]` | every page at phone and desk width, from the demo |
 | `npm run init-private [-- --pack <id>] [-- --git]` | creates the private folder, optionally a blank pack |
-| `npm run user:add -- <name>` | adds a website user (asks for the password) |
+| `npm run workspace:assign -- --workspace <id> <account>... [--dry-run]` | puts accounts in an openfrequency-accounts workspace ([docs/workspace-move.md](docs/workspace-move.md)) |
 | `npm run backup` | a consistent copy of the database |
 | `npm run budget [-- init\|reconcile]` | the month's spend, the cap and the costliest jobs |
 | `npm run zernio:check`, `npm run instagram:check`, `npm run instagram:token` | the publishers' checks and Instagram's token ([Publishing](#publishing)) |
@@ -401,8 +402,8 @@ tested end to end in a clean container by `deploy/test/run.sh`.
    Then put the private folder at `/opt/open-frequency/private` (a clone of its
    repository, or a copy of `packs/` and `.env`), owned by `openfrequency`.
 3. **`private/.env`**, mode 600: at least `SESSION_SECRET` (`openssl rand -hex 32`),
-   `OF_ADMIN_USER` and `OF_ADMIN_PASSWORD` (read once to create the first user, then
-   remove it), `PUBLIC_HOST`, `MEDIA_PUBLIC_BASE_URL`, `OF_USER_AGENT` with a contact
+   `OF_INTERNAL_TOKEN` (the same value as openfrequency-accounts'; sign-in is that
+   service's, see [docs/workspace-move.md](docs/workspace-move.md)), `PUBLIC_HOST`, `MEDIA_PUBLIC_BASE_URL`, `OF_USER_AGENT` with a contact
    (Wikimedia rate-limits readers without one), the budget, and the keys you have.
    Then once, as `openfrequency`: `npm run budget -- init`.
 4. **The service:** copy `deploy/openfrequency.service` to `/etc/systemd/system/`,
@@ -441,7 +442,7 @@ src/formats     the kinds of post, rotation, the mix, cover patterns
 src/trends      formats that work on YouTube Shorts
 src/autonomy    the runner and its rails
 src/onboarding  source discovery, the API catalogue, writing a new pack
-src/web         Teder: server, login, pages, actions, one stylesheet, one script
+src/web         Teder: server, who is signed in (accounts.js), workspaces, pages, actions, one stylesheet, one script
 assets/        the bundled fonts and the brand marks (assets/brand)
 examples/       the fictional demo pack and the blank pack
 scripts/        the commands above

@@ -22,6 +22,7 @@ import { robotsAllows } from '../sources/robots.js';
 import { israelDate } from '../schedule/israel.js';
 import { DEFAULT_MONTHLY_USD } from '../budget/ledger.js';
 import { addBankTopic, removeTopic, setWatchList } from '../topics/index.js';
+import { owns } from './workspace.js';
 
 // What each button does. Every action is a function (ctx, user, params, form)
 // that returns { ok, message, redirect } or throws an ActionError with a message
@@ -36,10 +37,19 @@ export class ActionError extends Error {
   }
 }
 
+// A post of another workspace is "not found", the same answer as one that never was (src/web/workspace.js).
 const mustPost = (ctx, id) => {
   const post = loadPost(ctx.db, id);
-  if (!post) throw new ActionError('הפוסט לא נמצא', 404);
+  if (!post || !owns(ctx, post.account_id)) throw new ActionError('הפוסט לא נמצא', 404);
   return post;
+};
+
+/** The engine's own context (every account), for its work once the row is known to be the session's. */
+const engineOf = (ctx) => ctx.global || ctx;
+
+/** The settings that are the whole server's (the API budget, the kill switch, when posts are written): the operator's alone. */
+const operatorOnly = (user) => {
+  if (!user.operator) throw new ActionError('את זה משנה רק מי שמפעיל את תדר', 403);
 };
 
 /**
@@ -47,7 +57,7 @@ const mustPost = (ctx, id) => {
  * minute). `job` (not sent to the browser) is the send, for the tests.
  */
 function draftBeside(ctx, id, result) {
-  const job = sendDraft(ctx, id).catch((e) => {
+  const job = sendDraft(engineOf(ctx), id).catch((e) => {
     ctx.log?.(`draft ${id}: ${e.message}`);
     return { state: 'failed', why: e.message };
   });
@@ -81,7 +91,8 @@ export function approveAll(ctx, user, params, form) {
   const jobs = [];
   let done = 0;
   for (const id of ids) {
-    if (ctx.db.get('SELECT status FROM posts WHERE id = ?', id)?.status !== 'queued') continue;
+    const row = ctx.db.get('SELECT status, account_id FROM posts WHERE id = ?', id);
+    if (row?.status !== 'queued' || !owns(ctx, row.account_id)) continue;
     const r = approve(ctx, user, { id });
     done++;
     if (r.job) jobs.push(r.job);
@@ -127,7 +138,7 @@ export function oldDraftsDeleted(ctx, user, { id }) {
 export async function publishNow(ctx, user, { id }) {
   const post = mustPost(ctx, id);
   try {
-    const r = await publishPost(ctx, id);
+    const r = await publishPost(engineOf(ctx), id);
     audit(ctx.db, { actor: user.name, action: 'publish_now', accountId: post.account_id, postId: id, detail: { via: r.via, ok: r.ok } });
     return { ok: r.ok, message: r.ok ? (r.via === 'dry' ? 'פורסם בפרסום יבש: נכתב לדיסק.' : 'פורסם.') : 'הפרסום נכשל. הסיבה בדף הפוסט.' };
   } catch (e) {
@@ -162,7 +173,9 @@ export async function edit(ctx, user, { id }, form) {
   // A line the owner left longer than the account's rule is broken in code, as a draft's would be.
   lineDraft(draft, pack);
   draft.captionIg = igCaption(draft);
-  const { problems, gate } = checkPost({ ...ctx, packs: ctx.packs }, pack, draft, post.facts, format);
+  // Checked as the engine checks a draft: against every account on the server, not only this workspace's.
+  const engine = engineOf(ctx);
+  const { problems, gate } = checkPost({ ...engine, packs: engine.packs }, pack, draft, post.facts, format);
   if (problems.length) throw new ActionError('הבדיקות עצרו את השינוי', 422, { problems: problems.map((p) => `${p.where}: ${p.msg}`), values: { ...form } });
 
   const names = new Map(ctx.db.all('SELECT id, name FROM sources WHERE account_id = ?', pack.id).map((r) => [r.id, r.name]));
@@ -173,7 +186,7 @@ export async function edit(ctx, user, { id }, form) {
   const extra = { captionIg: draft.captionIg || '', keywords: draft.keywords || [], subject: draft.subject || {}, cta: draft.cta?.text || '' };
   // Drawn again as it was drawn: in the look it went out in, with every photograph it had (each slide's, the one
   // behind the slides, a head-to-head's two faces). An edit used to bring back the cover's photograph alone.
-  const look = styleByHash(ctx.db, pack, post.checks?.style) || lockedStyle(ctx.db, pack, ctx.packs);
+  const look = styleByHash(ctx.db, pack, post.checks?.style) || lockedStyle(ctx.db, pack, engineOf(ctx).packs);
   const img = (imageId) => (imageId ? ctx.db.get('SELECT * FROM images WHERE id = ?', imageId) : null);
   const photos = new Map(
     [...post.slides.map((s) => [s.idx, img(s.image_id)]), ['bg', img(post.checks?.bgImage)], ...(post.checks?.coverImages || []).map((x, k) => [k ? 'cb' : 'ca', img(x)])].filter(([, p]) => p?.file)
@@ -240,6 +253,7 @@ export function resume(ctx, user, { id }) {
 }
 
 export function globalKill(ctx, user, _p, form) {
+  operatorOnly(user);
   const on = form.on === '1';
   setSetting(ctx.db, 'globalKill', on);
   audit(ctx.db, { actor: user.name, action: on ? 'global_kill_on' : 'global_kill_off' });
@@ -248,6 +262,7 @@ export function globalKill(ctx, user, _p, form) {
 
 /** A lower cap than OF_BUDGET_MONTHLY_USD for now, never a higher one; 0 goes back to it. */
 export function setBudget(ctx, user, _p, form) {
+  operatorOnly(user);
   const hard = Number(process.env.OF_BUDGET_MONTHLY_USD) > 0 ? Number(process.env.OF_BUDGET_MONTHLY_USD) : DEFAULT_MONTHLY_USD;
   // The owner types tokens (100 to a dollar); the cap is kept in dollars, as the ledger counts.
   const t = Number(form.budget);
@@ -260,6 +275,7 @@ export function setBudget(ctx, user, _p, form) {
 }
 
 export function setGenerateAt(ctx, user, _p, form) {
+  operatorOnly(user);
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(String(form.at || ''))) throw new ActionError('צריך שעה כמו 07:30');
   setSetting(ctx.db, 'generateAt', form.at);
   audit(ctx.db, { actor: user.name, action: 'generate_at', detail: { at: form.at } });
@@ -268,7 +284,7 @@ export function setGenerateAt(ctx, user, _p, form) {
 
 export function sourceStatus(ctx, user, { id }, _form, status) {
   const s = ctx.db.get('SELECT * FROM sources WHERE id = ?', Number(id));
-  if (!s) throw new ActionError('אין מקור כזה', 404);
+  if (!s || !owns(ctx, s.account_id)) throw new ActionError('אין מקור כזה', 404);
   ctx.db.update('sources', s.id, { status, approved_at: status === 'approved' ? nowIso() : s.approved_at });
   audit(ctx.db, { actor: user.name, action: `source_${status}`, accountId: s.account_id, detail: { source: s.key, url: s.url } });
   return { ok: true, message: status === 'approved' ? 'המקור אושר.' : 'המקור הוסר. פוסטים שנשענים עליו ייחסמו לפני פרסום.', redirect: `/sources?account=${encodeURIComponent(s.account_id)}` };
@@ -407,7 +423,7 @@ export function removeSoundAction(ctx, user, _p, form) {
 
 /** A browser asks for notifications: its push endpoint is kept. */
 export function subscribePush(ctx, user, _p, form) {
-  const r = subscribe(ctx.db, { endpoint: form.endpoint }, { userId: user.id ?? null });
+  const r = subscribe(ctx.db, { endpoint: form.endpoint }, { userId: user.id ?? null, workspaceId: ctx.workspaceId ?? null });
   if (!r.ok) throw new ActionError('הדפדפן לא החזיר כתובת התראות תקינה');
   audit(ctx.db, { actor: user.name, action: 'push_subscribed', detail: { host: new URL(String(form.endpoint)).hostname } });
   return { ok: true, message: 'ההתראות מופעלות בדפדפן הזה.' };
@@ -415,7 +431,7 @@ export function subscribePush(ctx, user, _p, form) {
 
 /** A browser turns its notifications off: its endpoint is forgotten. */
 export function unsubscribePush(ctx, user, _p, form) {
-  const n = unsubscribe(ctx.db, { endpoint: form.endpoint });
+  const n = unsubscribe(ctx.db, { endpoint: form.endpoint }, { workspaceId: ctx.workspaceId ?? null });
   audit(ctx.db, { actor: user.name, action: 'push_unsubscribed', detail: { n } });
   return { ok: true, message: 'ההתראות כבויות בדפדפן הזה.' };
 }
@@ -426,7 +442,7 @@ export async function takedown(ctx, user, { id }, form) {
   const notice = String(form.notice || '').trim();
   if (notice.length < 10) throw new ActionError('הדביקו את נוסח ההודעה (לפחות כמה מילים)');
   const platform = ['tiktok', 'instagram'].includes(form.platform) ? form.platform : null;
-  const r = await recordTakedown(ctx, { postId: id, platform, claimant: String(form.claimant || '').trim(), notice, by: user.name });
+  const r = await recordTakedown(engineOf(ctx), { postId: id, platform, claimant: String(form.claimant || '').trim(), notice, by: user.name });
   const hand = Object.entries(r.deleted).filter(([, v]) => v.state === 'by_hand').map(([p]) => (p === 'tiktok' ? 'טיקטוק' : 'אינסטגרם'));
   return {
     ok: true,
@@ -439,6 +455,8 @@ export async function takedown(ctx, user, { id }, form) {
 export function takedownDeleted(ctx, user, { id }, form) {
   const platform = ['tiktok', 'instagram'].includes(form.platform) ? form.platform : null;
   if (!platform) throw new ActionError('איזו פלטפורמה?');
+  const row = ctx.db.get('SELECT account_id FROM takedowns WHERE id = ?', Number(id));
+  if (!row || !owns(ctx, row.account_id)) throw new ActionError('אין הודעה כזו', 404);
   try {
     confirmDeleted(ctx.db, { id: Number(id), platform, by: user.name });
   } catch (e) {

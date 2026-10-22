@@ -6,9 +6,8 @@ import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
 import { buildPost } from '../src/pipeline/build.js';
 import { listen } from '../src/web/server.js';
-import { addUser } from '../src/web/auth.js';
 import { closeBrowser } from '../src/render/render.js';
-import { opened, tempHome } from './helpers.js';
+import { customer, fakeAccounts, opened, tempHome } from './helpers.js';
 
 // One account's pages at a time: the switcher at the top picks it, a cookie keeps it, and a link that names an
 // account (a post, ?account=) switches to that one. What waits in the others is counted on the switcher.
@@ -17,6 +16,7 @@ let home;
 let server;
 let base;
 let otherPost;
+let fake;
 
 before(async () => {
   home = tempHome({
@@ -34,23 +34,23 @@ before(async () => {
   const ctx = makeContext({ db, packs: loadAll({ dir: path.join(home.home, 'packs') }), log: () => {} });
   ctx.mediaDir = path.join(home.home, 'media');
   ctx.mediaRoot = home.home;
-  addUser(db, 'owner', 'a-long-test-password');
+  db.run('UPDATE accounts SET workspace_id = 1');
+  fake = await fakeAccounts();
   otherPost = (await buildPost(ctx, { pack: ctx.pack('second'), formatKey: 'care-guide' })).postId;
-  const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'x'.repeat(40) } });
+  const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'x'.repeat(40), ...fake.env } });
   server = s.server;
   base = `http://127.0.0.1:${s.port}`;
 });
 
 after(async () => {
   server?.close();
+  await fake?.close();
   await closeBrowser();
   home?.cleanup();
 });
 
-async function login() {
-  const res = await fetch(`${base}/login`, { method: 'POST', redirect: 'manual', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: 'user=owner&password=a-long-test-password' });
-  return res.headers.get('set-cookie').split(';')[0];
-}
+// Both accounts are one workspace's, and the session is its owner's.
+const login = async () => fake.session(customer(1)).cookie;
 const get = (p, cookie) => fetch(`${base}${p}`, { redirect: 'manual', headers: { cookie } });
 const acct = (res) => /of_acct=([^;]+)/.exec(res.headers.get('set-cookie') || '')?.[1] || null;
 
