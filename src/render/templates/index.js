@@ -1,5 +1,6 @@
 import { counter, he, ICON, leadNumber, sourceLine, splitLead, two } from '../html.js';
 import { coverInner, drawsRole, ROLE_CSS, roleInner } from '../roles.js';
+import { photocard } from './photocard.js';
 
 // The template library. Each template turns one slide into { css, html } using
 // only the theme's variables (--bg, --accent, --display...), so one template
@@ -346,7 +347,7 @@ body.s-tiktok .lines li{font-size:52px}
   },
 };
 
-export const TEMPLATE_IMPL = { bubble, scoreboard, ledger, editorial, poster, card, corner };
+export const TEMPLATE_IMPL = { bubble, scoreboard, ledger, editorial, poster, card, corner, photocard };
 
 /**
  * { css, html, bodyClass, bodyStyle } for one slide in a theme's template. A
@@ -357,7 +358,7 @@ export function buildSlide(theme, slide) {
   const t = TEMPLATE_IMPL[theme.template];
   if (!t) throw new Error(`no template "${theme.template}"`);
   const css = `${t.css(theme)}\n${ROLE_CSS}`;
-  if (drawsRole(slide)) {
+  if (drawsRole(slide) && !t.ownsRoles) {
     const parts = slide.kind === 'cover' ? coverInner(slide, { photo: Boolean(slide.hasPhoto) }) : roleInner(slide);
     const deep = slide.role === 'layer' ? { bodyClass: 'layer', bodyStyle: `--deep:${(slide.n - 1) / Math.max(1, slide.of - 1)}` } : slide.role === 'reveal' ? { bodyClass: 'reveal' } : {};
     return { css, html: t.frame(slide, parts), ...deep };

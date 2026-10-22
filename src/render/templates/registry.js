@@ -13,6 +13,7 @@ export const TEMPLATES = {
   poster: { variants: ['a', 'b'], about: 'bold colour blocks split on a diagonal, one heavy display face' },
   card: { variants: ['a', 'b'], about: 'clean and dark: one bright accent, one big number or idea per slide, content on comparison cards' },
   corner: { variants: ['a', 'b'], about: "the fighter's corner: black and red, a grain over everything, hard diagonal cuts, tale-of-the-tape cards" },
+  photocard: { variants: ['a', 'b', 'c'], about: 'a sharp photograph behind every slide, fading into dark; the facts on one dark card with a giant number' },
 };
 
 export const isTemplate = (name, variant = 'a') => Boolean(TEMPLATES[name]?.variants.includes(variant));

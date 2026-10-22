@@ -4,7 +4,7 @@ import path from 'node:path';
 import { ensureDir } from '../core/paths.js';
 import { tokenOf } from '../verify/claims.js';
 import { page, SIZES } from './html.js';
-import { buildSlide } from './templates/index.js';
+import { buildSlide, TEMPLATE_IMPL } from './templates/index.js';
 import { endParts } from './end.js';
 import { kindName, ranksOf } from '../formats/kinds.js';
 import { slideHasVisual } from './visuals.js';
@@ -423,6 +423,11 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
   // and colour behind every slide. A slide's own photograph is in its frame; the ground behind every slide is one.
   const ground = opts.backgroundPhoto ? (uri.has(0) && oneSubject ? uri.get(0) : uri.get('bg') || null) : null;
   const bgFor = () => ground;
+  // A template that stands every slide on a photograph (photocard): a content slide's own fills it, else the post's
+  // (the cover's when the post is about one subject, else the one found for its scene), sharp, never blurred.
+  const impl = TEMPLATE_IMPL[pack.theme.template] || {};
+  const bleed = impl.fullBleed && pack.theme.options?.coverPhoto !== false;
+  const postPhoto = (oneSubject && uri.get(0)) || uri.get('bg') || null;
   const items = slides.filter((s) => s.kind === 'item').length;
   const places = slidePlaces(slides);
   // Photographs left off a slide that could not fit them, per platform: not shown, not credited.
@@ -477,19 +482,21 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
         brand: brand && !end && i === slides.length - 1 && s.kind !== 'cover' ? brand : null,
       };
       // The cover's photograph, and a guess-who's reveal, fill the slide; a content slide's sits in a frame.
-      const full = uri.has(i) && (s.kind === 'cover' || (i === slides.length - 1 && s.role === 'reveal')) && pack.theme.options?.coverPhoto !== false;
+      const full = uri.has(i) && (s.kind === 'cover' || (i === slides.length - 1 && s.role === 'reveal') || (bleed && s.kind === 'item')) && pack.theme.options?.coverPhoto !== false;
       // A guess-who's cover shows its answer's photograph blurred past recognition: a real picture that teases, never tells.
       const tease = !full && s.kind === 'cover' && postKind === 'guess-who' && uri.has(slides.length - 1) && pack.theme.options?.coverPhoto !== false;
       if (uri.has(i) && !full) slide.photo = uri.get(i);
       // A head-to-head's cover: both sides, each on its own half.
       const split = s.kind === 'cover' && postKind === 'head-to-head' && uri.has('ca') && uri.has('cb') ? [uri.get('ca'), uri.get('cb')] : null;
-      slide.hasPhoto = Boolean(full || tease || split);
+      // Nothing of its own on a full-bleed template: the post's photograph (a guess-who's answer is never one of them).
+      const stand = !full && !tease && !split && bleed ? postPhoto : null;
+      slide.hasPhoto = Boolean(full || tease || split || stand);
       slide.tease = Boolean(tease);
       slide.hasVisual = s.kind === 'item' && slideHasVisual(slide);
       const file = path.join(outDir, `${size}-${String(i + 1).padStart(2, '0')}.jpg`);
       // A cover photograph smaller than FULL_BLEED_MIN is framed over its own blurred copy, never stretched to fill.
       const framed = full && s.kind === 'cover' && !fillsCover(readFileSync(byIdx.get(i).file));
-      const look = { photo: full ? uri.get(i) : tease ? uri.get(slides.length - 1) : null, photoPos: full ? focus.get(i) : null, blur: tease, split, splitPos: split ? [focus.get('ca'), focus.get('cb')] : null, bg: bgFor(i), framed };
+      const look = { photo: full ? uri.get(i) : tease ? uri.get(slides.length - 1) : stand, photoPos: full ? focus.get(i) : null, blur: tease, split, splitPos: split ? [focus.get('ca'), focus.get('cb')] : null, bg: bgFor(i), framed };
       drawn.push({ i, s, slide, look, file, ratio: await drawSlide({ i, s, slide, look, file, size }) });
       out[size].push(file);
     }
@@ -509,7 +516,9 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
     if (end) {
       const sl = { kind: 'end', handle: pack.meta.handle, noHandle, brand };
       const file = path.join(outDir, `${size}-${String(slides.length + 1).padStart(2, '0')}.jpg`);
-      await renderHtml(page({ theme: pack.theme, overlay, size, slide: sl, parts: endParts(pack), bg: bgFor(slides.length) }), { size, file, floor: 0.45 });
+      // A template with its own closing slide draws it on the post's photograph.
+      const own = impl.end && bleed && postPhoto;
+      await renderHtml(page({ theme: pack.theme, overlay, size, slide: own ? { ...sl, brand: null } : sl, parts: own ? impl.end(pack) : endParts(pack), ...(own ? { photo: postPhoto } : { bg: bgFor(slides.length) }) }), { size, file, floor: 0.45 });
       out[size].push(file);
     }
   }
