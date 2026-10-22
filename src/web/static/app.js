@@ -19,8 +19,8 @@
     const mini = document.documentElement.classList.toggle('side-mini');
     const b = e.currentTarget;
     b.setAttribute('aria-expanded', String(!mini));
-    b.setAttribute('aria-label', mini ? 'הרחב את סרגל הצד' : 'כווץ את סרגל הצד');
-    b.title = mini ? 'הרחב' : 'כווץ';
+    b.setAttribute('aria-label', mini ? 'להרחיב את סרגל הצד' : 'לכווץ את סרגל הצד');
+    b.title = mini ? 'להרחיב' : 'לכווץ';
     document.cookie = `of_side=${mini ? 'mini' : 'full'}; Path=/; Max-Age=31536000; SameSite=Strict`;
   });
 

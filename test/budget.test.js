@@ -270,7 +270,7 @@ test('money short: the weakest account comes down first, half a post a day at a 
     assert.equal(r.budget, 'stop');
     assert.equal(r.generated.length, 0);
     assert.equal(r.budgetStop, true);
-    assert.match(budgetBanner({ level: 'stop', share: 1, cap: 15, nextMonth: '2026-11-01', cuts: [] }), /שום פוסט לא נכתב עד/);
+    assert.match(budgetBanner({ level: 'stop', share: 1, cap: 15, nextMonth: '2026-11-01', cuts: [] }), /פוסטים חדשים לא ייכתבו עד/);
   } finally {
     delete process.env.ANTHROPIC_BUDGET_WARN_USD;
     cleanup();

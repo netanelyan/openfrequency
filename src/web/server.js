@@ -199,7 +199,7 @@ export function createHandler(ctx, { port, env = process.env, limiter = createLi
         if (p === '/logout') return redirect(res, '/login', { 'set-cookie': sessionCookie('', { secure, clear: true }) });
         // Developer mode: the settings a developer reads, opened by an owner from the version line, kept on this browser.
         if (p === '/settings/dev') {
-          if (user.role !== 'owner') return ajax ? json(req, res, 403, { ok: false, message: 'רק הבעלים' }) : redirect(res, '/settings');
+          if (user.role !== 'owner') return ajax ? json(req, res, 403, { ok: false, message: 'רק הבעלים יכולים לעשות את זה' }) : redirect(res, '/settings');
           const on = form.on === '1';
           const c = `of_dev=${on ? '1' : ''}; Path=/; Max-Age=${on ? 31536000 : 0}; SameSite=Strict; HttpOnly${secure ? '; Secure' : ''}`;
           if (on) audit(ctx.db, { actor: user.name, action: 'dev_mode' });

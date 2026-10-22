@@ -79,7 +79,7 @@ function factsBlock(post, { open = false } = {}) {
 <ol class="factlist">${items
     .map((s, i) => {
       const facts = s.factKeys.map((key) => post.facts.find((f) => f.key === key)).filter(Boolean);
-      return `<li id="s-${post.id}-${i + 1}"><div class="slide-n">שקף ${i + 1}${ROLE_NAME[s.role] ? ` (${ROLE_NAME[s.role]})` : ''}: ${esc(s.title)}${s.data?.a || s.data?.b ? ` <span class="muted num">${esc(s.data.a)} · ${esc(s.data.b)}</span>` : ''}</div>${facts.length ? '' : '<div class="muted small">בלי עובדה משלו: דעה, מיתוס או בדיחה, וכל מספר בו מצוטט</div>'}${facts
+      return `<li id="s-${post.id}-${i + 1}"><div class="slide-n">שקף ${i + 1}${ROLE_NAME[s.role] ? ` (${ROLE_NAME[s.role]})` : ''}: ${esc(s.title)}${s.data?.a || s.data?.b ? ` <span class="muted num">${esc(s.data.a)} · ${esc(s.data.b)}</span>` : ''}</div>${facts.length ? '' : '<div class="muted small">אין בו עובדה משלו (דעה, מיתוס או בדיחה), וכל מספר בו מצוטט</div>'}${facts
         .map(
           (f) => `<details class="fact"><summary>${f.verified ? `<span class="ok">${icon('check')}</span>` : `<span class="no">${icon('x')}</span>`}<span>${esc(f.claim)}</span></summary>
 <div class="src"><blockquote class="q" dir="auto">${esc(f.quote)}</blockquote>
@@ -107,7 +107,7 @@ function trustLine(post) {
   const bits = [];
   if (used.length) bits.push(unverified ? `<span class="badc">${icon('x')}${unverified} עובדות לא אומתו</span>` : `<span class="good">${icon('shield')}${used.length === 1 ? 'עובדה אחת, עם מקור' : `${used.length} עובדות, כל אחת עם מקור`}</span>`);
   if (post.review_score != null) bits.push(`<span class="${post.review_score >= 4 ? 'warnc' : ''}" title="ציון של בודק ${post.checks?.reviewer === 'claude' ? 'Claude' : 'אופליין'}: 0 אדם, 10 בוט">${icon('spark')}נשמע כמו בוט <span class="num ltr">${post.review_score}/10</span></span>`);
-  if (post.ai_label) bits.push(`<span class="warnc">${icon('alert')}תמונת AI: תסומן</span>`);
+  if (post.ai_label) bits.push(`<span class="warnc">${icon('alert')}תמונת AI, תסומן ככזו בפרסום</span>`);
   return bits.length ? `<div class="trust">${bits.join('')}</div>` : '';
 }
 
@@ -127,15 +127,15 @@ ${post.sub ? `<p class="subline">${esc(post.sub)}</p>` : ''}
 ${strip(post)}
 ${trustLine(post)}
 <div class="actions">
-${decide ? postButton(ctx, `/post/${post.id}/approve`, `${icon('check')}אשר`, { cls: 'btn primary', ajax: 'remove' }) : ''}
-<a class="btn" href="/post/${esc(post.id)}#edit">${icon('edit')}ערוך</a>
-${decide ? `<button class="btn ghost" type="button" data-toggle="#reject-${esc(post.id)}" aria-expanded="false">${icon('x')}דחה</button>` : ''}
-${post.status === 'approved' ? postButton(ctx, `/post/${post.id}/unapprove`, 'בטל אישור', { cls: 'btn ghost', ajax: 'reload' }) : ''}
+${decide ? postButton(ctx, `/post/${post.id}/approve`, `${icon('check')}אישור`, { cls: 'btn primary', ajax: 'remove' }) : ''}
+<a class="btn" href="/post/${esc(post.id)}#edit">${icon('edit')}עריכה</a>
+${decide ? `<button class="btn ghost" type="button" data-toggle="#reject-${esc(post.id)}" aria-expanded="false">${icon('x')}דחייה</button>` : ''}
+${post.status === 'approved' ? postButton(ctx, `/post/${post.id}/unapprove`, 'ביטול אישור', { cls: 'btn ghost', ajax: 'reload' }) : ''}
 </div>
 ${decide ? `<form class="rejectbox" id="reject-${esc(post.id)}" method="post" action="/post/${esc(post.id)}/reject" data-ajax="remove">${csrfField(ctx)}
 <label class="f">למה לדחות?<select name="reason">${REJECT_REASONS.map((r) => `<option>${esc(r)}</option>`).join('')}<option value="">אחר</option></select></label>
 <input type="text" name="note" placeholder="הערה (לא חובה), עוזרת לכתיבה הבאה" maxlength="300">
-<button class="btn danger" type="submit">דחה את הפוסט</button></form>` : ''}
+<button class="btn danger" type="submit">לדחות את הפוסט</button></form>` : ''}
 ${captionDetails(post)}
 ${factsBlock(post)}
 </article>`;
@@ -149,10 +149,10 @@ ${factsBlock(post)}
 /** The banners that stop the engine: the kill switch, a paused account, an account out of its share of the budget. */
 function stopBanners(ctx, d) {
   const out = [];
-  if (ctx.globalKill) out.push(`<div class="banner bad">${icon('power')}<div><b>מתג הכיבוי הכללי מופעל.</b><p>שום חשבון לא מייצר ולא מפרסם.</p></div>${postButton(ctx, '/settings/kill', 'הפעל מחדש', { cls: 'btn sm', fields: { on: '0' } })}</div>`);
+  if (ctx.globalKill) out.push(`<div class="banner bad">${icon('power')}<div><b>מתג הכיבוי הכללי מופעל.</b><p>אף חשבון לא כותב פוסטים ולא מפרסם עד שמפעילים מחדש.</p></div>${postButton(ctx, '/settings/kill', 'הפעלה מחדש', { cls: 'btn sm', fields: { on: '0' } })}</div>`);
   for (const g of d.groups) {
-    if (g.acc?.status === 'paused') out.push(`<div class="banner warn">${icon('alert')}<div><b>${esc(g.pack.meta.displayName)} מושהה: ${esc(PAUSE_REASONS[g.acc.paused_reason] || g.acc.paused_reason)}</b>${g.acc.paused_detail ? `<p>${esc(g.acc.paused_detail)}</p>` : ''}</div><a class="btn sm" href="/accounts?account=${esc(g.pack.id)}#acc-${esc(g.pack.id)}">לחשבון</a></div>`);
-    else if (g.reached) out.push(`<div class="banner warn">${icon('alert')}<div><b>${esc(g.pack.meta.displayName)}: הנתח שלו מהתקציב נגמר.</b><p>לא נכתבים בו פוסטים חדשים עד שהתוכנית החודשית מפנה לו כסף, או עד החודש הבא.</p></div></div>`);
+    if (g.acc?.status === 'paused') out.push(`<div class="banner warn">${icon('alert')}<div><b>${esc(g.pack.meta.displayName)} מושהה (${esc(PAUSE_REASONS[g.acc.paused_reason] || g.acc.paused_reason)})</b>${g.acc.paused_detail ? `<p>${esc(g.acc.paused_detail)}</p>` : ''}</div><a class="btn sm" href="/accounts?account=${esc(g.pack.id)}#acc-${esc(g.pack.id)}">לחשבון</a></div>`);
+    else if (g.reached) out.push(`<div class="banner warn">${icon('alert')}<div><b>הנתח של ${esc(g.pack.meta.displayName)} מהתקציב נגמר.</b><p>פוסטים חדשים לא ייכתבו בו עד שהתוכנית החודשית תפנה לו כסף, או עד החודש הבא.</p></div></div>`);
   }
   return out.join('');
 }
@@ -176,7 +176,7 @@ export function needsYou(d, max = 6) {
     }
   }
   for (const t of d.attention?.waitingDeletes || []) rows.push({ href: `/post/${t.post_id}`, ic: 'alert', bad: true, title: t.hook || t.post_id, sub: `הודעת הסרה: למחוק ידנית ב${t.waiting.map((w) => PLATFORM_HE[w.platform] || w.platform).join(' וב')}` });
-  for (const im of d.attention?.images || []) rows.push({ href: `/post/${im.id}`, ic: 'alert', title: im.hook || im.id, sub: `תמונה מחכה לעין של אדם${im.screen?.why ? `: ${im.screen.why}` : ''}` });
+  for (const im of d.attention?.images || []) rows.push({ href: `/post/${im.id}`, ic: 'alert', title: im.hook || im.id, sub: `צריך לבדוק את התמונה בעין${im.screen?.why ? `: ${im.screen.why}` : ''}` });
   for (const g of d.groups) for (const p of g.waiting) rows.push({ href: `/posts#post-${p.id}`, acc: g.pack.id, title: p.hook, sub: `${g.pack.meta.displayName} · ${formatName(g.pack, p.format_id)} · ${p.slot_at ? timeHe(p.slot_at) : 'בלי שעה'}` });
   return { rows: rows.slice(0, max), more: Math.max(0, rows.length - max), total: rows.length };
 }
@@ -233,7 +233,7 @@ ${stopBanners(ctx, d)}
 <div class="kpi side">${side('/posts', 'waiting', 'מחכים לאישור')}${side('/posts#scheduled', 'scheduled', 'מתוזמנים')}</div>
 </section>
 <section class="panel home-panel"><header><h2>צריך אותך</h2>${todo.total ? '<a class="end small" href="/posts">כל הפוסטים</a>' : ''}</header>
-${todo.rows.length ? `${postLines(todo.rows)}${todo.more ? `<p class="small"><a href="/posts">ועוד ${todo.more}</a></p>` : ''}` : '<p class="muted">אין מה לאשר כרגע. הפוסטים הבאים ייכתבו בשעת הייצור היומית.</p>'}
+${todo.rows.length ? `${postLines(todo.rows)}${todo.more ? `<p class="small"><a href="/posts">ועוד ${todo.more}</a></p>` : ''}` : '<p class="muted">אין מה לאשר כרגע. הפוסטים הבאים ייכתבו בשעה שקבעתם בהגדרות.</p>'}
 </section>
 ${tiktokPanel(d)}
 ${d.summary ? summaryPanel(d) : ''}`;
@@ -256,17 +256,17 @@ ${d.groups.map((g) => `<a class="r" role="row" href="/?account=${esc(g.pack.id)}
 </div>`;
   const row = (p, g) => {
     const cover = p.media?.tiktok?.length ? `<img class="thumb" src="${media(p, 'tiktok', 0)}" alt="" width="36" height="64" loading="lazy" decoding="async">` : '<span class="thumb"></span>';
-    return `<div class="qrow" id="all-${esc(p.id)}" data-post>${cover}<a class="tx" href="/post/${esc(p.id)}"><b>${esc(p.hook)}</b><span class="muted small">${esc(formatName(g.pack, p.format_id))} · ${esc(p.slot_at ? timeHe(p.slot_at) : 'בלי שעה')}</span></a>${postButton(ctx, `/post/${p.id}/approve`, `${icon('check')}אשר`, { cls: 'btn sm', ajax: 'remove' })}</div>`;
+    return `<div class="qrow" id="all-${esc(p.id)}" data-post>${cover}<a class="tx" href="/post/${esc(p.id)}"><b>${esc(p.hook)}</b><span class="muted small">${esc(formatName(g.pack, p.format_id))} · ${esc(p.slot_at ? timeHe(p.slot_at) : 'בלי שעה')}</span></a>${postButton(ctx, `/post/${p.id}/approve`, `${icon('check')}אישור`, { cls: 'btn sm', ajax: 'remove' })}</div>`;
   };
   const several = d.groups.filter((g) => g.waiting.length).length > 1;
   const queue = d.groups
     .filter((g) => g.waiting.length)
-    .map((g) => `<div class="qgroup"><header>${accDot(g.pack.id)}<h3>${esc(g.pack.meta.displayName)}</h3><span class="muted small num">${g.waiting.length}</span>${several && g.waiting.length > 1 ? `<span class="end">${postButton(ctx, '/posts/approve-all', `אשר את ${g.waiting.length}`, { cls: 'btn sm ghost', fields: { ids: ids(g.waiting) } })}</span>` : ''}</header>${g.waiting.map((p) => row(p, g)).join('')}</div>`)
+    .map((g) => `<div class="qgroup"><header>${accDot(g.pack.id)}<h3>${esc(g.pack.meta.displayName)}</h3><span class="muted small num">${g.waiting.length}</span>${several && g.waiting.length > 1 ? `<span class="end">${postButton(ctx, '/posts/approve-all', `לאשר את ${g.waiting.length}`, { cls: 'btn sm ghost', fields: { ids: ids(g.waiting) } })}</span>` : ''}</header>${g.waiting.map((p) => row(p, g)).join('')}</div>`)
     .join('');
   const body = `<div class="head"><h1>כל החשבונות</h1><span class="sub">${esc(dayHe(Date.now()))}</span></div>
 ${stopBanners(ctx, d)}
 <section class="panel home-panel">${accounts}</section>
-<section class="panel home-panel" id="waiting"><header><h2>מחכים לאישור</h2>${waiting.length > 1 ? `<span class="end">${postButton(ctx, '/posts/approve-all', `${icon('check')}אשר את כל ${waiting.length}`, { cls: 'btn primary', fields: { ids: ids(waiting) }, confirm: `לחצו שוב לאישור ${waiting.length} פוסטים` })}</span>` : ''}</header>
+<section class="panel home-panel" id="waiting"><header><h2>מחכים לאישור</h2>${waiting.length > 1 ? `<span class="end">${postButton(ctx, '/posts/approve-all', `${icon('check')}לאשר את כל ה-${waiting.length}`, { cls: 'btn primary', fields: { ids: ids(waiting) }, confirm: `לחצו שוב לאישור ${waiting.length} פוסטים` })}</span>` : ''}</header>
 ${queue || '<p class="muted">אף חשבון לא מחכה לאישור.</p>'}
 </section>
 ${others.length ? `<section class="panel home-panel"><header><h2>עוד דברים שמחכים לך</h2></header>${postLines(others)}</section>` : ''}`;
@@ -285,12 +285,12 @@ ${d.groups
   .map((g) => {
     const mode = MODE_HE[g.acc?.mode || 'approve'];
     return `<section class="group" id="g-${esc(g.pack.id)}" aria-labelledby="gh-${esc(g.pack.id)}"><header>${accDot(g.pack.id)}<h2 id="gh-${esc(g.pack.id)}">${esc(g.pack.meta.displayName)}</h2><span class="handle ltr">@${esc(g.pack.meta.handle)}</span><span class="end">${g.waiting.length ? `<span class="chip sig">${g.waiting.length} מחכים</span>` : ''}${g.plan?.cut ? `<span class="chip warn" title="התקציב קצר החודש">${g.plan.perDay} ביום</span>` : ''}<span class="chip ghost" title="${esc(mode[1])}">${esc(mode[0])}</span></span></header>
-${g.waiting.length ? `<div class="posts">${g.waiting.map((p) => postCard(ctx, p, g.pack)).join('')}</div>` : `<div class="empty">${icon('inbox')}<b>אין כאן מה לאשר</b>${g.acc?.status === 'paused' ? 'החשבון מושהה.' : 'הפוסטים הבאים ייכתבו בשעת הייצור היומית.'}</div>`}
+${g.waiting.length ? `<div class="posts">${g.waiting.map((p) => postCard(ctx, p, g.pack)).join('')}</div>` : `<div class="empty">${icon('inbox')}<b>אין כאן מה לאשר</b>${g.acc?.status === 'paused' ? 'החשבון מושהה.' : 'הפוסטים הבאים ייכתבו בשעה שקבעתם בהגדרות.'}</div>`}
 ${g.blocked.length ? `<details class="facts"><summary>${icon('shield')}נחסמו היום בבדיקות <span class="chip bad">${g.blocked.length}</span><span class="chev">${icon('chev')}</span></summary><ul class="factlist">${g.blocked.map((b) => `<li><a href="/post/${esc(b.id)}"><b>${esc(b.hook || b.topic || 'בלי כותרת')}</b></a><div class="muted small">${esc(b.reason)}</div></li>`).join('')}</ul></details>` : ''}
 </section>`;
   })
   .join('')}
-<section class="panel home-panel" id="scheduled"><header><h2>מתוזמנים</h2></header>${sched.length ? postLines(sched) : '<p class="muted">אין פוסט מאושר שמחכה למשבצת.</p>'}</section>
+<section class="panel home-panel" id="scheduled"><header><h2>מתוזמנים</h2></header>${sched.length ? postLines(sched) : '<p class="muted">אין פוסט מאושר שמחכה לשעה שלו.</p>'}</section>
 <section class="panel home-panel" id="published"><header><h2>פורסמו היום</h2></header>${pub.length ? postLines(pub) : '<p class="muted">עוד לא פורסם היום.</p>'}</section>`;
   return layout({ ...ctx, title: 'פוסטים', active: 'posts' }, body);
 }
@@ -305,7 +305,7 @@ function tiktokDraftBanners(ctx, post) {
     const [he] = FLOW_HE[flowState(tk.flow)] || [tk.flow.state];
     const note = tk.flow.state === 'waiting' ? draftNote(tk.flow, post.slot_at || tk.flow.slotAt, timeHe) : tk.flow.error || '';
     out.push(`<div class="banner info">${icon('clock')}<div><b>טיקטוק: ${esc(he)}</b>${note ? `<p>${esc(note)}</p>` : ''}</div></div>`);
-  } else if (tk?.uploading) out.push(`<div class="banner info">${icon('clock')}<div><b>טיקטוק: הטיוטה בדרך לאפליקציה</b></div></div>`);
+  } else if (tk?.uploading) out.push(`<div class="banner info">${icon('clock')}<div><b>הטיוטה בדרך לאפליקציה של טיקטוק</b></div></div>`);
   else if (tk?.error && post.status === 'approved') out.push(`<div class="banner warn">${icon('alert')}<div><b>הטיוטה לא הגיעה לטיקטוק</b><p>${esc(tk.error)}</p><p>${(Number(tk.tries) || 0) < 3 ? 'עוד ניסיון בדקות הקרובות, ולכל המאוחר בשעה של הפוסט.' : 'עוד ניסיון אחד בשעה של הפוסט.'}</p></div></div>`);
   const old = post.publish?.oldDrafts || [];
   if (old.length) out.push(`<div class="banner warn">${icon('alert')}<div><b>${old.length === 1 ? 'טיוטה ישנה של הפוסט הזה נמצאת' : `${old.length} טיוטות ישנות של הפוסט הזה נמצאות`} בתיבת הטיוטות של טיקטוק</b><p>מחקו ${old.length === 1 ? 'אותה' : 'אותן'} באפליקציה, כדי ש${old.length === 1 ? 'היא לא תפורסם' : 'הן לא יפורסמו'} בטעות.</p></div>${postButton(ctx, `/post/${post.id}/old-drafts-deleted`, 'מחקתי', { cls: 'btn sm' })}</div>`);
@@ -346,7 +346,7 @@ ${items
   .join('')}
 <label class="f">${post.caption_ig ? 'כיתוב לטיקטוק' : 'כיתוב'}<textarea name="caption" maxlength="${post.caption_ig ? 900 : 400}">${esc(v.caption)}</textarea></label>
 ${post.caption_ig ? `<label class="f">כיתוב קצר לאינסטגרם (הכותרת נכנסת לפניו)<textarea name="caption_short" maxlength="260">${esc(values ? values.caption_short : post.data?.captionShort || '')}</textarea></label>` : ''}
-<div><button class="btn primary" type="submit">${icon('check')}שמור ורנדר מחדש</button></div></form></details>`;
+<div><button class="btn primary" type="submit">${icon('check')}לשמור ולרנדר מחדש</button></div></form></details>`;
   const screen = d.image ? (() => {
     try {
       return JSON.parse(d.image.safety_json || 'null');
@@ -364,7 +364,7 @@ ${post.status !== 'taken_down' ? `<details><summary class="muted">${icon('alert'
 <label class="f">פלטפורמה<select name="platform"><option value="">שתיהן</option><option value="tiktok">טיקטוק</option><option value="instagram">אינסטגרם</option></select></label>
 <label class="f">ממי<input type="text" name="claimant" maxlength="200"></label>
 <label class="f">נוסח ההודעה<textarea name="notice" maxlength="4000" required></textarea></label>
-<div><button class="btn danger" type="submit">רשום והורד את הפוסט</button></div></form></details>` : ''}</section>`
+<div><button class="btn danger" type="submit">לרשום ולהוריד את הפוסט</button></div></form></details>` : ''}</section>`
     : '';
 
   const body = `<div class="head"><div><a class="muted small back" href="/posts">${icon('chev')}חזרה לפוסטים</a><h1 class="title">${esc(post.hook || post.topic || 'פוסט')}</h1></div><span class="sub">${statusChip(post.status)}</span></div>
@@ -379,8 +379,8 @@ ${post.media?.instagram ? `<h3 class="lbl">אינסטגרם <span>4:5</span></h3
 ${trustLine(post)}
 <div class="capwrap">${captionBlock(post)}</div>
 </section>
-${post.status === 'queued' ? `<div class="actionbar">${postButton(ctx, `/post/${post.id}/approve`, `${icon('check')}אשר`, { cls: 'btn primary' })}<a class="btn" href="#edit">${icon('edit')}ערוך</a>${postButton(ctx, `/post/${post.id}/reject`, `${icon('x')}דחה`, { cls: 'btn ghost', fields: { reason: 'נדחה מדף הפוסט' } })}</div>` : ''}
-${post.status === 'approved' ? `<div class="actionbar">${postButton(ctx, `/post/${post.id}/publish-now`, 'פרסם עכשיו', { cls: 'btn primary', confirm: 'בטוח? לפרסם עכשיו' })}${postButton(ctx, `/post/${post.id}/unapprove`, 'בטל אישור', { cls: 'btn ghost' })}</div>` : ''}
+${post.status === 'queued' ? `<div class="actionbar">${postButton(ctx, `/post/${post.id}/approve`, `${icon('check')}אישור`, { cls: 'btn primary' })}<a class="btn" href="#edit">${icon('edit')}עריכה</a>${postButton(ctx, `/post/${post.id}/reject`, `${icon('x')}דחייה`, { cls: 'btn ghost', fields: { reason: 'נדחה מדף הפוסט' } })}</div>` : ''}
+${post.status === 'approved' ? `<div class="actionbar">${postButton(ctx, `/post/${post.id}/publish-now`, 'לפרסם עכשיו', { cls: 'btn primary', confirm: 'לחצו שוב כדי לפרסם עכשיו' })}${postButton(ctx, `/post/${post.id}/unapprove`, 'ביטול אישור', { cls: 'btn ghost' })}</div>` : ''}
 ${['queued', 'approved', 'sample'].includes(post.status) ? edit : ''}
 </div>
 <div>
@@ -397,7 +397,7 @@ ${post.hook_pattern ? `<dt>תבנית השער</dt><dd><span class="ltr">${esc(p
 ${post.data?.cta?.text ? `<dt>קריאה לפעולה</dt><dd>${esc(post.data.cta.text)}</dd>` : ''}
 ${post.data?.keywords?.length ? `<dt>מילות חיפוש</dt><dd>${post.data.keywords.map((x) => `<bdi>${esc(x)}</bdi>`).join(' · ')}</dd>` : ''}
 ${d.image ? `<dt>תמונה</dt><dd>${esc(d.image.provider)} · ${esc(d.image.license)}${d.image.author ? ` · ${esc(d.image.author)}` : ''}${d.image.source_url ? ` · <a href="${esc(d.image.source_url)}" target="_blank" rel="noopener noreferrer">מקור ${icon('ext')}</a>` : ''}${d.image.ai_generated ? ' · <span class="chip warn">AI</span>' : ''}</dd>
-<dt>בדיקת התמונה</dt><dd>${d.image.safety === 'ok' || d.image.reviewed_at ? `<span class="chip ok">${d.image.reviewed_at ? `נבדקה על ידי ${esc(d.image.reviewed_by)}` : 'עברה'}</span>` : d.image.safety ? `<span class="chip warn">מחכה לעין של אדם</span>` : '<span class="chip ghost">לא נבדקה</span>'}${screen?.why ? `<div class="muted small" dir="auto">${esc(screen.why)}</div>` : ''}${imageHold ? postButton(ctx, `/post/${post.id}/image-ok`, 'הסתכלתי: אין דם, פציעה או סימן מים', { cls: 'btn sm' }) : ''}</dd>` : ''}
+<dt>בדיקת התמונה</dt><dd>${d.image.safety === 'ok' || d.image.reviewed_at ? `<span class="chip ok">${d.image.reviewed_at ? `נבדקה על ידי ${esc(d.image.reviewed_by)}` : 'עברה'}</span>` : d.image.safety ? `<span class="chip warn">מחכה לבדיקה בעין</span>` : '<span class="chip ghost">לא נבדקה</span>'}${screen?.why ? `<div class="muted small" dir="auto">${esc(screen.why)}</div>` : ''}${imageHold ? postButton(ctx, `/post/${post.id}/image-ok`, 'הסתכלתי: אין דם, פציעה או סימן מים', { cls: 'btn sm' }) : ''}</dd>` : ''}
 ${d.metrics.length ? d.metrics.slice(0, 2).map((m) => `<dt>${esc(PLATFORM_HE[m.platform] || m.platform)}</dt><dd class="num">${k(m.views)} צפיות · ${k(m.likes)} לייקים · ${k(m.shares)} שיתופים${m.saves != null ? ` · ${k(m.saves)} שמירות` : ''}</dd>`).join('') : ''}
 </dl></section>
 ${takedownPanel}
@@ -417,16 +417,16 @@ export function accountsPage(ctx, rows) {
       const h = (n) => (n === 0 ? 'h0' : `h${Math.max(1, Math.min(4, Math.ceil((n / max) * 4)))}`);
       return `<article class="card acc acc-${esc(pack.id)} acct" id="acc-${esc(pack.id)}">
 <div class="title">${accDot(pack.id)}<div><h2>${esc(pack.meta.displayName)}</h2><span class="muted small ltr">@${esc(pack.meta.handle)}</span></div><span class="end">${paused ? '<span class="chip warn">מושהה</span>' : '<span class="chip ok">פעיל</span>'}</span></div>
-${paused ? `<div class="paused${acc.paused_reason === 'kill' ? ' kill' : ''}">${icon(acc.paused_reason === 'kill' ? 'power' : 'alert')}<div><b>${esc(PAUSE_REASONS[acc.paused_reason] || acc.paused_reason)}</b>${acc.paused_detail ? `<div class="small">${esc(acc.paused_detail)}</div>` : ''}</div>${postButton(ctx, `/accounts/${pack.id}/resume`, 'הפעל מחדש', { cls: 'btn sm' })}</div>` : ''}
+${paused ? `<div class="paused${acc.paused_reason === 'kill' ? ' kill' : ''}">${icon(acc.paused_reason === 'kill' ? 'power' : 'alert')}<div><b>${esc(PAUSE_REASONS[acc.paused_reason] || acc.paused_reason)}</b>${acc.paused_detail ? `<div class="small">${esc(acc.paused_detail)}</div>` : ''}</div>${postButton(ctx, `/accounts/${pack.id}/resume`, 'הפעלה מחדש', { cls: 'btn sm' })}</div>` : ''}
 <form method="post" action="/accounts/${esc(pack.id)}/mode" data-autosubmit>${csrfField(ctx)}<div class="seg" role="radiogroup" aria-label="מצב אוטונומיה">${['approve', 'digest', 'auto']
         .map((m) => `<input type="radio" name="mode" value="${m}" id="m-${esc(pack.id)}-${m}"${acc.mode === m ? ' checked' : ''}><label for="m-${esc(pack.id)}-${m}">${MODE_HE[m][0]}<small>${MODE_HE[m][1]}</small></label>`)
-        .join('')}</div><noscript><button class="btn sm" type="submit">שמור</button></noscript></form>
+        .join('')}</div><noscript><button class="btn sm" type="submit">שמירה</button></noscript></form>
 <div><div class="row"><span>הנתח מהתקציב</span><b class="num">${tokenNum(spend)} / ${tokenNum(cap)} טוקנים</b></div><meter min="0" max="${cap || 1}" low="${(cap || 1) * 0.7}" high="${(cap || 1) * 0.9}" optimum="0" value="${Math.min(spend, cap || 1)}"></meter>${plan?.cut ? `<p class="small m4"><span class="chip warn">פוסט ${plan.perDay === 1 ? 'אחד' : plan.perDay} ביום במקום ${plan.planned}</span> התקציב קצר החודש, וזה החשבון שמצמצם ראשון.</p>` : ''}</div>
 <div><div class="row"><span>7 הימים האחרונים</span><b>${week.days.reduce((s, x) => s + x.n, 0)} פורסמו${week.views != null ? ` · ${k(week.views)} צפיות` : ''}</b></div>
 <div class="week" aria-label="פוסטים שפורסמו בכל יום">${week.days.map((x) => `<span title="${esc(shortDate(x.at))}: ${x.n}"><i class="${h(x.n)}"></i>${esc(weekdayNarrow(x.at))}</span>`).join('')}</div></div>
 <dl class="kv"><dt>בתור</dt><dd>${week.counts.queued || 0} ממתינים · ${week.counts.approved || 0} מאושרים</dd><dt>נחסמו השבוע</dt><dd>${week.counts.blocked || 0}</dd><dt>פרסום</dt><dd>${publishers.map((x) => `${PLATFORM_HE[x.platform] || x.platform}: ${publisherHe(x)}`).join(' · ')}</dd>${style ? `<dt>סגנון</dt><dd><span class="ltr">${esc(style.theme.template)}/${esc(style.theme.variant || 'a')}</span> · נעול מ-${esc(shortDate(style.at))}</dd>` : ''}</dl>
-${style?.pending ? `<div class="paused">${icon('alert')}<div><b>הסגנון בקובץ theme.json השתנה</b><div class="small">הפוסטים ממשיכים להצטייר בסגנון הנעול עד שתחילו את החדש. פוסטים שכבר צוירו נשארים בשלהם.</div></div>${postButton(ctx, `/accounts/${pack.id}/style`, 'החל את הסגנון החדש', { cls: 'btn sm' })}</div>` : ''}
-<div class="actions p0">${!paused ? postButton(ctx, `/accounts/${pack.id}/kill`, `${icon('power')}כבה את החשבון`, { cls: 'btn danger', confirm: 'בטוח? לחצו שוב לכיבוי' }) : ''}<a class="btn" href="/sources?account=${esc(pack.id)}">מקורות</a><a class="btn" href="/rivals?account=${esc(pack.id)}">מתחרים</a><a class="btn" href="/sounds?account=${esc(pack.id)}">סאונדים</a></div>
+${style?.pending ? `<div class="paused">${icon('alert')}<div><b>הסגנון בקובץ theme.json השתנה</b><div class="small">הפוסטים ממשיכים לצאת בסגנון הקודם עד שעוברים לחדש. פוסטים שכבר צוירו לא משתנים.</div></div>${postButton(ctx, `/accounts/${pack.id}/style`, 'לעבור לסגנון החדש', { cls: 'btn sm' })}</div>` : ''}
+<div class="actions p0">${!paused ? postButton(ctx, `/accounts/${pack.id}/kill`, `${icon('power')}לכבות את החשבון`, { cls: 'btn danger', confirm: 'לחצו שוב כדי לכבות' }) : ''}<a class="btn" href="/sources?account=${esc(pack.id)}">מקורות</a><a class="btn" href="/rivals?account=${esc(pack.id)}">מתחרים</a><a class="btn" href="/sounds?account=${esc(pack.id)}">סאונדים</a></div>
 </article>`;
     })
     .join('')}</div>`;
@@ -436,13 +436,13 @@ ${style?.pending ? `<div class="paused">${icon('alert')}<div><b>הסגנון ב�
 /* ------------------------------------------------------------ results */
 
 const pct = (x) => (x == null ? '–' : `${(x * 100).toFixed(x < 0.01 ? 2 : 1)}%`);
-const DIRECTIVE_HE = { open: ['מחכה למשבצת', 'warn'], used: ['נכתב', 'ok'], expired: ['הוחלף בדוח חדש', 'ghost'] };
+const DIRECTIVE_HE = { open: ['מחכה לפוסט הבא', 'warn'], used: ['נכתב', 'ok'], expired: ['הוחלף בדוח חדש', 'ghost'] };
 
 /** The morning's feedback, one panel per account: the posts of the last three days in their boxes, and what each box asked for. */
 export function feedbackPanels(list) {
   return list
     .map(({ pack, day, text, report, directives }) => {
-      const head = `<header>${accDot(pack.id)}<h2>${esc(pack.meta.displayName)}: המשוב של הבוקר</h2>${day ? `<span class="end muted small">${esc(dayHe(day))}</span>` : ''}</header>`;
+      const head = `<header>${accDot(pack.id)}<h2>${esc(pack.meta.displayName)} · המשוב של הבוקר</h2>${day ? `<span class="end muted small">${esc(dayHe(day))}</span>` : ''}</header>`;
       if (!report) return `<section class="panel">${head}<p class="muted">עוד אין דוח. כל בוקר, לפני שנכתבים הפוסטים, המנוע קורא מחדש את המספרים של הפוסטים משלושת הימים האחרונים, ושם כל אחד מהם באחת מארבע קופסאות.</p></section>`;
       const posts = report.posts || [];
       const measures = [...new Set(posts.flatMap((p) => Object.values(p.platforms || {}).map((x) => x.measure)))];
@@ -473,7 +473,7 @@ export function feedbackPanels(list) {
             })
             .join('')}</ul>`
         : '';
-      return `<section class="panel">${head}<p class="muted small">${esc(text)}. צפיות מול החציון של החשבון עצמו, באותו גיל של הפוסט; פעולה: ${measures.map((m) => esc(MEASURES[m] || m)).join(', ') || 'אין עוד מספרים'}. הודעות פרטיות לא נקראות אף פעם.</p>
+      return `<section class="panel">${head}<p class="muted small">${esc(text)}. צפיות מול החציון של החשבון עצמו, באותו גיל של הפוסט. מה נמדד: ${measures.map((m) => esc(MEASURES[m] || m)).join(', ') || 'אין עוד מספרים'}. תדר לא קורא הודעות פרטיות.</p>
 <div class="matrix">${cells}</div>
 ${waiting.length ? `<p class="muted small">עוד לא בקופסה (אין מספיק פוסטים קודמים להשוואה, או שהפלטפורמה עוד לא מסרה מספרים): ${waiting.map((p) => esc(p.hook || p.post)).join(' · ')}</p>` : ''}
 ${plans}</section>`;
@@ -566,7 +566,7 @@ export function resultsPage(ctx, d) {
     : `<div class="empty">${icon('results')}<b>אין עדיין מספרים</b>המספרים נקראים מ-Zernio רק מפוסטים שפורסמו בפועל, והציון נקבע 72 שעות אחרי הפרסום.</div>`;
   const dropped = d.formats.flatMap((f) => f.rows.filter((r) => r.status === 'dropped' || r.atRisk).map((r) => ({ ...r, pack: f.pack })));
   const formats = `<p class="lede">70% מהפוסטים בפורמטים מוכחים, 30% בניסיונות, ופורמט נושר אחרי 3 תוצאות ברצף מתחת ל-70% מהחציון.</p>
-${(d.learning || []).filter((l) => l.share != null).map((l) => `<section class="panel"><header>${accDot(l.pack.id)}<h2>${esc(l.pack.meta.displayName)}: בידור מול מספרים</h2></header>
+${(d.learning || []).filter((l) => l.share != null).map((l) => `<section class="panel"><header>${accDot(l.pack.id)}<h2>${esc(l.pack.meta.displayName)} · בידור מול מספרים</h2></header>
 <p>עכשיו <b class="num">${Math.round(l.share * 100)}%</b> מהפוסטים בפורמטים של בידור (סיפור, נחשו מי, קרחון...) ו-<b class="num">${Math.round((1 - l.share) * 100)}%</b> בפורמטים של מספרים (ראש בראש, דירוג).${l.recent ? ` מתוך ${l.recent} הפוסטים האחרונים, ${l.recentEnt} היו בידור.` : ''}</p>
 <p class="muted small">${l.learned?.why ? `השינוי האחרון (${esc(shortDate(l.learned.at))}): ${esc(l.learned.why)}.` : `עוד לא זז: היחס זז ב-5 נקודות בכל פעם, לכל היותר פעם בשבוע, בין ${Math.round(MIX.min * 100)}% ל-${Math.round(MIX.max * 100)}% בידור, לכיוון הקבוצה שהפוסטים שלה עושים יותר טוב, ורק כשיש לפחות 3 תוצאות בכל קבוצה.`}</p>
 ${l.hooks.some((h) => h.used) ? `<table class="table stack"><thead><tr><th>תבנית שער</th><th>פורמט</th><th>שימושים</th><th>ממוצע מול החציון</th></tr></thead><tbody>${l.hooks
@@ -577,7 +577,7 @@ ${l.hooks.some((h) => h.used) ? `<table class="table stack"><thead><tr><th>תב�
 <section class="panel"><header><h2>מה נושר ולמה</h2></header>${dropped.length ? `<ul class="factlist">${dropped.map((r) => `<li>${accDot(r.pack.id)} <b>${esc(r.name)}</b> ${r.status === 'dropped' ? '<span class="chip bad">נשר</span>' : '<span class="chip warn">בסכנה</span>'}<div class="muted small">${esc(r.dropped_why || 'שתי התוצאות האחרונות מתחת ל-70% מהחציון: עוד אחת והוא נושר')}</div></li>`).join('')}</ul>` : '<p class="muted">אף פורמט לא נשר ואף אחד לא בסכנה.</p>'}</section>
 ${d.formats
   .map(
-    (f) => `<section class="panel"><header>${accDot(f.pack.id)}<h2>${esc(f.pack.meta.displayName)}: פורמטים</h2></header>
+    (f) => `<section class="panel"><header>${accDot(f.pack.id)}<h2>${esc(f.pack.meta.displayName)} · פורמטים</h2></header>
 <table class="table stack"><thead><tr><th>פורמט</th><th>סוג</th><th>מצב</th><th>תוצאות</th><th>ממוצע מול החציון</th><th>שלוש אחרונות</th></tr></thead><tbody>${f.rows
       .map((r) => `<tr><td data-k="">${esc(r.name)}</td><td data-k="סוג">${r.kind === 'proven' ? 'מוכח' : 'ניסיון'}</td><td data-k="מצב">${r.status === 'dropped' ? '<span class="chip bad">נשר</span>' : r.atRisk ? '<span class="chip warn">בסכנה</span>' : '<span class="chip ok">פעיל</span>'}</td><td class="n" data-k="תוצאות">${r.n}</td><td class="n" data-k="ממוצע">${r.avg != null ? `${r.avg.toFixed(2)}×` : '–'}</td><td data-k="אחרונות">${r.last.length ? bars(r.last) : '–'}</td></tr>`)
       .join('')}</tbody></table></section>`
@@ -615,7 +615,7 @@ function topicRow(ctx, t, { remove = false } = {}) {
 <b>${esc(t.angle || t.title)}</b>${t.angle && t.angle !== t.title ? `<div class="muted small">${esc(t.title)}</div>` : ''}
 ${t.why ? `<div class="small">${esc(t.why)}</div>` : ''}${t.parts?.why ? `<div class="muted small">${esc(t.parts.why)}</div>` : ''}${t.note ? `<div class="muted small">${esc(t.note)}</div>` : ''}
 ${t.url ? `<a class="small" href="${esc(t.url)}" target="_blank" rel="noopener noreferrer">${t.origin === 'bank' ? 'איפה זה הפך ויראלי' : 'המקור של הסימן'} ${icon('ext')}</a>` : ''}
-${remove ? postButton(ctx, '/topics/remove', 'הסר', { cls: 'btn ghost sm', fields: { account: t.account_id, id: t.id } }) : ''}</div>
+${remove ? postButton(ctx, '/topics/remove', 'הסרה', { cls: 'btn ghost sm', fields: { account: t.account_id, id: t.id } }) : ''}</div>
 <div class="tside">${topicScore(t)}</div></li>`;
 }
 
@@ -626,13 +626,13 @@ export function topicsPage(ctx, { current, topics, pass, watch, queries, youtube
   const q = [...(queries.he || []), ...(queries.en || [])];
   const body = `<div class="head"><h1>נושאים</h1><span class="sub">מה כדאי לספר, לפני שמחפשים במקורות</span><span class="end"><a class="btn sm" href="/sources">${icon('sources')}מקורות</a></span></div>
 <p class="lede">כל פוסט מתחיל מנושא: קודם מהבנק שלך, אחר כך ממה שאנשים קוראים ורואים השבוע. כל נושא מקבל ציון של 0 עד 10 על כמה הוא עוצר גלילה, ונושא מתחת ל-${pass} לא נכתב. רק אחרי שנבחר נושא מחפשים לו עובדות במקורות המאושרים, ונושא שאף מקור לא תומך בו נשאר בצד.</p>
-<section class="panel" id="bank"><header><h2>להוסיף לבנק</h2><span class="end muted small">נושאים שאת/ה יודע/ת שעבדו. הם הראשונים בתור.</span></header>
+<section class="panel" id="bank"><header><h2>להוסיף לבנק</h2><span class="end muted small">נושאים שכבר ראיתם שעובדים. הם הראשונים בתור.</span></header>
 ${problems.length ? `<div class="problems"><b>לא נשמר:</b><ul>${problems.map((p) => `<li>${esc(p)}</li>`).join('')}</ul></div>` : ''}
 <form method="post" action="/topics/add" class="formgrid">${csrfField(ctx)}<input type="hidden" name="account" value="${esc(current.id)}">
 <label class="f">הנושא<input type="text" name="title" value="${esc(form.title || '')}" maxlength="300" required placeholder="למשל: השחקן שסירב לחוזה של 100 מיליון"></label>
 <label class="f">למה זה הפך ויראלי<textarea name="why" maxlength="600" placeholder="מה גרם לאנשים לעצור ולשתף">${esc(form.why || '')}</textarea></label>
 <label class="f">קישור <small>איפה זה עבד. הוא לא משמש כמקור לעובדות.</small><input type="url" name="url" value="${esc(form.url || '')}" dir="ltr" placeholder="https://"></label>
-<div><button class="btn primary" type="submit">${icon('plus')}הוסף לבנק</button></div></form></section>
+<div><button class="btn primary" type="submit">${icon('plus')}להוסיף לבנק</button></div></form></section>
 <section class="panel"><header><h2>הבאים בתור</h2><span class="end muted small">${next.length}</span></header>
 ${next.length ? `<ul class="topics">${next.map((t) => topicRow(ctx, t, { remove: t.origin === 'bank' })).join('')}</ul>` : '<p class="muted">אין נושא בתור. הוסיפו לבנק, או חכו לסימנים של מחר. בינתיים הפוסטים נכתבים מהמסמכים של היום.</p>'}</section>
 ${used.length ? `<details class="panel"><summary><h2 class="inline">כבר נכתבו <span class="muted small">${used.length}</span></h2></summary><ul class="topics">${used.map((t) => topicRow(ctx, t)).join('')}</ul></details>` : ''}
@@ -641,7 +641,7 @@ ${out.length ? `<details class="panel"><summary><h2 class="inline">נשארו ב
 <p class="muted">פעם ביום תדר בודק כמה קוראים את הדפים בוויקיפדיה של השמות כאן, ונושא נוצר כשקוראים אחד מהם השבוע פי 1.5 לפחות מבחודש שלפני. ${youtube ? 'הוא גם בודק אילו שורטס נצפו הכי הרבה בשבועיים האחרונים בחיפושים של החשבון' : 'יוטיוב עוד לא מחובר, אז שורטס לא נבדקים'}${q.length && youtube ? `: ${q.map((x) => `<span class="chip ghost">${esc(x)}</span>`).join(' ')}` : '.'}${live ? '' : ' (בהדגמה הסימנים לא נבדקים: רק הבנק פעיל.)'}</p>
 <form method="post" action="/topics/watch" class="formgrid">${csrfField(ctx)}<input type="hidden" name="account" value="${esc(current.id)}">
 <label class="f">שמות למעקב <small>שחקנים, קבוצות, חברות: שם אחד בשורה, כמו בכותרת של הדף בוויקיפדיה. שם בעברית נבדק בוויקיפדיה העברית.</small><textarea name="names" rows="6" dir="auto">${esc(watch.join('\n'))}</textarea></label>
-<div><button class="btn" type="submit">שמור</button></div></form></section>`;
+<div><button class="btn" type="submit">שמירה</button></div></form></section>`;
   return layout({ ...ctx, title: 'נושאים', active: 'topics' }, body);
 }
 
@@ -667,7 +667,7 @@ export function sourcesPage(ctx, { packs, current, sources, form = {}, problems 
 <h3 class="srcname" dir="auto">${esc(s.name)}</h3><a class="small ltr" href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">${esc(s.url)}</a>
 <p class="muted small m6" dir="auto">${esc(s.why || '')}</p>
 <p class="muted small m4">${s.approved_at ? `אושר ${esc(shortDate(s.approved_at))}` : ''}${s.last_ok_at ? ` · נקרא ${esc(stamp(s.last_ok_at))}` : ''}${s.last_error ? ` · <span class="chip bad">${esc(s.last_error.slice(0, 80))}</span>` : ''}</p>
-<div class="actions pt10 p0x">${s.status !== 'approved' ? postButton(ctx, `/sources/${s.id}/approve`, 'אשר', { cls: 'btn sm primary' }) : ''}${s.status !== 'removed' ? postButton(ctx, `/sources/${s.id}/remove`, 'הסר', { cls: 'btn sm danger', confirm: 'להסיר את המקור?' }) : ''}</div></article>`;
+<div class="actions pt10 p0x">${s.status !== 'approved' ? postButton(ctx, `/sources/${s.id}/approve`, 'אישור', { cls: 'btn sm primary' }) : ''}${s.status !== 'removed' ? postButton(ctx, `/sources/${s.id}/remove`, 'הסרה', { cls: 'btn sm danger', confirm: 'להסיר את המקור?' }) : ''}</div></article>`;
     })
     .join('');
   const body = `<div class="head"><h1>מקורות</h1><span class="sub">רק מקור מאושר יכול לתמוך בעובדה</span><span class="end"><a class="btn sm" href="/topics">${icon('spark')}נושאים</a><a class="btn sm" href="/facts?account=${esc(current.id)}">${icon('shield')}עובדות שנבדקו ביד</a></span></div>
@@ -681,7 +681,7 @@ ${problems.length ? `<div class="problems"><ul>${problems.map((p) => `<li>${esc(
 <label class="f">כתובת <small>https בלבד</small><input type="url" name="url" required dir="ltr" value="${esc(form.url || '')}"></label>
 <label class="f">סוג<select name="type"><option value="rss">פיד (RSS/Atom)</option><option value="web">דף</option><option value="api">API (JSON)</option></select></label>
 <label class="f">למה סומכים עליו? <small>יופיע ליד כל עובדה ממנו</small><textarea name="why" required minlength="10">${esc(form.why || '')}</textarea></label>
-<button class="btn primary" type="submit">${icon('plus')}הוסף כמקור מאושר</button></form></section></div>
+<button class="btn primary" type="submit">${icon('plus')}להוסיף כמקור מאושר</button></form></section></div>
 ${catalogPanel(ctx, current, sources)}`;
   return layout({ ...ctx, title: 'מקורות', active: 'sources' }, body);
 }
@@ -691,11 +691,11 @@ function catalogPanel(ctx, current, sources) {
   const have = new Set(sources.filter((s) => s.status === 'approved').map((s) => s.url));
   const niche = ([key, n]) => `<details class="facts"><summary>${esc(n.name)} <span class="chip ghost">${n.sources.length}</span><span class="chev">${icon('chev')}</span></summary>
 <ul class="factlist">${n.sources
-    .map((s) => `<li><b dir="auto">${esc(s.name)}</b> <span class="chip ghost">${s.lang === 'he' ? 'עברית' : 'אנגלית'}</span> ${have.has(s.url) ? '<span class="chip ok">כבר מקור</span>' : postButton(ctx, '/sources/catalog', `${icon('plus')}הוסף`, { cls: 'btn sm', fields: { account: current.id, niche: key, id: s.id } })}<div class="muted small" dir="auto">${esc(s.why)}</div></li>`)
+    .map((s) => `<li><b dir="auto">${esc(s.name)}</b> <span class="chip ghost">${s.lang === 'he' ? 'עברית' : 'אנגלית'}</span> ${have.has(s.url) ? '<span class="chip ok">כבר מקור</span>' : postButton(ctx, '/sources/catalog', `${icon('plus')}הוספה`, { cls: 'btn sm', fields: { account: current.id, niche: key, id: s.id } })}<div class="muted small" dir="auto">${esc(s.why)}</div></li>`)
     .join('')}</ul>
-${n.refused.length ? `<p class="muted small">לא ניתנים לקריאה: ${n.refused.map(([name, why]) => `${esc(name)} (${esc(why)})`).join(' · ')}</p>` : ''}</details>`;
+${n.refused.length ? `<p class="muted small">אי אפשר לקרוא אותם: ${n.refused.map(([name, why]) => `${esc(name)} (${esc(why)})`).join(' · ')}</p>` : ''}</details>`;
   return `<section class="panel mt16"><header><h2>מקורות מוכנים לפי נישה</h2></header>
-<p class="muted">פידים שנבדקו: האתר מרשה בקובץ robots.txt שלו גם לנו וגם ל-Claude לקרוא, כי כל מה שמקור אומר נכתב מחדש על ידי Claude. הבדיקה רצה שוב בכל קריאה. כתבות ארוכות וראיונות נקראים ראשונים.</p>
+<p class="muted">כל פיד כאן נבדק: האתר מרשה בקובץ robots.txt שלו לנו ול-Claude לקרוא, כי Claude כותב מחדש כל מה שמקור אומר. הבדיקה חוזרת בכל קריאה, וכתבות ארוכות וראיונות נקראים ראשונים.</p>
 ${Object.entries(CATALOG).map(niche).join('')}</section>`;
 }
 
@@ -734,7 +734,7 @@ export function budgetPanel(ctx, d, { dev = false } = {}) {
 ${dev ? `<dl class="kv mt12"><dt>שמור לקריאות שעוד רצות</dt><dd>${usd(p.reserved, 3)}</dd><dt>לפוסט</dt><dd>${usd(p.costPerPost, 3)}</dd></dl>
 <div class="scrollx mt12"><table class="table stack"><thead><tr><th>חשבון</th><th>נתח</th><th>הוצאה</th><th>לפוסט</th><th>ביום</th><th>נשארו החודש</th><th>חוזק</th></tr></thead><tbody>${rows}</tbody></table></div>
 <p class="muted small">התקרה היא <code class="ltr">OF_BUDGET_MONTHLY_USD</code> ב-<code class="ltr">.env</code> (${capUsd}), לכל שירות בתשלום חוץ מ-Zernio. כל קריאה שומרת קודם את המחיר הגבוה ביותר שהיא יכולה לעלות, ולכן שום דבר לא עובר את התקרה.</p>` : ''}
-<form method="post" action="/settings/budget" class="formgrid mt12">${csrfField(ctx)}<label class="f">תקרה נמוכה יותר לחודש הזה <small>עד ${tokenNum(d.envCap)} טוקנים; 0 מבטל אותה</small><input type="number" name="budget" min="0" max="${Math.round(d.envCap * TOKENS_PER_USD)}" step="50" value="${esc(Math.round(lower * TOKENS_PER_USD))}"></label><button class="btn" type="submit">שמור</button></form></section>`;
+<form method="post" action="/settings/budget" class="formgrid mt12">${csrfField(ctx)}<label class="f">תקרה נמוכה יותר לחודש הזה <small>עד ${tokenNum(d.envCap)} טוקנים, ו-0 מבטל אותה</small><input type="number" name="budget" min="0" max="${Math.round(d.envCap * TOKENS_PER_USD)}" step="50" value="${esc(Math.round(lower * TOKENS_PER_USD))}"></label><button class="btn" type="submit">שמירה</button></form></section>`;
 }
 
 /**
@@ -746,11 +746,11 @@ export function settingsPage(ctx, d) {
   const s = d.settings;
   const dev = !!ctx.dev;
   const devPanels = dev
-    ? `<section class="panel dev" id="dev"><header><h2>מצב מפתח</h2><span class="end">${postButton(ctx, '/settings/dev', 'כבה', { cls: 'btn sm', fields: { on: '0' } })}</span></header><p class="muted small m0">מפתחות, המנוע, הפרסום והיומן. נשאר פתוח בדפדפן הזה עד שמכבים.</p></section>
+    ? `<section class="panel dev" id="dev"><header><h2>מצב מפתח</h2><span class="end">${postButton(ctx, '/settings/dev', 'לכבות', { cls: 'btn sm', fields: { on: '0' } })}</span></header><p class="muted small m0">מפתחות, המנוע, הפרסום והיומן. נשאר פתוח בדפדפן הזה עד שמכבים.</p></section>
 <div class="cols even">
 <div>
 <section class="panel"><header><h2>מפתחות</h2><span class="end muted small">הערכים עצמם לא מוצגים</span></header><ul class="keys">${d.keys.map((x) => `<li>${x.set ? `<span class="chip ok">${icon('check')}מוגדר</span>` : '<span class="chip ghost">חסר</span>'}<div><code>${esc(x.name)}</code><div class="muted small">${esc(x.he || x.what)}</div></div></li>`).join('')}</ul></section>
-<section class="panel"><header><h2>מצב המנוע</h2></header><dl class="kv"><dt>מקורות וכתיבה</dt><dd>${d.mode === 'live' ? '<span class="chip ok">חי</span> מקורות אמיתיים ו-Claude' : '<span class="chip warn">הקלטות</span> בלי רשת ובלי מפתח'}</dd>
+<section class="panel"><header><h2>מצב המנוע</h2></header><dl class="kv"><dt>מקורות וכתיבה</dt><dd>${d.mode === 'live' ? '<span class="chip ok">חי</span> מקורות אמיתיים ו-Claude' : '<span class="chip warn">הקלטות</span> עובד מהקלטות שמורות, בלי חיבור לרשת'}</dd>
 <dt>מתג פרסום חי</dt><dd>${d.liveSwitch ? '<span class="chip ok">PUBLISH_MODE=live</span>' : '<span class="chip ghost">כבוי: הכל יבש</span>'}</dd>
 ${d.publishers.map((p) => `<dt>${esc(p.name)}</dt><dd>${p.platforms.map((x) => `${PLATFORM_HE[x.platform] || x.platform}: ${publisherHe(x)}`).join(' · ')}</dd>`).join('')}</dl></section>
 ${d.instagram.length ? `<section class="panel"><header><h2>אינסטגרם ישירות (Meta Graph API)</h2></header><ul class="factlist">${d.instagram.map((x) => `<li>${accDot(x.id)} <b>${esc(x.name)}</b> ${x.configured ? '<span class="chip ok">מחובר</span>' : `<span class="chip ghost">חסר ${!x.userId ? 'instagram.userId ב-pack.json' : `<code class="ltr">${esc(x.tokenEnv)}</code>`}</span>`} <span class="muted small">${x.auth === 'instagram' ? 'Instagram Login' : 'Facebook Login (עמוד פייסבוק)'}${x.daysLeft != null ? ` · האסימון בתוקף עוד ${x.daysLeft} ימים` : ''}</span></li>`).join('')}</ul><p class="muted small">בדיקה מלאה של האסימון, החשבון ונתוני ה-insights: <code class="ltr">npm run instagram:check</code></p></section>` : ''}
@@ -766,18 +766,18 @@ ${d.instagram.length ? `<section class="panel"><header><h2>אינסטגרם יש
 <section class="panel" id="push"><header><h2>התראות</h2><span class="end">${d.push?.browsers ? `<span class="chip ok">${d.push.browsers === 1 ? 'מכשיר אחד' : `${d.push.browsers} מכשירים`}</span>` : '<span class="chip ghost">כבוי</span>'}</span></header>
 <p class="muted">פוסט שאישרתם נשלח מיד לטיוטות של טיקטוק, ובשעה שלו מגיעה התראה לפרסם אותו.</p>
 <p class="muted small">באייפון: פתחו את תדר בספארי, שתפו ואז "הוסף למסך הבית", ופתחו את תדר מהאייקון. רק משם אפשר להפעיל התראות.</p>
-<form method="post" action="/push/subscribe" data-ajax="reload" data-push="${esc(d.push?.key || '')}">${csrfField(ctx)}<input type="hidden" name="endpoint" value=""><button class="btn" type="button" data-push-enable>${icon('spark')}הפעל התראות במכשיר הזה</button></form>
-<form method="post" action="/push/unsubscribe" data-ajax="reload" data-push-off hidden>${csrfField(ctx)}<input type="hidden" name="endpoint" value=""><button class="btn ghost" type="button" data-push-disable>כבה התראות במכשיר הזה</button></form>
+<form method="post" action="/push/subscribe" data-ajax="reload" data-push="${esc(d.push?.key || '')}">${csrfField(ctx)}<input type="hidden" name="endpoint" value=""><button class="btn" type="button" data-push-enable>${icon('spark')}להפעיל התראות במכשיר הזה</button></form>
+<form method="post" action="/push/unsubscribe" data-ajax="reload" data-push-off hidden>${csrfField(ctx)}<input type="hidden" name="endpoint" value=""><button class="btn ghost" type="button" data-push-disable>לכבות התראות במכשיר הזה</button></form>
 </section>
-<section class="panel"><header><h2>מתי נכתבים הפוסטים</h2></header><p class="muted">כל יום בשעה הזו תדר כותב את הפוסטים של היום ושולח אותם לאישור.</p><form method="post" action="/settings/generate-at" class="formgrid">${csrfField(ctx)}<label class="f">שעה<input type="time" name="at" value="${esc(s.generateAt)}" dir="ltr"></label><button class="btn" type="submit">שמור</button></form></section>
+<section class="panel"><header><h2>מתי נכתבים הפוסטים</h2></header><p class="muted">כל יום בשעה הזו תדר כותב את הפוסטים של היום ושולח אותם לאישור.</p><form method="post" action="/settings/generate-at" class="formgrid">${csrfField(ctx)}<label class="f">שעה<input type="time" name="at" value="${esc(s.generateAt)}" dir="ltr"></label><button class="btn" type="submit">שמירה</button></form></section>
 <section class="panel"><header><h2>צוות</h2></header><ul class="factlist">${d.users.map((u) => `<li><b>${esc(u.name)}</b> <span class="chip ghost">${esc(ROLE_HE[u.role] || u.role)}</span> <span class="muted small">${u.last_login_at ? `נכנס ${esc(stamp(u.last_login_at))}` : 'עוד לא נכנס'}</span></li>`).join('')}</ul></section>
 </div>
 <div>
 ${budgetPanel(ctx, d, { dev })}
-<section class="panel"><header><h2>החשבון שלך</h2></header><p class="muted m0">מחובר בתור <b>${esc(ctx.user?.name || '')}</b></p><div class="actions p0 mt12">${postButton(ctx, '/logout', `${icon('logout')}יציאה`, { cls: 'btn' })}</div></section>
+<section class="panel"><header><h2>החשבון שלך</h2></header><p class="muted m0">מחוברים בתור <b>${esc(ctx.user?.name || '')}</b></p><div class="actions p0 mt12">${postButton(ctx, '/logout', `${icon('logout')}יציאה`, { cls: 'btn' })}</div></section>
 <section class="panel"><header><h2>עצירת חירום</h2><span class="end">${s.globalKill ? '<span class="chip bad">הכל עצור</span>' : ''}</span></header>
-<p class="muted">עוצר את כל החשבונות מיד: שום פוסט לא נכתב ושום פוסט לא מתפרסם עד שמפעילים מחדש.</p>
-${s.globalKill ? postButton(ctx, '/settings/kill', 'הפעל הכל מחדש', { cls: 'btn primary', fields: { on: '0' } }) : postButton(ctx, '/settings/kill', `${icon('power')}עצור הכל`, { cls: 'btn danger', fields: { on: '1' }, confirm: 'בטוח? לחצו שוב לעצירה' })}
+<p class="muted">עוצר את כל החשבונות מיד. אף פוסט לא נכתב ולא מתפרסם עד שמפעילים מחדש.</p>
+${s.globalKill ? postButton(ctx, '/settings/kill', 'להפעיל הכל מחדש', { cls: 'btn primary', fields: { on: '0' } }) : postButton(ctx, '/settings/kill', `${icon('power')}לעצור הכל`, { cls: 'btn danger', fields: { on: '1' }, confirm: 'לחצו שוב כדי לעצור הכל' })}
 </section>
 </div></div>
 ${devPanels}
@@ -823,7 +823,7 @@ export function factsPage(ctx, { packs, current, topics, today, nextYear, form =
           return `<li><div class="meta p0"><span class="chip ${cls}">${esc(he)}</span>${f.checkedBy === 'claude' ? '<span class="chip warn" title="הועתק מהעמוד, עוד לא נבדק על ידיך">נבדק על ידי Claude</span>' : ''}<span class="end muted small">נבדק ${esc(f.checkedAt)} · עד ${esc(f.expires)}</span></div>
 <blockquote dir="auto">${esc(f.quote)}</blockquote><a class="small" href="${esc(f.url)}" target="_blank" rel="noopener noreferrer" dir="auto">${esc(f.source)}</a>${f.note ? `<p class="muted small m4" dir="auto">${esc(f.note)}</p>` : ''}
 ${f.problems.length ? `<div class="problems"><ul>${f.problems.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
-<div class="actions pt10 p0x"><form method="post" action="/facts/confirm" class="inline">${csrfField(ctx)}<input type="hidden" name="account" value="${esc(current.id)}"><input type="hidden" name="topic" value="${esc(t.topic)}"><input type="hidden" name="id" value="${esc(f.id)}"><label class="small">בתוקף עד <input type="date" name="expires" value="${esc(f.expires > today ? f.expires : nextYear)}" dir="ltr"></label><button class="btn sm primary" type="submit">${icon('check')}בדקתי שוב היום</button></form>${postButton(ctx, '/facts/remove', 'הסר', { cls: 'btn sm danger', confirm: 'להסיר את העובדה?', fields: { account: current.id, topic: t.topic, id: f.id } })}</div></li>`;
+<div class="actions pt10 p0x"><form method="post" action="/facts/confirm" class="inline">${csrfField(ctx)}<input type="hidden" name="account" value="${esc(current.id)}"><input type="hidden" name="topic" value="${esc(t.topic)}"><input type="hidden" name="id" value="${esc(f.id)}"><label class="small">בתוקף עד <input type="date" name="expires" value="${esc(f.expires > today ? f.expires : nextYear)}" dir="ltr"></label><button class="btn sm primary" type="submit">${icon('check')}בדקתי שוב היום</button></form>${postButton(ctx, '/facts/remove', 'הסרה', { cls: 'btn sm danger', confirm: 'להסיר את העובדה?', fields: { account: current.id, topic: t.topic, id: f.id } })}</div></li>`;
         })
         .join('')}</ul>` : '<p class="muted">אין עובדות בנושא הזה.</p>'}</section>`
     )
@@ -840,9 +840,9 @@ ${problems.length ? `<div class="problems"><ul>${problems.map((x) => `<li>${esc(
 <label class="f">שם המקור<input type="text" name="source" required maxlength="80" value="${esc(form.source || '')}" placeholder="כל זכות"></label>
 <label class="f">כתובת העמוד<input type="url" name="url" required dir="ltr" value="${esc(form.url || '')}"></label>
 <label class="f">נבדק ב<input type="date" name="checkedAt" required dir="ltr" value="${esc(form.checkedAt || today)}"></label>
-<label class="f">בתוקף עד <small>אחרי התאריך הזה היא לא בשימוש עד שתבדקו שוב; עד שנתיים</small><input type="date" name="expires" required dir="ltr" value="${esc(form.expires || nextYear)}"></label>
+<label class="f">בתוקף עד <small>אחרי התאריך הזה היא לא בשימוש עד שתבדקו שוב. אפשר עד שנתיים קדימה</small><input type="date" name="expires" required dir="ltr" value="${esc(form.expires || nextYear)}"></label>
 <label class="f">הערה <small>לא חובה</small><input type="text" name="note" maxlength="200" value="${esc(form.note || '')}"></label>
-<button class="btn primary" type="submit">${icon('plus')}הוסף עובדה</button></form></section></div>`;
+<button class="btn primary" type="submit">${icon('plus')}להוסיף עובדה</button></form></section></div>`;
   return layout({ ...ctx, title: 'עובדות שנבדקו ביד', active: 'sources' }, body);
 }
 
@@ -852,7 +852,7 @@ const RIVAL_STATE = { fresh: null, stale: ['כדאי להציץ שוב', 'warn']
 const agoHe = (d) => (d <= 0 ? 'היום' : d === 1 ? 'אתמול' : `לפני ${d} ימים`);
 
 /** The rival form: a new rival, or the one `r` is (its fields prefilled). */
-function rivalForm(ctx, current, r = {}, { id = null, submit = 'הוסף מתחרה' } = {}) {
+function rivalForm(ctx, current, r = {}, { id = null, submit = 'להוסיף מתחרה' } = {}) {
   const v = (x) => (Array.isArray(x) ? x.join('\n') : x || '');
   return `<form method="post" action="/rivals/save" class="formgrid">${csrfField(ctx)}<input type="hidden" name="account" value="${esc(current.id)}">${id ? `<input type="hidden" name="id" value="${esc(id)}">` : ''}
 <label class="f">שם משתמש<input type="text" name="handle" required maxlength="40" dir="ltr" autocapitalize="off" spellcheck="false" placeholder="@" value="${esc(r.handle || '')}"></label>
@@ -860,7 +860,7 @@ function rivalForm(ctx, current, r = {}, { id = null, submit = 'הוסף מתח�
 <label class="f">שורות השער שעבדו להם הכי טוב <small>שורה לכל אחת, עד ${RIVALS.hooks}, כמו שהן כתובות</small><textarea name="hooks" required rows="4" dir="auto">${esc(v(r.hooks))}</textarea></label>
 <label class="f">הפורמטים שלהם <small>שורה לכל אחד: "דירוג 5 עד 1", "סיפור בשקפים"</small><textarea name="formats" rows="2" dir="auto">${esc(v(r.formats))}</textarea></label>
 <label class="f">שעות פרסום <small><bdi dir="ltr">18:30, 21:00</bdi></small><input type="text" name="times" dir="ltr" value="${esc(Array.isArray(r.times) ? r.times.join(', ') : r.times || '')}"></label>
-<label class="f">מה הם לא נותנים <small>הנושאים והזוויות שהקהל שלהם לא מקבל; הכי חשוב בטופס</small><textarea name="gaps" rows="3" maxlength="${RIVALS.gapChars}" dir="auto">${esc(r.gaps || '')}</textarea></label>
+<label class="f">מה הם לא נותנים <small>הנושאים והזוויות שהקהל שלהם לא מקבל. זה הכי חשוב בטופס</small><textarea name="gaps" rows="3" maxlength="${RIVALS.gapChars}" dir="auto">${esc(r.gaps || '')}</textarea></label>
 <button class="btn primary" type="submit">${id ? icon('check') : icon('plus')}${submit}</button></form>`;
 }
 
@@ -874,14 +874,14 @@ export function rivalsPage(ctx, { packs, current, rivals, times, form = {}, prob
       return `<section class="panel acc acc-${esc(current.id)}" id="rival-${r.id}"><header><h2 class="ltr">@${esc(r.handle)}</h2><span class="chip ghost">${esc(PLATFORM_HE[r.platform] || r.platform)}</span>${st ? `<span class="chip ${st[1]}">${esc(st[0])}</span>` : ''}<span class="end muted small">עודכן ${esc(agoHe(r.age))}${r.updatedBy ? ` · ${esc(r.updatedBy)}` : ''}</span></header>
 <ul class="rival">${r.hooks.map((h) => `<li dir="auto">${esc(h)}</li>`).join('')}</ul>
 <dl class="kv">${r.formats.length ? `<dt>פורמטים</dt><dd dir="auto">${esc(r.formats.join(' · '))}</dd>` : ''}${r.times.length ? `<dt>שעות</dt><dd class="ltr">${esc(r.times.join(' · '))}</dd>` : ''}${r.gaps ? `<dt>מה חסר אצלם</dt><dd dir="auto">${esc(r.gaps)}</dd>` : ''}</dl>
-<details class="rivaledit"${editing === r.id ? ' open' : ''}><summary>עדכון</summary>${editing === r.id && problems.length ? `<div class="problems"><ul>${problems.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}${rivalForm(ctx, current, shown, { id: r.id, submit: 'שמור, הסתכלתי היום' })}</details>
-<div class="actions pt10 p0x">${postButton(ctx, '/rivals/remove', 'הסר', { cls: 'btn sm danger', confirm: 'להסיר את המתחרה?', fields: { account: current.id, id: r.id } })}</div></section>`;
+<details class="rivaledit"${editing === r.id ? ' open' : ''}><summary>עדכון</summary>${editing === r.id && problems.length ? `<div class="problems"><ul>${problems.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}${rivalForm(ctx, current, shown, { id: r.id, submit: 'לשמור, הסתכלתי היום' })}</details>
+<div class="actions pt10 p0x">${postButton(ctx, '/rivals/remove', 'הסרה', { cls: 'btn sm danger', confirm: 'להסיר את המתחרה?', fields: { account: current.id, id: r.id } })}</div></section>`;
     })
     .join('');
-  const fewer = rivals.length < RIVALS.min ? `<p class="small"><span class="chip warn">${rivals.length ? `עוד ${RIVALS.min - rivals.length}` : `${RIVALS.min} לפחות`}</span> שלושה עד חמישה חשבונות נותנים תמונה של הנישה; אחד הוא רק טעם של חשבון אחד.</p>` : '';
+  const fewer = rivals.length < RIVALS.min ? `<p class="small"><span class="chip warn">${rivals.length ? `עוד ${RIVALS.min - rivals.length}` : `${RIVALS.min} לפחות`}</span> שלושה עד חמישה חשבונות נותנים תמונה של הנישה. חשבון אחד מראה רק את הטעם שלו.</p>` : '';
   const slots = times.own.length
     ? `<section class="panel"><header><h2>שעות</h2></header><dl class="kv">${times.own.map((x) => `<dt class="ltr">${esc(x.at)}</dt><dd>${x.near ? `${x.near === 1 ? 'מתחרה אחד מפרסם' : `${x.near} מתחרים מפרסמים`} בטווח שעה` : 'אף מתחרה לא מפרסם בטווח שעה'}</dd>`).join('')}${times.theirs.length ? `<dt>הם</dt><dd><bdi dir="ltr">${esc(times.theirs.map((x) => x.at).join(' · '))}</bdi></dd>` : ''}</dl>
-<p class="muted small m6">המשבצות של החשבון באות מהחבילה שלו, עם שבת, חגים ושעות הפרסום. השעות של המתחרים מוצגות כאן לידן ולא משנות אותן.</p></section>`
+<p class="muted small m6">שעות הפרסום של החשבון מוגדרות בחבילה שלו, כולל שבת וחגים. השעות של המתחרים מוצגות כאן לידן ולא משנות אותן.</p></section>`
     : '';
   const adding = !editing && problems.length;
   const body = `<div class="head"><h1>מתחרים</h1><span class="sub">מה שראיתם אצלם, בשביל הכתיבה</span></div>
@@ -902,7 +902,7 @@ export function soundsPage(ctx, { packs, current, sounds, mode, recent, limits, 
   const tabs = packs.length < 2 ? '' : `<nav class="tabs" aria-label="חשבונות">${packs.map((p) => `<a href="/sounds?account=${esc(p.id)}"${p.id === current.id ? ' aria-current="true"' : ''}>${accDot(p.id)}${esc(p.meta.displayName)}</a>`).join('')}</nav>`;
   const list = sounds.length
     ? `<div class="panel p0 soundlist">${sounds
-        .map((s) => `<div class="row sound"><span class="tx"><b dir="auto">${esc(s.name)}</b><span class="muted small" dir="auto">${esc(s.artist)} · נוסף ${esc(agoHe(s.age))}${recent.includes(s.id) ? ' · היה באחת מ-5 הטיוטות האחרונות' : ''}</span></span>${s.stale ? '<span class="chip warn">ישן</span>' : '<span class="chip ok">טרי</span>'}${s.link ? `<a class="btn sm" href="${esc(s.link)}" target="_blank" rel="noopener noreferrer">${icon('ext')}בטיקטוק</a>` : ''}${postButton(ctx, '/sounds/remove', 'הסר', { cls: 'btn sm danger', confirm: 'להסיר?', fields: { account: current.id, id: s.id } })}</div>`)
+        .map((s) => `<div class="row sound"><span class="tx"><b dir="auto">${esc(s.name)}</b><span class="muted small" dir="auto">${esc(s.artist)} · נוסף ${esc(agoHe(s.age))}${recent.includes(s.id) ? ' · היה באחת מ-5 הטיוטות האחרונות' : ''}</span></span>${s.stale ? '<span class="chip warn">ישן</span>' : '<span class="chip ok">טרי</span>'}${s.link ? `<a class="btn sm" href="${esc(s.link)}" target="_blank" rel="noopener noreferrer">${icon('ext')}בטיקטוק</a>` : ''}${postButton(ctx, '/sounds/remove', 'הסרה', { cls: 'btn sm danger', confirm: 'להסיר?', fields: { account: current.id, id: s.id } })}</div>`)
         .join('')}</div>`
     : '<div class="empty"><b>עוד אין סאונדים לחשבון הזה</b>טיוטה בלי סאונד מהרשימה עדיין יוצאת, רק בלי הצעה איזה סאונד להוסיף.</div>';
   const fewer = sounds.length < limits.min ? `<p class="small"><span class="chip warn">${sounds.length ? `עוד ${limits.min - sounds.length}` : `${limits.min} לפחות`}</span> כל טיוטה מקבלת סאונד שלא היה ב-${limits.recent} הטיוטות האחרונות, אז כדאי שיהיו כמה.</p>` : '';
@@ -918,6 +918,6 @@ ${problems.length ? `<div class="problems"><ul>${problems.map((x) => `<li>${esc(
 <label class="f">שם הסאונד<input type="text" name="name" required maxlength="${limits.chars}" dir="auto" value="${esc(form.name || '')}"></label>
 <label class="f">אמן<input type="text" name="artist" required maxlength="${limits.chars}" dir="auto" value="${esc(form.artist || '')}"></label>
 <label class="f">קישור <small>לא חובה: הסאונד בטיקטוק, כדי למצוא אותו מהר</small><input type="url" name="link" dir="ltr" placeholder="https://www.tiktok.com/music/..." value="${esc(form.link || '')}"></label>
-<button class="btn primary" type="submit">${icon('plus')}הוסף</button></form></section>` : `<section class="panel"><header><h2>${limits.max} סאונדים</h2></header><p class="muted">זה המקסימום. כדי להוסיף אחר, הסירו אחד ישן.</p></section>`}</div>`;
+<button class="btn primary" type="submit">${icon('plus')}הוספה</button></form></section>` : `<section class="panel"><header><h2>${limits.max} סאונדים</h2></header><p class="muted">זה המקסימום. כדי להוסיף אחר, הסירו אחד ישן.</p></section>`}</div>`;
   return layout({ ...ctx, title: 'סאונדים', active: 'accounts' }, body);
 }

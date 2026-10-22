@@ -88,7 +88,7 @@ test('results lead with what the published posts did; the formats and the blocks
   const html = await (await get('/results', cookie)).text();
   assert.match(html, /<div class="kpi lead"><span class="l">צפיות<\/span>/, 'views lead');
   assert.ok(html.indexOf('class="kpi lead"') < html.indexOf('<details class="more" id="formats">'), 'the formats come after the numbers');
-  assert.match(html, /<details class="more" id="formats"><summary class="btn sm">[\s\S]*?פורמטים<\/summary><div class="more-in">[\s\S]*?: פורמטים<\/h2>/, 'the formats tables are inside the fold');
+  assert.match(html, /<details class="more" id="formats"><summary class="btn sm">[\s\S]*?פורמטים<\/summary><div class="more-in">[\s\S]*? · פורמטים<\/h2>/, 'the formats tables are inside the fold');
   assert.doesNotMatch(html, /<h2>מנצחים<\/h2>/);
 });
 

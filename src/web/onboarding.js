@@ -62,7 +62,7 @@ function listPage(ctx, pc) {
     { ...pc, title: 'חשבון חדש', active: 'new' },
     `<div class="head"><h1>חשבון חדש</h1><span class="sub">בוחרים נישה ודוגמאות, מאשרים מקורות, ומקבלים חמישה פוסטים לדוגמה.</span></div>
 <div class="cols"><section class="panel"><header><h2>מתחילים מכאן</h2></header>
-<p class="muted">המנוע יחפש אתרים סמכותיים (ממשלה, תיעוד רשמי, כלי תקשורת מבוססים), ימצא להם פידים, יציע מקורות נתונים מובנים, יבדוק אילו פורמטים עובדים בנישה, וידרג כל מקור עם סיבה. שום מקור לא נכנס בלי אישור שלכם.</p>
+<p class="muted">המנוע מחפש אתרים שאפשר לסמוך עליהם (משרדי ממשלה, תיעוד רשמי, כלי תקשורת ותיקים), מוצא להם פידים ומקורות נתונים, בודק אילו פורמטים עובדים בנישה, ונותן לכל מקור ציון עם הסבר. מקור נכנס רק אחרי שאתם מאשרים אותו.</p>
 <form method="post" action="/new" class="formgrid">${csrfField(pc)}
 <label class="f">הנישה <small>בעברית, כמו שהייתם מתארים לחבר</small><input type="text" name="niche" required maxlength="80" placeholder="למשל: בישול טבעוני לסטודנטים"></label>
 <label class="f">הנישה באנגלית <small>לחיפוש פורמטים ביוטיוב</small><input type="text" name="nicheEn" maxlength="80" dir="ltr"></label>
@@ -70,7 +70,7 @@ function listPage(ctx, pc) {
 <label class="f">הקהל<input type="text" name="audience" maxlength="160" placeholder="מי קורא, ומה הוא רוצה"></label>
 <label class="f">נושאים <small>מופרדים בפסיקים</small><input type="text" name="topics" maxlength="200"></label>
 <label class="f">דוגמאות <small>אתרים (https://...) או חשבונות שאתם אוהבים, אחד בכל שורה</small><textarea name="examples" rows="4" dir="ltr"></textarea></label>
-<button class="btn primary" type="submit">${icon('spark')}חפש מקורות</button></form></section>
+<button class="btn primary" type="submit">${icon('spark')}לחפש מקורות</button></form></section>
 <section class="panel"><header><h2>בתהליך</h2></header>${rows.length ? `<ul class="factlist">${rows.map((r) => `<li><a href="/new/${esc(r.id)}"><b>${esc(r.seed.niche)}</b></a> <span class="chip">${esc(STATUS_HE[r.status] || r.status)}</span> <span class="muted small">${esc(stamp(r.updated_at))}</span></li>`).join('')}</ul>` : '<p class="muted">אין עדיין.</p>'}</section></div>`
   );
 }
@@ -99,8 +99,8 @@ function detailPage(ctx, pc, r) {
 <div class="grid12"><section class="panel"><header><h2>שם לחשבון</h2></header><div class="formgrid">
 <label class="f">שם החשבון<input type="text" name="displayName" required maxlength="40"></label>
 <label class="f">שם המשתמש <small>אותיות לטיניות, ממנו נגזר מזהה החבילה</small><input type="text" name="handle" required maxlength="30" dir="ltr" pattern="@?[A-Za-z0-9._-]{2,30}"></label>
-<p class="muted small">עיצוב, צבעים וגופן ייבחרו אוטומטית כך שלא יהיו דומים לאף חשבון אחר. הכל נשמר כקבצים בתיקייה הפרטית וניתן לשנות אחר כך.</p>
-<button class="btn primary" type="submit">${icon('check')}צור את החבילה</button></div></section>
+<p class="muted small">העיצוב, הצבעים והגופן נבחרים לבד, כך שהחשבון לא ייראה כמו אף חשבון אחר. הכל נשמר כקבצים בתיקייה הפרטית, ואפשר לשנות אחר כך.</p>
+<button class="btn primary" type="submit">${icon('check')}ליצור את החבילה</button></div></section>
 <section class="panel"><header><h2>פורמטים שעובדים בנישה</h2></header>${(r.found.formats || []).length ? `<ul class="factlist">${r.found.formats.map((f) => `<li><a href="${esc(f.url)}" target="_blank" rel="noopener noreferrer">${k(f.views)} צפיות ${icon('ext')}</a> <span class="muted small" dir="auto">${esc(f.title)}</span></li>`).join('')}</ul>` : '<p class="muted">לא נבדק (בלי YOUTUBE_API_KEY).</p>'}</section></div></div></form>`
     );
   }
@@ -113,10 +113,10 @@ function detailPage(ctx, pc, r) {
     { ...pc, title: 'פוסטים לדוגמה', active: 'new' },
     `${head}${notes}
 <section class="panel"><header>${accDot(r.pack_id)}<h2>${esc(pack?.meta.displayName || r.pack_id)}</h2><span class="end muted small ltr">@${esc(pack?.meta.handle || '')}</span></header>
-<p class="muted">החבילה נכתבה לתיקייה הפרטית (${esc(r.pack_id)}). החשבון לא יעלה לאוויר לפני שיש חמישה פוסטים לדוגמה ועברתם עליהם. דוגמאות לא מתפרסמות לעולם.</p>
-<div class="actions p0">${busy ? `<span class="chip warn">${icon('clock')}כותב פוסטים לדוגמה, הדף יתרענן</span><meta http-equiv="refresh" content="4">` : postButton(pc, `/new/${r.id}/samples`, `${icon('spark')}${samples.length ? 'עוד פוסטים לדוגמה' : 'צור 5 פוסטים לדוגמה'}`, { cls: 'btn' })}
+<p class="muted">החבילה נכתבה לתיקייה הפרטית (${esc(r.pack_id)}). החשבון לא יעלה לאוויר לפני שיש חמישה פוסטים לדוגמה ועברתם עליהם. פוסט לדוגמה לא מתפרסם, גם אחרי שהחשבון באוויר.</p>
+<div class="actions p0">${busy ? `<span class="chip warn">${icon('clock')}כותב פוסטים לדוגמה, הדף יתרענן</span><meta http-equiv="refresh" content="4">` : postButton(pc, `/new/${r.id}/samples`, `${icon('spark')}${samples.length ? 'עוד פוסטים לדוגמה' : 'ליצור 5 פוסטים לדוגמה'}`, { cls: 'btn' })}
 ${good >= 5 && !reviewed && r.status !== 'live' ? postButton(pc, `/new/${r.id}/reviewed`, `${icon('check')}עברתי על הדוגמאות`, { cls: 'btn' }) : ''}
-${reviewed ? postButton(pc, `/new/${r.id}/live`, `${icon('power')}העלה לאוויר, במצב אישור`, { cls: 'btn primary', confirm: 'בטוח? לחצו שוב' }) : ''}
+${reviewed ? postButton(pc, `/new/${r.id}/live`, `${icon('power')}להעלות לאוויר, במצב אישור`, { cls: 'btn primary', confirm: 'לחצו שוב כדי להעלות לאוויר' }) : ''}
 ${r.status === 'live' ? '<span class="chip ok">באוויר</span>' : ''}</div>
 <p class="muted small mt12">${good} מתוך 5 דוגמאות עברו את כל הבדיקות.</p></section>
 <div class="posts mt16">${samples.map((p) => postCard(pc, p, pack)).join('')}</div>`

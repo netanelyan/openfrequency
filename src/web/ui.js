@@ -106,8 +106,8 @@ export function budgetBanner(b) {
   const out = [];
   const pctTxt = `${Math.round((b.share || 0) * 100)}%`;
   const nm = b.nextMonth ? shortDate(`${b.nextMonth}T12:00:00Z`) : 'החודש הבא';
-  if (b.level === 'stop') out.push(`<div class="banner bad">${icon('alert')}<div><b>התקציב החודשי נגמר.</b><p>שום פוסט לא נכתב עד ${esc(nm)}. פוסטים שכבר אושרו ממשיכים לצאת.</p></div><a class="btn sm" href="/settings#budget">לתקציב</a></div>`);
-  else if (b.level === 'warn') out.push(`<div class="banner warn">${icon('alert')}<div><b>${pctTxt} מהתקציב החודשי כבר נוצלו.</b><p>התחזית לסוף החודש: ${tokenNum(b.forecast)} מתוך ${tokenNum(b.cap)} טוקנים. ב-100% שום פוסט לא נכתב עד ${esc(nm)}.</p></div><a class="btn sm" href="/settings#budget">לתקציב</a></div>`);
+  if (b.level === 'stop') out.push(`<div class="banner bad">${icon('alert')}<div><b>התקציב החודשי נגמר.</b><p>פוסטים חדשים לא ייכתבו עד ${esc(nm)}. פוסטים שכבר אושרו ממשיכים לצאת.</p></div><a class="btn sm" href="/settings#budget">לתקציב</a></div>`);
+  else if (b.level === 'warn') out.push(`<div class="banner warn">${icon('alert')}<div><b>${pctTxt} מהתקציב החודשי כבר נוצלו.</b><p>התחזית לסוף החודש: ${tokenNum(b.forecast)} מתוך ${tokenNum(b.cap)} טוקנים. ב-100% פוסטים חדשים לא ייכתבו עד ${esc(nm)}.</p></div><a class="btn sm" href="/settings#budget">לתקציב</a></div>`);
   if (b.cuts?.length) {
     out.push(`<div class="banner info">${icon('clock')}<div><b>התקציב קצר החודש, אז חלק מהחשבונות מפרסמים פחות.</b>${b.cuts.map((c) => `<p>${esc(c.name)}: ${rateText(c.perDay)} במקום ${c.planned} ביום.</p>`).join('')}</div><a class="btn sm" href="/settings#budget">למה</a></div>`);
   }
@@ -179,7 +179,7 @@ ${SPRITE}
 <header class="top"><div class="wrap">
   <a class="brand" href="/" aria-label="תדר, להיום">${tederMark()}<b>תדר</b></a>
   ${accountSwitch(ctx)}
-  <button class="sidetoggle" type="button" data-side aria-label="${ctx.side === 'mini' ? 'הרחב את סרגל הצד' : 'כווץ את סרגל הצד'}" aria-expanded="${ctx.side === 'mini' ? 'false' : 'true'}" title="${ctx.side === 'mini' ? 'הרחב' : 'כווץ'}">${icon('sidebar')}</button>
+  <button class="sidetoggle" type="button" data-side aria-label="${ctx.side === 'mini' ? 'להרחיב את סרגל הצד' : 'לכווץ את סרגל הצד'}" aria-expanded="${ctx.side === 'mini' ? 'false' : 'true'}" title="${ctx.side === 'mini' ? 'להרחיב' : 'לכווץ'}">${icon('sidebar')}</button>
   <nav class="nav" aria-label="ראשי">${nav}</nav>
   <div class="tools">
     <a class="spend" href="/settings#budget" title="טוקנים החודש: ${tokenNum(spent)} מתוך ${tokenNum(cap)} (${used}%)">${ring}<span class="lbl">טוקנים</span><span class="amt num ltr"><b>${tokenNum(spent)}</b><span> / ${tokenNum(cap)}</span></span></a>

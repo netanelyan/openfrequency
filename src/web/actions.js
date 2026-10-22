@@ -205,9 +205,9 @@ export async function edit(ctx, user, { id }, form) {
   });
   // A draft sent before the edit is the old text: it stays in the app for the owner to delete, and the new one goes.
   if (post.status === 'approved' && retireDraft(ctx.db, loadPost(ctx.db, id))) {
-    return draftBeside(ctx, id, { ok: true, message: `נשמר, נבדק ורונדר מחדש. טיוטה חדשה נשלחת לטיקטוק. ${DRAFT_LEFT}`, redirect: `/post/${id}` });
+    return draftBeside(ctx, id, { ok: true, message: `נשמר ועבר את הבדיקות. השקפים רונדרו מחדש, וטיוטה חדשה נשלחת לטיקטוק. ${DRAFT_LEFT}`, redirect: `/post/${id}` });
   }
-  return { ok: true, message: 'נשמר, נבדק ורונדר מחדש.', redirect: `/post/${id}` };
+  return { ok: true, message: 'נשמר ועבר את הבדיקות. השקפים רונדרו מחדש.', redirect: `/post/${id}` };
 }
 
 export function setMode(ctx, user, { id }, form) {
@@ -224,7 +224,7 @@ export function applyStyle(ctx, user, { id }) {
   if (!pack) throw new ActionError('אין חשבון כזה', 404);
   const lock = lockStyle(ctx.db, pack);
   audit(ctx.db, { actor: user.name, action: 'style', accountId: id, detail: { hash: lock.hash, look: `${pack.theme.template}/${pack.theme.variant || 'a'}` } });
-  return { ok: true, message: 'הסגנון החדש נשמר. הפוסטים הבאים יצוירו בו, ופוסטים שכבר צוירו נשארים בשלהם.' };
+  return { ok: true, message: 'עברתם לסגנון החדש. הפוסטים הבאים ייצאו בו, ואלה שכבר צוירו לא משתנים.' };
 }
 
 export function killAccount(ctx, user, { id }) {
@@ -243,7 +243,7 @@ export function globalKill(ctx, user, _p, form) {
   const on = form.on === '1';
   setSetting(ctx.db, 'globalKill', on);
   audit(ctx.db, { actor: user.name, action: on ? 'global_kill_on' : 'global_kill_off' });
-  return { ok: true, message: on ? 'הכל נעצר.' : 'המערכת פועלת שוב.' };
+  return { ok: true, message: on ? 'הכל נעצר.' : 'הכל פועל שוב.' };
 }
 
 /** A lower cap than OF_BUDGET_MONTHLY_USD for now, never a higher one; 0 goes back to it. */
@@ -252,7 +252,7 @@ export function setBudget(ctx, user, _p, form) {
   // The owner types tokens (100 to a dollar); the cap is kept in dollars, as the ledger counts.
   const t = Number(form.budget);
   const max = Math.round(hard * 100);
-  if (!(t >= 0 && t <= max)) throw new ActionError(`תקרה בין 0 ל-${max.toLocaleString('en-US')} טוקנים`);
+  if (!(t >= 0 && t <= max)) throw new ActionError(`התקרה צריכה להיות בין 0 ל-${max.toLocaleString('en-US')} טוקנים`);
   const n = t / 100;
   setSetting(ctx.db, 'globalBudgetUsd', n);
   audit(ctx.db, { actor: user.name, action: 'global_budget', detail: { usd: n || hard } });
@@ -260,7 +260,7 @@ export function setBudget(ctx, user, _p, form) {
 }
 
 export function setGenerateAt(ctx, user, _p, form) {
-  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(String(form.at || ''))) throw new ActionError('שעה בפורמט HH:MM');
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(String(form.at || ''))) throw new ActionError('צריך שעה כמו 07:30');
   setSetting(ctx.db, 'generateAt', form.at);
   audit(ctx.db, { actor: user.name, action: 'generate_at', detail: { at: form.at } });
   return { ok: true, message: 'נשמר.' };
@@ -281,9 +281,9 @@ export function addSource(ctx, user, _p, form) {
   let url = '';
   try {
     url = new URL(String(form.url || '').trim()).href;
-    if (!url.startsWith('https://')) problems.push('רק כתובות https');
+    if (!url.startsWith('https://')) problems.push('צריך כתובת שמתחילה ב-https');
   } catch {
-    problems.push('כתובת לא תקינה');
+    problems.push('הכתובת לא נראית כמו קישור');
   }
   if (!['rss', 'web', 'api'].includes(form.type)) problems.push('סוג לא מוכר');
   if (String(form.why || '').trim().length < 10) problems.push('צריך לכתוב למה סומכים על המקור');

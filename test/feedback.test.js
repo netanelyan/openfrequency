@@ -237,8 +237,8 @@ test('Results shows each account its report: the four boxes, the posts in them, 
       assert.ok(html.includes(b.todo), b.todo);
     }
     assert.match(html, /href="\/post\/pA"/);
-    assert.match(html, /מחכה למשבצת/);
-    assert.match(html, /הודעות פרטיות לא נקראות/);
+    assert.match(html, /מחכה לפוסט הבא/);
+    assert.match(html, /תדר לא קורא הודעות פרטיות/);
     assert.ok(plansFor(ctx.db, ctx.pack('demo'), { post: 'nope', box: 'hh' }).length === 0);
   } finally {
     cleanup();
