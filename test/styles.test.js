@@ -69,6 +69,48 @@ test('no outline and no shadow on any letter, and no progress bar, counter, dots
   }
 });
 
+test('no label at the top of a slide: no eyebrow over a headline, in any style', async () => {
+  const browser = await getBrowser();
+  const tab = await browser.newPage({ viewport: { width: 1080, height: 1920 } });
+  try {
+    for (const name of STYLE_NAMES) {
+      for (const slide of [cover, number, text, { ...text, photo }]) {
+        const html = draw(name, slide);
+        assert.doesNotMatch(html, /ראש בראש/, `style ${name}: the cover's category is not drawn`);
+        await tab.setContent(html);
+        // Nothing sits above the headline but the slide's own number (C sets it first) and C's and D's label chips.
+        const above = await tab.evaluate(() => {
+          const hl = document.querySelector('.hl');
+          if (!hl) return [];
+          const top = hl.getBoundingClientRect().top;
+          return [...document.querySelectorAll('body *')].filter((el) => el.children.length === 0 && el.textContent.trim() && !el.closest('.probe,style,title') && el.getBoundingClientRect().bottom < top - 1 && !el.closest('.chip,.nrow,.sides')).map((el) => el.textContent.trim());
+        });
+        assert.deepEqual(above, [], `style ${name} ${slide.kind}: text above the headline`);
+      }
+    }
+    // C's label sits on the photograph's lower edge; with no photograph there is none.
+    assert.doesNotMatch(draw('C', text), /class="chip/);
+    assert.match(draw('C', { ...text, photo }), /class="chip"/);
+  } finally {
+    await tab.close();
+  }
+});
+
+test("a highlight block (B, D) is a band behind its letters that stays inside its own line", async () => {
+  const browser = await getBrowser();
+  const tab = await browser.newPage({ viewport: { width: 1080, height: 1920 } });
+  try {
+    for (const name of ['B', 'D']) {
+      await tab.setContent(draw(name, { ...cover, hook: 'הגמר שברזיל\nהפסידה בבית', highlight: 'בבית' }));
+      const bg = await tab.evaluate(() => getComputedStyle(document.querySelector('mark.hi')).backgroundImage);
+      assert.match(bg, /linear-gradient/, `style ${name}`);
+      assert.match(bg, /14%.*97%/, `style ${name}: from just above the letters to just below them`);
+    }
+  } finally {
+    await tab.close();
+  }
+});
+
 test('the safe zones are px on all four sides, and a line in a side band is refused', async () => {
   assert.deepEqual(SAFE_ZONES.tiktok, { top: 140, bottom: 420, right: 152, left: 152 });
   assert.deepEqual(SAFE_ZONES.instagram, { top: 80, bottom: 120, right: 96, left: 96 });

@@ -16,7 +16,11 @@ import { bestInk, contrast, isHex, luminance } from '../color.js';
 // position x0.7, the headlines x0.85, its own safe zones (src/rules/overlay.js).
 //
 // What a style draws that is not the post's own checked text is a fixed label of the post's structure ("מקום 3",
-// "רמז 2 מתוך 3"), the category over a cover (the format's name), and style B's swipe cue.
+// "רמז 2 מתוך 3") on C's and D's chips, style C's key line at a cover's foot, and style B's swipe cue. No style sets a
+// label at the top of the screen, over the headline: an eyebrow reads as a machine-made post.
+//
+// `mark`: the room a highlight takes beside its words, on each side, at the text's size (its padding and margin,
+// 0.16 of the letter size): the check measures a line with a highlight on that much less.
 
 const T = (family, weight, px, lh, more = {}) => ({ family, weight, px, lh, ...more });
 
@@ -47,9 +51,9 @@ export const STYLES = {
     tokens: { bg: '#111111', text: '#FFFFFF', muted: '#D8D4C8', accent: '#FFC24D' },
     text: {
       // One phrase a line: the style breaks the line itself, so the writer's breaks are not kept.
-      hook: T('Karantina Headline', 700, 264, 0.86, { lines: 3, floor: 200, breaks: false, mark: 32 }),
+      hook: T('Karantina Headline', 700, 264, 0.86, { lines: 3, floor: 200, breaks: false, mark: 42 }),
       sub: T('Rubik', 600, 52, 1.3, { lines: 3 }),
-      title: T('Karantina Headline', 700, 180, 0.9, { lines: 2, floor: 140, breaks: false, mark: 24 }),
+      title: T('Karantina Headline', 700, 180, 0.9, { lines: 2, floor: 140, breaks: false, mark: 29 }),
       // On a number slide the giant number is the headline and the slide's title is the caption under it.
       ntitle: T('Rubik', 800, 60, 1.2, { lines: 2, floor: 52, breaks: false }),
       body: T('Rubik', 400, 40, 1.45, { lines: 4 }),
@@ -82,10 +86,10 @@ export const STYLES = {
     dark: true,
     tokens: { bg: '#0B1416', text: '#FFFFFF', muted: '#C7D3D6', accent: '#5FE0B5' },
     text: {
-      hook: T('Karantina Headline', 700, 156, 0.9, { lines: 3, floor: 120, breaks: true, mark: 20 }),
+      hook: T('Karantina Headline', 700, 156, 0.9, { lines: 3, floor: 120, breaks: true, mark: 25 }),
       sub: T('Rubik', 500, 34, 1.4, { lines: 3 }),
-      title: T('Karantina Headline', 700, 132, 0.92, { lines: 2, floor: 100, breaks: true, mark: 16 }),
-      ntitle: T('Karantina Headline', 700, 132, 0.92, { lines: 2, floor: 100, breaks: true, mark: 16 }),
+      title: T('Karantina Headline', 700, 132, 0.92, { lines: 2, floor: 100, breaks: true, mark: 21 }),
+      ntitle: T('Karantina Headline', 700, 132, 0.92, { lines: 2, floor: 100, breaks: true, mark: 21 }),
       body: T('Rubik', 400, 32, 1.5, { lines: 3 }),
       tbody: T('Rubik', 400, 32, 1.5, { lines: 3 }),
       number: T('Karantina', 700, 208, 0.9),

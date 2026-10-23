@@ -649,7 +649,7 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
           const subj = extra.subject || {};
           const names = postKind === 'head-to-head' && subj.a && subj.b ? `${subj.a} מול ${subj.b}` : '';
           const day = postKind === 'on-this-day' && subj.date ? String(subj.date) : '';
-          slide.category = day || names || format?.name || '';
+          // Style C's key line, at the foot of the cover: the day, or the two sides. Nothing is set over a headline.
           slide.keyLine = day || names;
         }
         drawn.push({ i, s, slide, look: {}, file, ratio: await drawSlide({ i, s, slide, look: {}, file, size }) });

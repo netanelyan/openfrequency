@@ -79,13 +79,11 @@ function drawA(m, slide, g, S) {
   if (m.kind === 'cover') {
     return {
       bt: photo ? g.y(260) : g.y(460),
-      html: `${photoHtml(slide, 'ph full')}${photo ? '<div class="ov"></div><div class="shade"></div>' : ''}
-${m.category ? `<div class="lbl">${he(m.category)}</div>` : ''}
+      html: `${photoHtml(slide, 'ph full')}${photo ? '<div class="ov"></div>' : ''}
 <div class="blk cov${photo ? '' : ' mid'}">${txt('h1', 'hl', S, 'hook', m.hook, g, { highlight: m.highlight })}${txt('p', 'sub', S, 'sub', m.sub, g)}</div>`,
     };
   }
   if (m.kind === 'end') return endHtml(m, g, S);
-  const label = m.label ? `<div class="lbl">${he(m.label)}</div>` : '';
   if (m.kind === 'number') {
     const v = m.value;
     const row = m.sides
@@ -93,14 +91,14 @@ ${m.category ? `<div class="lbl">${he(m.category)}</div>` : ''}
       : `<div class="nrow">${v.pre ? `<span class="unit">${he(v.pre)}</span>` : ''}${bigNum(v.num, g.hs(S.text.number.px))}${v.post ? `<span class="unit">${he(v.post)}</span>` : ''}</div>`;
     return {
       bt: photo ? g.y(660) : g.y(280),
-      html: `${photoHtml(slide)}${photo ? '<div class="ov"></div><div class="shade"></div>' : ''}${label}
+      html: `${photoHtml(slide)}${photo ? '<div class="ov"></div>' : ''}
 <div class="blk">${txt('h2', 'hl', S, 'ntitle', m.title, g, { highlight: m.highlight })}${m.meta ? `<div class="meta">${he(m.meta)}</div>` : ''}
 <div class="card">${m.kicker ? `<div class="clbl">${he(m.kicker)}</div>` : ''}${row}${m.body ? `<i class="rule"></i>${txt('p', 'bd', S, 'body', m.body, g)}` : ''}</div>${ctaHtml(m)}${srcHtml(slide)}</div>`,
     };
   }
   return {
     bt: photo ? g.y(660) : g.y(280),
-    html: `${photoHtml(slide)}${photo ? '<div class="ov"></div><div class="shade"></div>' : ''}${label}
+    html: `${photoHtml(slide)}${photo ? '<div class="ov"></div>' : ''}
 <div class="blk">${txt('h2', 'hl', S, 'title', m.title, g, { highlight: m.highlight })}${gfx(m)}${m.list ? listHtml(m.body, S, g) : txt('p', 'bd', S, 'tbody', m.body, g)}${ctaHtml(m)}${srcHtml(slide)}</div>`,
   };
 }
@@ -110,7 +108,6 @@ const CSS_A = (g, S) => `
 .ph.full{height:100%}
 .ov{position:absolute;inset:0 0 auto 0;height:${g.y(940)}px;background:linear-gradient(to bottom,rgba(var(--bg-rgb),0) ${g.y(520)}px,rgba(var(--bg-rgb),1) ${g.y(940)}px)}
 .k-cover .ov{height:100%;background:linear-gradient(to bottom,rgba(var(--bg-rgb),0) 35%,rgba(var(--bg-rgb),.92) 72%,rgba(var(--bg-rgb),1) 100%)}
-.lbl{top:${g.y(152)}px;font:700 ${S.text.label.px}px/1.2 'Assistant';color:var(--accent)}
 .blk{gap:${g.y(36)}px}
 .blk.cov{justify-content:flex-end;bottom:${g.y(460)}px}
 .blk.cov.mid{justify-content:center;top:${g.y(400)}px}
@@ -138,20 +135,24 @@ const CSS_A = (g, S) => `
 
 /* -------------------------------------------------------------------------------------------------- B: poster */
 
+// The highlight block of B and D: a band of the accent behind the letters, from just above the tallest to just below
+// the lowest (Karantina's letters stand from 23% to 96% of its line's box, its baseline at 86%), so it never reaches
+// the line above or below, with a little room to each side of the words. A plain background fills the whole box of a
+// face this tall and ran over the lines around it.
+const BAND = '.hl mark.hi{background:linear-gradient(to bottom,transparent 14%,var(--accent) 14%,var(--accent) 97%,transparent 97%);color:var(--on-accent);padding:0 .12em;margin:0 .04em;-webkit-box-decoration-break:clone;box-decoration-break:clone}';
+
+
 function drawB(m, slide, g, S) {
   const photo = hasPhoto(slide);
   if (m.kind === 'cover') {
     return {
       bt: photo ? g.y(560) : g.y(380),
       html: `${photoHtml(slide, 'ph full')}${photo ? '<div class="ov" data-scrim data-min="0.45" data-max="0.7"></div>' : ''}
-${m.category ? `<div class="lbl">${he(m.category)}</div>` : ''}
 <div class="blk cov">${txt('h1', 'hl', S, 'hook', m.hook, g, { highlight: m.highlight })}${txt('p', 'sub', S, 'sub', m.sub, g)}</div>
 <div class="cue">החליקו ←</div>`,
     };
   }
   if (m.kind === 'end') return endHtml(m, g, S);
-  const label = [m.label, m.kind === 'number' ? m.kicker : ''].filter(Boolean).join(' · ');
-  const top = label ? `<div class="lbl">${he(label)}</div>` : '';
   const framed = photo ? photoHtml(slide, 'fr') : '';
   if (m.kind === 'number') {
     const v = m.value;
@@ -160,25 +161,23 @@ ${m.category ? `<div class="lbl">${he(m.category)}</div>` : ''}
       : `<div class="nrow">${bigNum(v.num, g.hs(S.text.number.px))}${unitOf(v).length ? `<span class="unit">${he(unitOf(v).join(' '))}</span>` : ''}</div>`;
     return {
       bt: g.y(260),
-      html: `${top}<div class="blk">${big}${txt('div', 'cap', S, 'ntitle', m.title, g, { highlight: m.highlight })}${framed}${txt('p', 'bd', S, 'body', m.body, g)}${ctaHtml(m)}${srcHtml(slide)}</div>`,
+      html: `<div class="blk">${big}${txt('div', 'cap', S, 'ntitle', m.title, g, { highlight: m.highlight })}${framed}${txt('p', 'bd', S, 'body', m.body, g)}${ctaHtml(m)}${srcHtml(slide)}</div>`,
     };
   }
   return {
     bt: g.y(260),
-    html: `${top}<div class="blk">${txt('h2', 'hl', S, 'title', m.title, g, { highlight: m.highlight })}${framed || gfx(m)}${m.list ? listHtml(m.body, S, g) : txt('p', 'bd', S, 'tbody', m.body, g)}${ctaHtml(m)}${srcHtml(slide)}</div>`,
+    html: `<div class="blk">${txt('h2', 'hl', S, 'title', m.title, g, { highlight: m.highlight })}${framed || gfx(m)}${m.list ? listHtml(m.body, S, g) : txt('p', 'bd', S, 'tbody', m.body, g)}${ctaHtml(m)}${srcHtml(slide)}</div>`,
   };
 }
 
 const CSS_B = (g, S) => `
 .ph.full{height:100%}
 .ov{position:absolute;inset:0;background:rgba(10,10,10,var(--scrim,.45))}
-.lbl{top:${g.y(152)}px;font:600 ${S.text.label.px}px/1.2 'Rubik';color:var(--accent)}
 .blk{gap:${g.y(32)}px}
 .blk.cov{gap:${g.y(40)}px;bottom:${g.z.bottom + 36 + g.y(28)}px}
 .hl{font-family:'Karantina Headline';font-weight:700;line-height:.86;color:var(--fg)}
 .k-item .hl{line-height:.9}
-.hl mark.hi{background:var(--accent);color:var(--on-accent);padding:0 ${g.y(32)}px;-webkit-box-decoration-break:clone;box-decoration-break:clone}
-.k-item .hl mark.hi{padding:0 ${g.y(24)}px}
+${BAND}
 .sub{font:600 ${S.text.sub.px}px/1.3 'Rubik';color:var(--fg)}
 .cue{position:absolute;right:${g.z.right}px;bottom:${g.z.bottom}px;font:600 30px/1.2 'Rubik';color:var(--muted)}
 .nrow{display:flex;align-items:baseline;gap:24px}
@@ -212,7 +211,9 @@ ${m.key ? `<div class="key">${he(m.key)}</div>` : ''}`,
     };
   }
   if (m.kind === 'end') return endHtml(m, g, S);
-  const chip = m.label ? `<div class="chip${photo ? '' : ' still'}">${he(m.label)}</div>` : '';
+  // The label sits on the photograph's lower edge; a slide with no photograph has no edge for it, and no label at the
+  // top of the screen (a line over the headline reads as an eyebrow, a mark of machine-made posts).
+  const chip = m.label && photo ? `<div class="chip">${he(m.label)}</div>` : '';
   const num = m.kind === 'number'
     ? m.sides
       ? `<div class="sides">${m.sides.map((x) => `<div class="side"><span>${he(x.who)}</span>${bigNum(x.value, g.hs(96))}</div>`).join('')}</div>`
@@ -220,7 +221,7 @@ ${m.key ? `<div class="key">${he(m.key)}</div>` : ''}`,
     : '';
   const body = m.kind === 'number' ? txt('p', 'bd', S, 'body', m.body, g) : m.list ? listHtml(m.body, S, g) : txt('p', 'bd', S, 'tbody', m.body, g);
   return {
-    bt: photo ? g.y(1000) : g.y(chip ? 360 : 260),
+    bt: photo ? g.y(1000) : g.y(260),
     lift: photo ? g.y(700) : null,
     html: `${photoHtml(slide)}${chip}
 <div class="blk">${num}${txt('h2', 'hl', S, m.kind === 'number' ? 'ntitle' : 'title', m.title, g, { highlight: m.highlight })}${body}${m.kind === 'number' ? '' : gfx(m)}${ctaHtml(m)}${srcHtml(slide)}</div>`,
@@ -240,7 +241,6 @@ const CSS_C = (g, S) => `
 .sub{font:500 ${S.text.sub.px}px/1.35 'Rubik';color:var(--muted)}
 .key{position:absolute;right:${g.z.right}px;left:${g.z.left}px;bottom:${g.z.bottom}px;font:800 30px/1.2 'Rubik';color:var(--accent)}
 .chip{position:absolute;right:${g.z.right}px;top:calc(var(--bt) - ${g.y(192)}px);max-width:${1080 - g.z.left - g.z.right}px;font:900 ${g.hs(S.text.label.px)}px/1.2 'Rubik';color:#fff;background:var(--accent);padding:16px 36px;white-space:nowrap;overflow:hidden}
-.chip.still{top:${g.y(180)}px}
 .nrow{display:flex;align-items:baseline;gap:20px}
 .num{font-family:'Rubik';font-weight:900;line-height:1;color:var(--accent);white-space:nowrap;unicode-bidi:isolate}
 .unit{font:800 40px/1.1 'Rubik';color:var(--accent);white-space:nowrap}
@@ -290,7 +290,7 @@ const CSS_D = (g, S) => `
 .blk.cov{gap:${g.y(8)}px}
 .hl{font-family:'Karantina Headline';font-weight:700;line-height:.9;color:var(--fg)}
 .k-item .hl{line-height:.92}
-.hl mark.hi{background:var(--accent);color:var(--on-accent);padding:0 ${g.y(20)}px;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+${BAND}
 .sub{font:500 ${S.text.sub.px}px/1.4 'Rubik';color:var(--muted);margin-top:${g.y(28)}px}
 .bar{display:block;width:88px;height:6px;background:var(--accent);margin-top:${g.y(20)}px}
 .chip{align-self:flex-start;font:800 ${S.text.label.px}px/1.2 'Rubik';color:var(--on-accent);background:var(--accent);padding:6px 18px;white-space:nowrap}
@@ -342,9 +342,6 @@ bdi{unicode-bidi:isolate}
 .ph{position:absolute;top:0;left:0;width:100%;object-fit:cover;object-position:50% 30%;display:block}
 .ph.split{display:flex;gap:6px;overflow:hidden}
 .ph.split img{flex:1;min-width:0;height:100%;object-fit:cover}
-/* The labels over a photograph's top: a dark band from the top edge, not a shadow on the letters. */
-.shade{position:absolute;inset:0 0 auto 0;height:${g.y(340)}px;background:linear-gradient(to bottom,rgba(0,0,0,.42),rgba(0,0,0,0))}
-.lbl{position:absolute;right:${g.z.right}px;left:${g.z.left}px;white-space:nowrap;overflow:hidden}
 .blk{position:absolute;right:${g.z.right}px;left:${g.z.left}px;top:var(--bt);bottom:${g.z.bottom}px;display:flex;flex-direction:column}
 .blk>*{flex:none}
 .blk>.gfx{flex:0 1 auto;min-height:0;display:flex;flex-direction:column}

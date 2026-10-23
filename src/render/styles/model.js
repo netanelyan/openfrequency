@@ -80,7 +80,7 @@ export function numberOf(s) {
  */
 export function slideModel(s) {
   if (s.kind === 'cover') {
-    return { kind: 'cover', category: s.category || '', hook: s.hook || '', sub: s.sub || '', highlight: s.highlight || '', key: s.keyLine || '' };
+    return { kind: 'cover', hook: s.hook || '', sub: s.sub || '', highlight: s.highlight || '', key: s.keyLine || '' };
   }
   if (s.kind === 'end') return { kind: 'end', title: s.title || '', body: s.body || '', handle: s.handle || '' };
   const cta = s.isLast && s.cta?.text ? s.cta.text : '';
