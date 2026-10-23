@@ -145,6 +145,17 @@ test('no line ends on one word alone, punctuation stays on its word, two Latin w
   assert.ok(highlightIn('בעולם ה-AI?', 'AI'));
 });
 
+test('words held together are let go where they would not fit: a poster headline breaks rather than being refused', async () => {
+  const title = 'ניו זילנד, ב-23 במרץ 1988';
+  const S = STYLES.B.text.title;
+  assert.equal(fitText(title, S, { box: boxFor(S) }).ok, true, 'the check does not refuse it');
+  const slide = { kind: 'item', role: 'beat', postKind: 'story', n: 1, of: 3, title, body: 'ישראל ניצחה בחוץ ועלתה לשלב הבא.' };
+  const r = await renderHtml(draw('B', slide), { size: 'tiktok', file: path.join(out, 'letgo.jpg') });
+  assert.deepEqual(r.warnings, []);
+  const hook = 'מלמיליאן בגמר הגביע';
+  assert.equal(fitText(hook, STYLES.B.text.hook, { box: boxFor(STYLES.B.text.hook) }).ok, true);
+});
+
 test("a slide is a number slide when its point is a number, else a title and its text", () => {
   assert.equal(slideModel(number).kind, 'number');
   assert.equal(slideModel(number).value.num, '67');

@@ -63,21 +63,31 @@ const linesAt = (text, box, face, px, tracking) => text.split('\n').reduce((n, l
  */
 export function fitText(text, spec, { box, scale = 1 }) {
   const face = `${spec.family} ${spec.weight}`;
-  const t = displayText(text, { breaks: spec.breaks !== false });
-  if (!t) return { ok: true, px: spec.px * scale, lines: 0, want: 0, max: spec.lines, chars: 0 };
-  const writer = t.split('\n').length;
+  const breaks = spec.breaks !== false;
+  // As the renderer sets it: a number held to the word it counts (render.js), the last two words held together.
+  const held = displayText(text, { breaks }).replace(/(\d) (?=[א-ת])/g, '$1 ');
+  if (!held) return { ok: true, px: spec.px * scale, lines: 0, want: 0, max: spec.lines, chars: 0 };
+  const writer = held.split('\n').length;
   const max = spec.lines || 99;
-  const want = Math.min(writer, max);
+  const want = breaks ? Math.min(writer, max) : max;
   const base = spec.px * scale;
   const floor = (spec.floor || spec.px * BODY_FLOOR) * scale;
-  let px = base;
-  let lines = linesAt(t, box, face, px, spec.tracking || 0);
-  while (lines > want && px > floor) {
-    px = Math.max(floor, px - STEP * scale);
-    lines = linesAt(t, box, face, px, spec.tracking || 0);
-  }
+  const set = (t) => {
+    let px = base;
+    let lines = linesAt(t, box, face, px, spec.tracking || 0);
+    while (lines > want && px > floor) {
+      px = Math.max(floor, px - STEP * scale);
+      lines = linesAt(t, box, face, px, spec.tracking || 0);
+    }
+    return { px, lines };
+  };
+  // Words are held together only where they fit: a pair wider than the slide at the floor ("ב-23 במרץ 1988" in a
+  // poster's headline) breaks like any other words, as the renderer lets it, rather than refusing a text the writer
+  // could never fix.
+  let r = set(held);
+  if (r.lines === Infinity) r = set(held.replace(/ /g, ' '));
   const chars = Math.floor((max * box) / widthOf('ה', face, floor, spec.tracking || 0) * 0.92);
-  return { ok: lines <= max, px: Math.round(px), lines, want, max, chars };
+  return { ok: r.lines <= max, px: Math.round(r.px), lines: r.lines, want, max, chars };
 }
 
 /** The width a style's text has on one platform: the slide less its side bands, less a card's inset. */

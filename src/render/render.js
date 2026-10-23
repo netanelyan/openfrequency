@@ -254,7 +254,14 @@ export async function renderHtml(html, { size, file, floor = FIT_FLOOR, scale = 
         el.style.fontSize = `${px}px`;
       };
       const bad = [];
-      for (const el of els) {
+      // Words held together (the last two of a line, a number and the word it counts) are held only where they fit:
+      // a pair wider than the slide at the floor is let go, and the text is set again, breaking like any other.
+      const letGo = (el) => {
+        const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+        for (let n = w.nextNode(); n; n = w.nextNode()) n.nodeValue = n.nodeValue.replace(/ /g, ' ');
+        for (const b of el.querySelectorAll('bdi')) if (/\s/.test(b.textContent)) b.style.whiteSpace = '';
+      };
+      const fitOne = (el) => {
         const d = el.dataset;
         const floor = Number(d.floor);
         let px = Math.max(floor, Number(d.px) * scale);
@@ -262,6 +269,13 @@ export async function renderHtml(html, { size, file, floor = FIT_FLOOR, scale = 
         while ((lineCount(el) > Number(d.want) || sideways(el)) && px > floor) {
           px = Math.max(floor, px - Number(d.step) * Math.min(1, scale + 0.2));
           set(el, px);
+        }
+      };
+      for (const el of els) {
+        fitOne(el);
+        if (sideways(el) && !el.classList.contains('num')) {
+          letGo(el);
+          fitOne(el);
         }
       }
       // A number and its unit on one row: a long number is set smaller until the row fits the slide's width.
