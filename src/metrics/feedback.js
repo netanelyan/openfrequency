@@ -1,10 +1,11 @@
 import { DAY, HOUR, now, nowIso } from '../core/clock.js';
-import { audit } from '../core/store.js';
+import { audit, getSetting, setSetting } from '../core/store.js';
 import { j } from '../db/index.js';
 import { hookPatterns } from '../formats/kinds.js';
 import { israelDate } from '../schedule/israel.js';
 import { resolveFormat } from '../trends/index.js';
 import { collectMetrics } from './collect.js';
+import { chooseStyle } from '../render/style.js';
 
 // The morning's feedback, once a day per account, before anything is drafted.
 //
@@ -183,6 +184,8 @@ export async function morningFeedback(ctx, pack, { t = now(), pull = true, read 
     // Read again unless read in the last two hours: the morning's numbers, not yesterday's.
     if (ids.length) await collectMetrics(ctx, { t, only: ids, freshHours: 2, ...read }).catch((e) => ctx.log?.(`feedback metrics ${pack.id}: ${e.message}`));
   }
+  // A style test whose two weeks are over is settled first: the posts from now on are drawn in its winner.
+  settleStyleTest(db, pack, { t, apply: (name) => chooseStyle(db, pack, name, { test: false }) });
   const posts = classifyAccount(db, pack, { t });
   const day = israelDate(t);
   const made = [];
@@ -233,4 +236,56 @@ export function latestFeedback(db, packs) {
       : [];
     return { pack, day: row.day, text: row.text, report, directives };
   });
+}
+
+/* ------------------------------------------------------------------------------------------------- style test */
+
+// A style test (src/render/style.js) drew an account's posts in two styles in turn for 14 days. The morning after it
+// ends, each style's posts are read the way the boxes read a post (views, and likes, comments, shares and saves per
+// view, at the reading nearest 72 hours), and the style whose posts did better on both together is locked: pack.json
+// "style" names it and the test is off. With fewer than STYLE_TEST_MIN posts in either style nothing is concluded,
+// the account keeps the style it had, and the result says so.
+
+export const STYLE_TEST_MIN = 3;
+
+/** Which of two styles did better: { winner, styles: { X: { posts, views, rate } }, why }. Pure. */
+export function judgeStyles(rows, styles) {
+  const by = Object.fromEntries(styles.map((s) => [s, rows.filter((r) => r.style === s)]));
+  const stat = Object.fromEntries(styles.map((s) => [s, { posts: by[s].length, views: median(by[s].map((r) => r.views)), rate: median(by[s].filter((r) => r.views > 0 && r.engagement != null).map((r) => r.engagement / r.views)) }]));
+  if (styles.some((s) => stat[s].posts < STYLE_TEST_MIN)) return { winner: null, styles: stat, why: `פחות מ-${STYLE_TEST_MIN} פוסטים עם מספרים באחד הסגנונות, אז אין הכרעה` };
+  const top = (k) => Math.max(...styles.map((s) => stat[s][k] || 0)) || 1;
+  const score = (s) => (stat[s].views || 0) / top('views') + (stat[s].rate || 0) / top('rate');
+  const [a, b] = styles;
+  const winner = score(a) >= score(b) ? a : b;
+  return { winner, styles: stat, why: `לפוסטים בסגנון ${winner} היו יותר צפיות ויותר תגובה לכל צפייה, יחד` };
+}
+
+/**
+ * Settle an account's style test once its 14 days are over: judge it, lock the winner and turn the test off.
+ * Returns the result, or null when there is no test to settle. `apply(name)`: what locks a style (the caller's, so
+ * this module writes no pack file itself).
+ */
+export function settleStyleTest(db, pack, { t = now(), apply = null } = {}) {
+  const test = getSetting(db, `style-test:${pack.id}`, null);
+  if (!test || test.result || Date.parse(test.until) > t) return null;
+  const platforms = pack.meta.platforms || ['tiktok', 'instagram'];
+  const rows = db
+    .all("SELECT id, checks_json FROM posts WHERE account_id = ? AND status = 'published' AND published_at >= ? AND published_at <= ?", pack.id, test.from, test.until)
+    .map((p) => {
+      const style = j(p.checks_json, {})?.styleName;
+      for (const plat of platforms) {
+        const rs = readings(db, p.id, plat);
+        if (!rs.length) continue;
+        const r = readingOf(nearest(rs, 72, 48) || rs[rs.length - 1]);
+        return { post: p.id, style, platform: plat, views: r.views, engagement: r.engagement };
+      }
+      return null;
+    })
+    .filter((r) => r && test.styles.includes(r.style));
+  const verdict = judgeStyles(rows, test.styles);
+  const result = { ...verdict, at: new Date(t).toISOString(), locked: verdict.winner || pack.meta.style?.name || null };
+  if (result.locked && apply) apply(result.locked);
+  setSetting(db, `style-test:${pack.id}`, { ...test, winner: verdict.winner, result });
+  audit(db, { action: 'style-test', accountId: pack.id, detail: { winner: verdict.winner, locked: result.locked } });
+  return result;
 }

@@ -155,7 +155,7 @@ the crop aimed at the face. Otherwise the slide keeps its graphic.
 | Rule | Where it is enforced |
 |---|---|
 | 1. Official APIs only; no likes, follows, comments, DMs or logged-in reading | `src/core/net.js` is the only `fetch`. Its write allowlist is Claude, Zernio's create-post, Meta's two publishing endpoints, deleting our own Instagram post after a takedown notice, and an empty Web Push to the owner's own browser (no words in it; never Telegram, a social host). It refuses Zernio's inbox and every Graph edge for comments, mentions, tags, messages, hashtags and other accounts by name. Tests scan the code for any other `fetch` |
-| 2. Each account a distinct brand | `src/packs/validate.js`: no two packs share a template, a display face, a handle, a name or a palette too close to tell apart; a cross-promotion check on every post |
+| 2. Each account a distinct brand | `src/packs/validate.js`: no two packs share a template, a display face, a handle, a name or a palette too close to tell apart; under the slide styles, two accounts may share a style but never a style and a close accent; a cross-promotion check on every post |
 | 3. Honest by construction | `src/verify/claims.js`: every quote verbatim in a stored document of that account's approved source, every number in its quotes, the render gate's token. `src/voice/honesty.js` refuses invented experience and fake badges or metrics |
 | 4. AI disclosure | TikTok's `video_made_with_ai` flag through Zernio; a caption line on Instagram |
 | 5. Rights | photographs from Pexels, Unsplash and Wikimedia Commons (licence stored, Commons licences on an allowlist, logos and crests refused); every photo screened for blood, injuries, weapons, watermarks; takedowns on notice; quotes short (4 to 40 words) |
@@ -187,6 +187,38 @@ and edit its files.
 Validation refuses a pack with weak contrast, a source without https or a reason to
 trust it, a money niche without the investment-advice check, or anything two packs
 share.
+
+### Slide styles
+
+An account can be drawn in one of four slide styles (`pack.json` `"style": { "name", "accent", "bg", "panel", "test" }`,
+`src/render/styles/`). A style keeps the post as it is (its slides, their order, which
+slide carries a number) and replaces the type, how the text is treated and the chrome:
+
+| Style | | For |
+|---|---|---|
+| A, editorial card | dark; a photograph above, the number on a card (Heebo, Assistant) | prices, data, comparisons: finance, real estate, travel, tech, B2B |
+| B, poster | a condensed face set huge, the key words on a block of colour, a framed photograph (Karantina, Rubik) | sports, combat sports, gaming, fitness, events |
+| C, split | light; the photograph on top, the text on a light panel, never on the photograph (Rubik) | fashion, beauty, food, home, wellness, shops, kids |
+| D, native dark | a photograph fading into a dark ground, a condensed headline (Karantina, Rubik) | news, history, culture; the default |
+
+No letter has an outline or a shadow, and no slide carries a progress bar, a counter,
+dots, a handle or a blurred photograph: TikTok draws its own furniture. Text keeps out
+of TikTok's bands on all four sides (top 140, bottom 420, both sides 152 px, since the
+Hebrew app mirrors its button rail; Instagram's 4:5 keeps 80, 120 and 96), and the
+renderer refuses a line inside one. Each slide may mark one `highlight`, a short phrase
+of its own headline, which the writer chooses. A headline is set smaller in steps down to
+its style's floor before it takes another line; one still too long is a check failure
+the repair loop sends back to the writer, with about how many characters fit
+(`src/render/styles/fit.js`, from the bundled faces' widths: `npm run styles:metrics`).
+
+Onboarding suggests a style from what the account is about and its colours, and gives
+a second customer in the same niche with a close colour the next best one
+(`src/onboarding/style.js`). On Teder, *Accounts* > *להחליף סגנון* shows the account's
+last post in all four styles side by side and switches it; a switch applies from the
+next post. An optional style test draws the posts in the two best-fit styles in turn for
+14 days, and the morning feedback then locks the one whose posts did better on views
+and engagement together (shown in *Results*). `npm run styles:review -- <account>=<db>`
+draws an account's last post from another database (a launch set) for that page.
 
 ## Autonomy and learning
 
@@ -323,6 +355,8 @@ fetches each slide from `MEDIA_PUBLIC_BASE_URL`, which must be live first.
 | `npm run zernio:check`, `npm run instagram:check`, `npm run instagram:token` | the publishers' checks and Instagram's token ([Publishing](#publishing)) |
 | `npm run live-day -- --allow-api --confirm` | one real day of posts on the API, and what each cost |
 | `npm run compare -- next\|status\|score` | the cost and quality comparison behind [docs/costs.md](docs/costs.md) |
+| `npm run styles:review [-- <account>=<db>...]` | each account's last post in all four slide styles, for Teder's styles page ([Slide styles](#slide-styles)) |
+| `npm run styles:metrics` | measures the slide styles' faces again, for the check that a headline fits its style |
 | `npm run check:public` | fails if anything committed looks private (also a pre-commit hook) |
 
 **Modes.** `OF_MODE=recorded` runs on each pack's recordings, every check as live;

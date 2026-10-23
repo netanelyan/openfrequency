@@ -14,6 +14,7 @@ import * as data from './data.js';
 import * as pages from './pages.js';
 import * as act from './actions.js';
 import { onboardingRoutes } from './onboarding.js';
+import { previewFile, stylesRoutes } from './styles.js';
 import { loadPost } from '../pipeline/build.js';
 import { lockedStyle } from '../render/style.js';
 import { latestNotification } from '../notify/index.js';
@@ -133,6 +134,7 @@ export function createHandler(ctx, { port, env = process.env, accounts = null } 
     ['POST', /^\/push\/unsubscribe$/, (c, u, m, f) => act.unsubscribePush(c, u, {}, f)],
     ['POST', /^\/post\/([\w-]+)\/old-drafts-deleted$/, (c, u, m) => act.oldDraftsDeleted(c, u, { id: m[1] })],
     ...onboardingRoutes(),
+    ...stylesRoutes(),
   ];
 
   const handler = async function handler(req, res) {
@@ -266,6 +268,15 @@ export function createHandler(ctx, { port, env = process.env, accounts = null } 
         const root = path.resolve(ctx.mediaRoot || dataDir());
         if (!file || !path.resolve(file).startsWith(root) || !existsSync(file)) return send(req, res, 404, 'no such slide', 'text/plain; charset=utf-8');
         res.writeHead(200, { 'content-type': 'image/jpeg', 'content-length': statSync(file).size, 'cache-control': 'private, max-age=86400', 'x-content-type-options': 'nosniff' });
+        return createReadStream(file).pipe(res);
+      }
+      // ---- a style preview (src/web/styles.js): a file its account's own manifest names, the workspace's accounts only
+      const sm = /^\/styles\/img\/([\w-]+)\/([\w-]+)\/([A-D])\/(\d+)$/.exec(p);
+      if (sm) {
+        const pk = owns(c, sm[1]) ? c.pack(sm[1]) : null;
+        const file = pk ? previewFile(pk, sm[2], sm[3], sm[4]) : null;
+        if (!file) return send(req, res, 404, 'no such preview', 'text/plain; charset=utf-8');
+        res.writeHead(200, { 'content-type': 'image/jpeg', 'content-length': statSync(file).size, 'cache-control': 'private, max-age=3600', 'x-content-type-options': 'nosniff' });
         return createReadStream(file).pipe(res);
       }
       // Each account's colour; it names the accounts, so a browser keeps it per session (vary: cookie).

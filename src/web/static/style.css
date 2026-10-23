@@ -914,3 +914,43 @@ details.more[open] > summary { background: var(--fill-2); }
 .tparts .vbar { width: 56px; margin: 0; }
 .tparts b { font-weight: 600; color: var(--ink-2); text-align: end; }
 @media (max-width: 560px) { .topic { grid-template-columns: 1fr; } .topic .tside { justify-items: start; } }
+
+/* ---- TikTok view (the post page): TikTok's furniture over each slide, to see what runs under it. Mirrored as the
+   Hebrew app draws it: the button rail on the left. The dashed box is the band the slide styles keep text inside. */
+.ttv { position: absolute; opacity: 0; pointer-events: none; }
+.ttv-l { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 8px; padding: 4px 12px; border-radius: 980px; font-size: 13px; font-weight: 600; color: var(--ink-3); background: var(--inset); cursor: pointer; user-select: none; }
+.ttv-l svg.i { width: 16px; height: 16px; }
+.ttv:checked + .ttv-l { color: #fff; background: var(--accent); }
+.ttv:focus-visible + .ttv-l { outline: 2px solid var(--accent); outline-offset: 2px; }
+.strip .tt { display: none; position: absolute; inset: 0; pointer-events: none; container-type: inline-size; color: #fff; z-index: 2; }
+.ttv:checked ~ .strip .tt { display: block; }
+.ttv:checked ~ .strip a .n, .ttv:checked ~ .strip a .has { display: none; }
+.tt > span { position: absolute; }
+.tt-safe { top: 7.29%; bottom: 21.88%; left: 14.07%; right: 14.07%; border: 1px dashed rgba(255, 90, 90, 0.9); }
+.tt-tabs { top: 3.6%; left: 0; right: 0; display: flex; justify-content: center; gap: 6cqw; font: 600 4.6cqw/1.2 system-ui, sans-serif; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6); }
+.tt-tabs i { font-style: normal; opacity: 0.75; }
+.tt-tabs b { border-bottom: 0.6cqw solid #fff; padding-bottom: 0.6cqw; }
+.tt-col { left: 2.6%; bottom: 17.5%; width: 11%; display: flex; flex-direction: column; align-items: center; gap: 4.6cqw; }
+.tt-col i { display: block; width: 8.4cqw; height: 8.4cqw; border-radius: 50%; background: rgba(255, 255, 255, 0.92); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4); }
+.tt-col i.av { width: 10.5cqw; height: 10.5cqw; background: #8a8a8e; border: 0.5cqw solid #fff; }
+.tt-col i.disc { background: #222; border: 1.6cqw solid #555; }
+.tt-dots { bottom: 22.6%; left: 0; right: 0; display: flex; justify-content: center; gap: 1.4cqw; }
+.tt-dots i { width: 1.7cqw; height: 1.7cqw; border-radius: 50%; background: rgba(255, 255, 255, 0.5); }
+.tt-dots i.on { background: #fff; }
+.tt-cap { right: 3.5%; left: 16%; bottom: 8.6%; display: flex; flex-direction: column; gap: 1cqw; text-align: right; font: 400 3.9cqw/1.35 system-ui, sans-serif; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7); }
+.tt-cap b { font-weight: 700; direction: ltr; text-align: right; }
+.tt-cap span { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.tt-bar { left: 0; right: 0; bottom: 0; height: 6.4%; background: #000; }
+
+/* ---- the slide styles page */
+.stylegrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin: 12px 0; }
+@media (max-width: 1100px) { .stylegrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .stylegrid { grid-template-columns: minmax(0, 1fr); } }
+.stylecol { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 14px; background: var(--inset); min-width: 0; }
+.stylecol.on { box-shadow: inset 0 0 0 2px var(--accent); }
+.stylecol header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.stylestrip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.stylestrip img { width: 100%; height: auto; aspect-ratio: 9 / 16; object-fit: cover; border-radius: 8px; display: block; background: #000; }
+.stylecol .sw { display: inline-block; width: 12px; height: 12px; border-radius: 50%; vertical-align: -1px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.2); }
+.warnline { display: flex; gap: 6px; align-items: flex-start; color: var(--warn, #b26b00); }
+.warnline svg.i { width: 15px; height: 15px; flex: none; margin-top: 2px; }

@@ -149,10 +149,11 @@ function snapshotB() {
 
 // Every page, as A would open it, and as A might try to reach B's: by ?account=, by B's ids in the address.
 const pagesFor = () => [
-  '/', '/posts', '/all', '/accounts', '/results', '/sources', '/facts', '/topics', '/rivals', '/sounds', '/settings', '/more', '/new',
+  '/', '/posts', '/all', '/accounts', '/results', '/sources', '/facts', '/topics', '/rivals', '/sounds', '/settings', '/more', '/new', '/styles',
   '/static/accounts.css', '/notifications/latest.json',
   '/?account=bravo', '/posts?account=bravo', '/accounts?account=bravo', '/results?account=bravo', '/sources?account=bravo', '/facts?account=bravo', '/topics?account=bravo', '/rivals?account=bravo', '/sounds?account=bravo', '/settings?account=loose',
   `/post/${B.post}`, `/media/${B.post}/tiktok/0`, `/media/${B.post}/instagram/0`, `/new/${B.onboarding}`,
+  '/styles?account=bravo', `/styles/img/bravo/${B.post}-000000/A/0`,
 ];
 
 test('workspace A sees nothing of workspace B, or of an account in no workspace: on every page, by every way in', async () => {
@@ -215,6 +216,8 @@ const casesFor = () => {
     [`/takedowns/${B.takedown}/deleted`, { platform: 'tiktok' }],
     ['/accounts/bravo/mode', { mode: 'auto' }],
     ['/accounts/bravo/style'],
+    ['/accounts/bravo/style-pick', { style: 'B' }],
+    ['/accounts/bravo/style-test', { on: '1' }],
     ['/accounts/bravo/kill'],
     ['/accounts/bravo/resume'],
     ['/accounts/loose/kill'],

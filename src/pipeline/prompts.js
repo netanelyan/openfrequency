@@ -1,5 +1,6 @@
 import { COMPLIANCE } from '../rules/compliance.js';
 import { overlayOf } from '../rules/overlay.js';
+import { styleRoom } from '../render/styles/fit.js';
 import { BEAT, MAX_HASHTAGS, STORY } from '../rules/caption.js';
 import { AD, BUREAUCRATIC, CALQUES, CONNECTIVES, FILLER, FORMAL, LIMITS, TEASER, limitsFor } from '../voice/tells.js';
 import { focusText } from '../sources/text.js';
@@ -87,6 +88,7 @@ export const SLIDES_SCHEMA = {
     hook: { type: 'string' },
     sub: { type: 'string' },
     hookPattern: { type: 'string' },
+    hookHighlight: { type: 'string' },
     subject: SUBJECT,
     slides: {
       type: 'array',
@@ -101,8 +103,9 @@ export const SLIDES_SCHEMA = {
           facts: { type: 'array', items: { type: 'string' } },
           visual: VISUAL_SCHEMA,
           imageQuery: { type: 'string' },
+          highlight: { type: 'string' },
         },
-        required: ['role', 'title', 'body', 'a', 'b', 'facts', 'visual', 'imageQuery'],
+        required: ['role', 'title', 'body', 'a', 'b', 'facts', 'visual', 'imageQuery', 'highlight'],
         additionalProperties: false,
       },
     },
@@ -118,7 +121,7 @@ export const SLIDES_SCHEMA = {
     keywords: { type: 'array', items: { type: 'string' } },
     coverVisual: VISUAL_SCHEMA,
   },
-  required: ['hook', 'sub', 'hookPattern', 'subject', 'slides', 'story', 'captionShort', 'question', 'keywords', 'coverVisual'],
+  required: ['hook', 'sub', 'hookPattern', 'hookHighlight', 'subject', 'slides', 'story', 'captionShort', 'question', 'keywords', 'coverVisual'],
   additionalProperties: false,
 };
 
@@ -312,6 +315,7 @@ const SLIDES_TASK = {
 The request names the format and its kind, the content slides with their roles, the verified facts, the outline and the cover pattern to follow. Write:
 - hook: the cover line. 3 to 11 words, after the cover pattern the request names (adapt it to this post, never copy it word for word). It makes them need the second slide: a real question or a concrete fact that only the slides explain ("איך ברצלונה הפכה 4:0 ל-6:1 בקאמפ נואו?" pulls; "ברצלונה ניצחה 6:1" is already over), built on the post's most surprising concrete detail where the pattern allows (a score, a sum, a quote, a name). It names what the post is about, as one sentence or one question: no colon, no label, no teaser that hides the subject. Never only the famous name of the story, and never the payoff the last slide holds. A count it promises ("3 רמזים", "5 ...") is the count of the slides that follow. A number only if it is the number of content slides, a top 5 or 10, or it appears in a fact's quote. hookPattern: that pattern's id.
 - sub: one short line under the cover line, or "" when the cover line alone fills the cover's lines (LINES in the request).
+- hookHighlight, and each slide's highlight: the one word or short phrase (up to 3 words) of the cover line, or of that slide's title, that the design marks in the account's colour: the number, the name or the word the line turns on, copied exactly as it is written there; or "" when nothing in it stands out. One a slide at most, never the whole line.
 - subject: as in the outline (you may shorten a name).
 - slides: exactly the outline's content slides, the same roles in the same order, each { role, title: up to 60 characters, body: up to 230 characters in one to three short sentences, broken into lines as the request's LINES says (or one item a line, where the shape says so), a and b: the two values on a head-to-head stat slide and "" everywhere else, facts: the ids of the facts it states }. Every number on a slide, dates and years included, must appear in the quotes of the facts it lists.
 - story, captionShort, keywords: as the account's rules say. For a legacy list post, the story may be in "hook" alone, and captionShort and keywords may be empty.
@@ -460,7 +464,7 @@ export function steerLine(steer) {
   return '';
 }
 
-export function slidesUser({ format, n, outline, facts, edits = [], problems = [], lastDraft = null, hook = null, cta = null, day = null, pack = null, steer = null, niche = '' }) {
+export function slidesUser({ format, n, outline, facts, edits = [], problems = [], lastDraft = null, hook = null, cta = null, day = null, pack = null, steer = null, niche = '', style = null }) {
   const legacy = kindName(format) === 'list';
   const body = limitsFor('slideBody', pack);
   const sub = limitsFor('sub', pack);
@@ -478,6 +482,7 @@ export function slidesUser({ format, n, outline, facts, edits = [], problems = [
     sub.maxChars < LIMITS.sub.maxChars ? `SUB: the line under the cover is at most ${sub.maxChars} characters, one punchy line that makes them swipe (the stakes or a tease, never an explanation of the topic), or "".` : '',
     !legacy ? `VISUALS: at least ${visualsNeeded(n)} of the ${n} content slides carry a visual (a stat slide's two values count).` : '',
     linesRule(pack),
+    styleRoomFor(pack, style),
     steerLine(steer),
     niche,
     `TOPIC: ${outline.topic}`,
@@ -526,12 +531,13 @@ export function repairPrompt(pack, { ttl = '5m' } = {}) {
  * The repair's user turn: the facts the post may cite, then each refused text with the checks' messages.
  * targets: [{ target, now: { text } | { title, body, a, b, facts }, problems: [msg], limits, last, refused }].
  */
-export function repairUser({ format, topic, facts, targets, pack = null }) {
+export function repairUser({ format, topic, facts, targets, pack = null, style = null }) {
   const lim = (l) => (l ? ` (at most ${l.maxChars} characters${l.sentences ? ` and ${l.sentences} sentences` : ''})` : '');
   return [
     formatHead(format),
     `TOPIC: ${topic}`,
     linesRule(pack),
+    styleRoomFor(pack, style),
     'FACTS THE POST MAY CITE (each with its id and the words of its source):',
     ...facts.map((f) => `- ${f.key}${f.who ? ` (ATTRIBUTED to ${f.whoHe || f.who}: name them and that they said it)` : ''}: ${f.claim}  [quote: "${f.quote}"]`),
     '',
@@ -549,6 +555,12 @@ export function repairUser({ format, topic, facts, targets, pack = null }) {
   ]
     .filter((x) => x !== '')
     .join('\n');
+}
+
+/** The room the account's slide style gives each text (src/render/styles/fit.js), or "" for the older templates. */
+export function styleRoomFor(pack, style = null) {
+  const name = style || pack?.meta?.style?.name;
+  return name ? styleRoom(name, { platforms: pack?.meta?.platforms || ['tiktok'] }) : '';
 }
 
 /** The kind's own instructions, for tests and tools that show one. */

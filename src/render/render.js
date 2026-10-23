@@ -11,6 +11,7 @@ import { slideHasVisual } from './visuals.js';
 import { focusOf } from '../images/safety.js';
 import { overlayOf } from '../rules/overlay.js';
 import { fillsCover } from '../images/size.js';
+import { stylePage } from './styles/index.js';
 
 // Slides to JPEG, through headless Chromium, because Hebrew needs real
 // bidirectional layout and shaping and the browser is the thing that has it.
@@ -74,7 +75,13 @@ const FIT_FLOOR = 0.6;
 const EVEN_FLOOR = 0.8;
 
 /** One HTML page to one JPEG. Returns { file, fitted }. */
-export async function renderHtml(html, { size, file, floor = FIT_FLOOR, scale = 1 }) {
+export async function renderHtml(html, { size, file, floor = FIT_FLOOR, scale = 1, lenient = false }) {
+  // A preview (the style picker, a review) is drawn even when it does not fit, and says so: { warnings }.
+  const warnings = [];
+  const refuse = (message, code) => {
+    if (lenient && ['overflow', 'safe_zone', 'fit'].includes(code)) warnings.push({ code, message });
+    else throw new RenderError(message, code);
+  };
   const geo = SIZES[size];
   const browser = await getBrowser();
   const context = await browser.newContext({ viewport: { width: geo.w, height: geo.h }, deviceScaleFactor: 1, locale: 'he-IL', javaScriptEnabled: true });
@@ -130,7 +137,7 @@ export async function renderHtml(html, { size, file, floor = FIT_FLOOR, scale = 
 
     // A photograph: measure the brightest band where the text sits and set the scrim.
     await tab.evaluate(() => {
-      const img = document.querySelector('img.photo');
+      const img = document.querySelector('img.photo, img.ph.full');
       const scrim = document.querySelector('[data-scrim]');
       if (!img || !scrim) return;
       const W = 54;
@@ -159,7 +166,11 @@ export async function renderHtml(html, { size, file, floor = FIT_FLOOR, scale = 
       // White text over (1 - a) * L + a * scrim(~0.003) must reach 7:1:  1.05 / (L' + 0.05) >= 7
       const want = 1.05 / 7 - 0.05;
       const a = worst <= want ? 0.35 : Math.min(0.96, (worst - want) / (worst - 0.003));
-      scrim.style.setProperty('--scrim', String(Math.max(0.35, a).toFixed(2)));
+      // A style sets its own layer (B's flat dark one, from 0.45): it is raised for a bright photograph, never past its
+      // ceiling, so the photograph is still there to see.
+      const lo = Number(scrim.dataset.min || 0.35);
+      const hi = Number(scrim.dataset.max || 0.96);
+      scrim.style.setProperty('--scrim', String(Math.min(hi, Math.max(lo, a)).toFixed(2)));
       document.body.dataset.scrim = String(a.toFixed(2));
     });
 
@@ -207,6 +218,106 @@ export async function renderHtml(html, { size, file, floor = FIT_FLOOR, scale = 
       // reversed the pieces ("GPT--ב 5.6").
       for (const b of document.querySelectorAll('bdi')) if (!/\s/.test(b.textContent)) b.style.whiteSpace = 'nowrap';
     });
+
+    // A styled slide (src/render/styles): each text is set at its style's size and, while it takes more lines than
+    // the writer broke it in (or more than the style allows), a step smaller, down to its floor; at the floor it may
+    // take another line, never more than the style's. Then the block must fit its room: a block too tall moves up
+    // where the style lets it (data-lift: over C's and D's photograph, which gets shorter in C), then its texts are
+    // set smaller together down to their floors. What still does not fit is refused, and said which text it is.
+    const styled = await tab.evaluate(({ scale }) => {
+      const b = document.body;
+      if (!b.dataset.style) return null;
+      const lineCount = (el) => {
+        const r = document.createRange();
+        r.selectNodeContents(el);
+        const fs = parseFloat(getComputedStyle(el).fontSize);
+        const mids = [];
+        for (const x of r.getClientRects()) {
+          if (!x.width || !x.height) continue;
+          const mid = (x.top + x.bottom) / 2;
+          if (!mids.some((m) => Math.abs(m - mid) < fs * 0.45)) mids.push(mid);
+        }
+        return mids.length;
+      };
+      const sideways = (el) => {
+        const box = el.getBoundingClientRect();
+        const r = document.createRange();
+        r.selectNodeContents(el);
+        const ink = r.getBoundingClientRect();
+        return ink.width > 0 && (ink.left < box.left - 2 || ink.right > box.right + 2);
+      };
+      const text = (el) => el.textContent.replace(/\s+/g, ' ').trim().slice(0, 40);
+      const els = [...document.querySelectorAll('.sf')];
+      const at = new Map();
+      const set = (el, px) => {
+        at.set(el, px);
+        el.style.fontSize = `${px}px`;
+      };
+      const bad = [];
+      for (const el of els) {
+        const d = el.dataset;
+        const floor = Number(d.floor);
+        let px = Math.max(floor, Number(d.px) * scale);
+        set(el, px);
+        while ((lineCount(el) > Number(d.want) || sideways(el)) && px > floor) {
+          px = Math.max(floor, px - Number(d.step) * Math.min(1, scale + 0.2));
+          set(el, px);
+        }
+      }
+      // A number and its unit on one row: a long number is set smaller until the row fits the slide's width.
+      for (const row of document.querySelectorAll('.nrow, .sides')) {
+        const nums = [...row.querySelectorAll('.num')];
+        const wide = () => {
+          const box = row.getBoundingClientRect();
+          return [...row.querySelectorAll('*')].some((c) => {
+            const r = c.getBoundingClientRect();
+            return r.width && (r.left < box.left - 2 || r.right > box.right + 2);
+          });
+        };
+        while (wide() && nums.some((el) => at.get(el) > Number(el.dataset.floor))) {
+          for (const el of nums) set(el, Math.max(Number(el.dataset.floor), at.get(el) - Number(el.dataset.step)));
+        }
+        if (wide()) bad.push({ code: 'fit', text: text(row), why: 'the number and its unit are wider than the slide' });
+      }
+      const blk = document.querySelector('.blk');
+      const over = () => {
+        if (!blk) return false;
+        const box = blk.getBoundingClientRect();
+        return [...blk.children].some((c) => {
+          const r = c.getBoundingClientRect();
+          return r.height > 0 && (r.bottom > box.bottom + 1 || r.top < box.top - 1);
+        });
+      };
+      let bt = parseFloat(getComputedStyle(b).getPropertyValue('--bt'));
+      const lift = b.dataset.lift ? Number(b.dataset.lift) : null;
+      while (over() && lift != null && bt > lift) {
+        bt = Math.max(lift, bt - 8);
+        b.style.setProperty('--bt', `${bt}px`);
+      }
+      // Smaller together: the texts beside the headline first, then the headline, each to its own floor.
+      for (const group of [els.filter((el) => !el.classList.contains('hl') && !el.classList.contains('num')), els.filter((el) => el.classList.contains('hl'))]) {
+        let moved = true;
+        while (over() && moved) {
+          moved = false;
+          for (const el of group) {
+            const px = at.get(el);
+            const floor = Number(el.dataset.floor);
+            if (px > floor) {
+              set(el, Math.max(floor, px - Math.max(1, px * 0.04)));
+              moved = true;
+            }
+          }
+        }
+      }
+      for (const el of els) {
+        const n = lineCount(el);
+        if (n > Number(el.dataset.max)) bad.push({ code: 'fit', text: text(el), why: `${n} lines at ${Math.round(at.get(el))}px, the style allows ${el.dataset.max}` });
+        else if (sideways(el)) bad.push({ code: 'fit', text: text(el), why: `wider than the slide at ${Math.round(at.get(el))}px` });
+      }
+      if (over()) bad.push({ code: 'overflow', text: text(blk), why: 'the block is taller than its room even with every text at its floor' });
+      return { bad, bt, fitted: els.map((el) => ({ text: text(el), from: Math.round(Number(el.dataset.px)), to: Math.round(at.get(el)), fits: true })) };
+    }, { scale });
+    if (styled?.bad.length) for (const x of styled.bad) refuse(`too long for the style: "${x.text}..." (${x.why})`, x.code);
 
     // Shrink any block that overflows, 2% a step, down to the floor. `scale` sets every block smaller first: the size
     // the rest of the post's content slides came out at (renderPost), so a post's text is one size from slide to slide.
@@ -291,14 +402,21 @@ export async function renderHtml(html, { size, file, floor = FIT_FLOOR, scale = 
       return out;
     }, { floor, scale });
     const failed = fitted.filter((f) => !f.fits);
-    if (failed.length) throw new RenderError(`too long for the slide even at ${Math.round(floor * 100)}% size: "${failed[0].text}..."`, 'overflow');
+    if (failed.length) refuse(`too long for the slide even at ${Math.round(floor * 100)}% size: "${failed[0].text}..."`, 'overflow');
+    // A styled slide's texts are what its size is measured by; its graphic's fit is the shared pass's.
+    if (styled) fitted.unshift(...styled.fitted);
 
     // The outline on text over a picture, and every line measured against the safe zone.
     const zone = await tab.evaluate(() => {
       const b = document.body;
       const H = innerHeight;
-      const top = Number(b.dataset.zoneTop || 0) * H;
-      const bottom = H - Number(b.dataset.zoneBottom || 0) * H;
+      // A styled slide keeps all four bands clear, in px (data-safe: top, right, bottom, left); the older templates
+      // keep the top and the bottom, as a share of the height.
+      const safe = b.dataset.safe ? b.dataset.safe.split(',').map(Number) : null;
+      const top = safe ? safe[0] : Number(b.dataset.zoneTop || 0) * H;
+      const bottom = H - (safe ? safe[2] : Number(b.dataset.zoneBottom || 0) * H);
+      const left = safe ? safe[3] : -Infinity;
+      const right = safe ? innerWidth - safe[1] : Infinity;
       const em = Number(b.dataset.outline || 0);
       const photo = b.classList.contains('has-photo');
       const over = photo || b.classList.contains('has-bg');
@@ -330,19 +448,20 @@ export async function renderHtml(html, { size, file, floor = FIT_FLOOR, scale = 
         // A line's box is its face's ascent and descent, taller than the letters in a display face: the letters sit in
         // the em box at its middle, and that is what must clear the zone ("02/06" in a 56 px face measured 73 px tall).
         const inkPad = (x) => Math.max(0, (x.height - parseFloat(cs.fontSize)) / 2);
-        const hit = r.find((x) => x.top + inkPad(x) < top - 2 || x.bottom - inkPad(x) > bottom + 2);
-        if (hit) bad.push({ text: n.nodeValue.trim().slice(0, 40), top: Math.round(hit.top), bottom: Math.round(hit.bottom) });
+        const hit = r.find((x) => x.top + inkPad(x) < top - 2 || x.bottom - inkPad(x) > bottom + 2 || x.left < left - 2 || x.right > right + 2);
+        if (hit) bad.push({ text: n.nodeValue.trim().slice(0, 40), top: Math.round(hit.top), bottom: Math.round(hit.bottom), left: Math.round(hit.left), right: Math.round(hit.right) });
         if (over && em > 0 && !ground(el)) outlined.add(el);
       }
       for (const el of outlined) {
         el.style.webkitTextStroke = `${em}em ${color}`;
         el.style.paintOrder = 'stroke fill';
       }
-      return { bad, outlined: outlined.size, top: Math.round(top), bottom: Math.round(bottom) };
+      return { bad, outlined: outlined.size, top: Math.round(top), bottom: Math.round(bottom), sides: safe ? [Math.round(left), Math.round(right)] : null };
     });
     if (zone.bad.length) {
       const x = zone.bad[0];
-      throw new RenderError(`text in the safe zone (clear above ${zone.top}px and below ${zone.bottom}px): "${x.text}" sits at ${x.top}-${x.bottom}px`, 'safe_zone');
+      const sides = zone.sides ? `, between ${zone.sides[0]}px and ${zone.sides[1]}px across` : '';
+      refuse(`text in the safe zone (clear above ${zone.top}px and below ${zone.bottom}px${sides}): "${x.text}" sits at ${x.top}-${x.bottom}px${zone.sides ? `, ${x.left}-${x.right}px across` : ''}`, 'safe_zone');
     }
 
     const dir = await tab.evaluate(() => [document.documentElement.dir, document.documentElement.lang]);
@@ -352,7 +471,7 @@ export async function renderHtml(html, { size, file, floor = FIT_FLOOR, scale = 
     ensureDir(path.dirname(file));
     writeFileSync(`${file}.tmp`, buf);
     renameSync(`${file}.tmp`, file);
-    return { file, fitted, outlined: zone.outlined, bytes: buf.length };
+    return { file, fitted, outlined: zone.outlined, bytes: buf.length, warnings };
   } finally {
     await context.close().catch(() => {});
     keepWarm();
@@ -393,7 +512,7 @@ const dataUri = (file) => `data:${/\.png$/i.test(file) ? 'image/png' : /\.svg$/i
  * an older caller, one photo drawn on the cover or on the last slide (photoOn).
  * Returns { tiktok: [files], instagram: [files] }.
  */
-export async function renderPost({ pack, post, slides, photos = null, photo = null, photoOn = 'cover', format = null, outDir }) {
+export async function renderPost({ pack, post, slides, photos = null, photo = null, photoOn = 'cover', format = null, outDir, only = null, platforms = null, lenient = false }) {
   const expected = tokenOf({ slides, caption: post.caption, hook: post.hook, sub: post.sub, extra: post.extra || {} });
   if (!post.token || post.token !== expected) {
     throw new RenderError('refused: this text was not checked by the fact gate (or changed after it)', 'unverified');
@@ -436,15 +555,19 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
   const extra = post.extra || {};
   const out = {};
   const scales = {};
+  // An account drawn in one of the slide styles (src/render/styles): each slide is a page of its own.
+  const styled = Boolean(pack.theme.style);
+  const warnings = [];
   // One slide drawn, at `scale` of its type's size: a slide that does not fit with everything on it is drawn again
   // without its framed photograph (a presentation choice: the text and the graphic are what was checked), then with
   // its type allowed smaller. Returns the size its text came out at, as a share of the design's.
   const drawSlide = async ({ i, s, slide, look, file, size, scale = 1 }) => {
     const tries = [{ ...slide }, ...(slide.photo ? [{ ...slide, photo: null, hasVisual: s.kind === 'item' && slideHasVisual({ ...slide, photo: null }) }] : [])];
     for (const [k, sl] of [...tries.map((t) => [FIT_FLOOR, t]), [0.45, tries.at(-1)]].entries()) {
-      const html = page({ theme: pack.theme, overlay, size, slide: sl[1], parts: buildSlide(pack.theme, sl[1]), ...look });
+      const html = styled ? stylePage({ theme: pack.theme, overlay, size, slide: sl[1] }) : page({ theme: pack.theme, overlay, size, slide: sl[1], parts: buildSlide(pack.theme, sl[1]), ...look });
       try {
-        const r = await renderHtml(html, { size, file, floor: sl[0], scale });
+        const r = await renderHtml(html, { size, file, floor: sl[0], scale, lenient });
+        for (const w of r.warnings || []) warnings.push({ size, slide: i, ...w });
         if (slide.photo && !sl[1].photo) (dropped[size] ??= new Set()).add(i);
         return Math.min(scale, ...r.fitted.filter((f) => f.from).map((f) => f.to / f.from));
       } catch (e) {
@@ -453,7 +576,7 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
     }
     throw new RenderError('the slide did not render', 'overflow');
   };
-  for (const size of pack.meta.platforms) {
+  for (const size of platforms || pack.meta.platforms) {
     out[size] = [];
     const drawn = [];
     let n = 0;
@@ -494,6 +617,31 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
       slide.tease = Boolean(tease);
       slide.hasVisual = s.kind === 'item' && slideHasVisual(slide);
       const file = path.join(outDir, `${size}-${String(i + 1).padStart(2, '0')}.jpg`);
+      if (only && !only.has(i)) continue;
+      if (styled) {
+        // A style draws a slide's own photograph, sharp, or none: never the cover's behind another slide, never a
+        // blurred one, never a guess-who's answer on its cover. A cover photograph too small to fill is left off.
+        // A cover with no photograph of its own stands on the post's scene ('bg'), sharp, when the post has one.
+        const own = uri.get(i) || (s.kind === 'cover' && postKind !== 'guess-who' ? uri.get('bg') : null) || null;
+        const fills = own && (s.kind !== 'cover' || fillsCover(readFileSync((byIdx.get(i) || byIdx.get('bg')).file)));
+        slide.photo = split ? null : fills ? own : null;
+        slide.photoPos = slide.photo ? focus.get(uri.has(i) ? i : 'bg') || null : null;
+        slide.split = split;
+        slide.splitPos = split ? [focus.get('ca'), focus.get('cb')] : null;
+        slide.hasPhoto = Boolean(slide.photo || split);
+        slide.hasVisual = s.kind === 'item' && slideHasVisual(slide);
+        slide.highlight = s.highlight || '';
+        if (s.kind === 'cover') {
+          const subj = extra.subject || {};
+          const names = postKind === 'head-to-head' && subj.a && subj.b ? `${subj.a} מול ${subj.b}` : '';
+          const day = postKind === 'on-this-day' && subj.date ? String(subj.date) : '';
+          slide.category = day || names || format?.name || '';
+          slide.keyLine = day || names;
+        }
+        drawn.push({ i, s, slide, look: {}, file, ratio: await drawSlide({ i, s, slide, look: {}, file, size }) });
+        out[size].push(file);
+        continue;
+      }
       // A cover photograph smaller than FULL_BLEED_MIN is framed over its own blurred copy, never stretched to fill.
       const framed = full && s.kind === 'cover' && !fillsCover(readFileSync(byIdx.get(i).file));
       const look = { photo: full ? uri.get(i) : tease ? uri.get(slides.length - 1) : stand, photoPos: full ? focus.get(i) : null, blur: tease, split, splitPos: split ? [focus.get('ca'), focus.get('cb')] : null, bg: bgFor(i), framed };
@@ -513,7 +661,12 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
       }
     }
     (scales[size] = drawn.map((d) => Math.round(d.ratio * 100) / 100));
-    if (end) {
+    if (end && styled && !only) {
+      const file = path.join(outDir, `${size}-${String(slides.length + 1).padStart(2, '0')}.jpg`);
+      const r = await renderHtml(stylePage({ theme: pack.theme, overlay, size, slide: { kind: 'end', title: end.title, body: end.body || '', handle: pack.meta.handle } }), { size, file, lenient });
+      for (const w of r.warnings || []) warnings.push({ size, slide: slides.length, ...w });
+      out[size].push(file);
+    } else if (end && !only) {
       const sl = { kind: 'end', handle: pack.meta.handle, noHandle, brand };
       const file = path.join(outDir, `${size}-${String(slides.length + 1).padStart(2, '0')}.jpg`);
       // A template with its own closing slide draws it on the post's photograph.
@@ -525,5 +678,7 @@ export async function renderPost({ pack, post, slides, photos = null, photo = nu
   Object.defineProperty(out, 'dropped', { value: dropped, enumerable: false });
   // The size each slide's text came out at, per platform, as a share of the design's.
   Object.defineProperty(out, 'scales', { value: scales, enumerable: false });
+  // What a lenient render (a preview) drew although it did not fit, per slide.
+  Object.defineProperty(out, 'warnings', { value: warnings, enumerable: false });
   return out;
 }

@@ -1,4 +1,5 @@
 import { latestFeedback } from '../metrics/feedback.js';
+import { styleTest } from '../render/style.js';
 import { DAY, monthKey, now } from '../core/clock.js';
 import { waitingImages } from '../images/index.js';
 import { KEYS, isSet } from '../core/env.js';
@@ -216,7 +217,9 @@ export function results(ctx, t = now()) {
   });
   // The morning's feedback: each account's latest report and what became of its plans.
   const feedback = latestFeedback(ctx.db, ctx.packs);
-  return { posts, scored, winners, losers, formats, medians, demo, trends, learning, feedback, blocks: blockRates(ctx, t) };
+  // Each account's style test (src/render/style.js), running or settled.
+  const styleTests = ctx.packs.map((pack) => ({ pack, test: styleTest(ctx.db, pack) })).filter((x) => x.test);
+  return { posts, scored, winners, losers, formats, medians, demo, trends, learning, feedback, blocks: blockRates(ctx, t), styleTests };
 }
 
 /**

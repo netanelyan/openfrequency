@@ -13,14 +13,15 @@ import { contentRange, ctasOf, factFree, groupOf, hookPatterns, kindName, kindOf
 import { resolveFormat } from '../trends/index.js';
 import { isGenericQuestion, limitsFor, mechanicalFix, normHe, tellsIn } from '../voice/tells.js';
 import { BLOCK_AT, REWRITE_AT, reviewTexts } from '../voice/review.js';
-import { lockedStyle } from '../render/style.js';
+import { lockedStyle, lookFor, styleForPost } from '../render/style.js';
+import { highlightProblems, styleFitProblems } from '../render/styles/fit.js';
 import { checkRules } from '../rules/check.js';
-import { lineDraft, oneLine, overlayProblems } from '../rules/overlay.js';
+import { lineDraft, oneLine, overlayOf, overlayProblems } from '../rules/overlay.js';
 import { MAX_HASHTAGS, captionProblems, hashtagProblems, storyCaption } from '../rules/caption.js';
 import { ATTRIBUTED_MAX, gate, numbersIn, verifyFact } from '../verify/claims.js';
 import { findImage, MIN_SIDE } from '../images/index.js';
 import { normVisual, slideHasVisual, visualProblems, visualsOf, visualText } from '../render/visuals.js';
-import { renderPost } from '../render/render.js';
+import { renderPost, slidePlaces } from '../render/render.js';
 import { israelDate } from '../schedule/israel.js';
 import { upcoming } from '../schedule/events.js';
 import { detailsPrompt, detailsUser, outlinePrompt, outlineUser, repairPrompt, repairUser, rewritePrompt, rewriteUser, slidesPrompt, slidesUser, visualsNeeded } from './prompts.js';
@@ -271,6 +272,10 @@ export function checkPost(ctx, pack, draft, facts, format = null) {
   for (const x of checkRules({ pack, others: ctx.packs || [], texts: textsOf(draft) })) problems.push(x);
   // The text over the picture: short lines broken by hand, a few a slide, reactions not labels (pack.json "overlay").
   for (const x of overlayProblems(draft, pack)) problems.push(x);
+  // The account's slide style (src/render/styles): every text fits it at the style's smallest size, and every
+  // highlight is a short phrase of its own headline.
+  const style = draft.style || null;
+  for (const x of style ? styleFitProblems(draft, { style, platforms: pack.meta.platforms, overlay: overlayOf(pack), places: slidePlaces(draft.slides), postKind: kindName(f) }) : highlightProblems(draft)) problems.push(x);
   // A phase 1 post's one caption is not a story, but its hashtags are still the engine's.
   if (kindName(f) === 'list') for (const x of hashtagProblems(draft)) problems.push(x);
   else {
@@ -427,9 +432,11 @@ export function keepItems(format, items, good) {
  * does with each answer, and what the launch set's tools check an answer with.
  * Returns { draft, checked, fixes }.
  */
-export function draftFromAnswer(ctx, pack, { format, answer: d, outline, items, facts, closer = null, hook = null, cta = null, attempt = 0 }) {
+export function draftFromAnswer(ctx, pack, { format, answer: d, outline, items, facts, closer = null, hook = null, cta = null, attempt = 0, style = null }) {
   const legacy = kindName(format) === 'list';
   const draft = {
+    // The slide style the post is drawn in, when it is not the account's own (a style test): its texts must fit it.
+    ...(style ? { style } : {}),
     hook: String(d.hook || '').trim(),
     sub: String(d.sub || '').trim(),
     // The code chose the pattern, so the results are credited to it whatever the answer says.
@@ -442,10 +449,11 @@ export function draftFromAnswer(ctx, pack, { format, answer: d, outline, items, 
     captionShort: String(d.captionShort || '').trim(),
     cta,
     slides: [
-      { kind: 'cover', role: 'cover', title: '', body: '', factKeys: [] },
+      { kind: 'cover', role: 'cover', title: '', body: '', factKeys: [], highlight: String(d.hookHighlight || '').trim() },
       ...(d.slides || []).map((s, i) => ({
         kind: 'item', role: legacy ? 'item' : String(s.role || items[i]?.role || '').trim(),
         title: String(s.title || '').trim(), body: String(s.body || '').trim(), a: String(s.a || '').trim(), b: String(s.b || '').trim(), factKeys: (s.facts || []).map(String),
+        highlight: String(s.highlight || '').trim(),
         ...(legacy ? {} : { visual: normVisual(s.visual), imageQuery: String(s.imageQuery || '').trim() }),
       })),
       ...(closer ? [{ kind: 'closer', role: 'closer', title: closer.title, body: closer.body || '', factKeys: [] }] : []),
@@ -512,7 +520,7 @@ export async function repairDraft(ctx, pack, { draft, checked, format, facts, it
     let res;
     try {
       res = await askJson(ctx, {
-        task: 'repair', role: 'rewrite', system: sp.system, user: repairUser({ format, topic: outline.topic, facts: verified, targets, pack }), schema: sp.schema,
+        task: 'repair', role: 'rewrite', system: sp.system, user: repairUser({ format, topic: outline.topic, facts: verified, targets, pack, style: draft.style }), schema: sp.schema,
         effort: EFFORT.repair, maxTokens: MAX_TOKENS.repair, meta: { ...meta, attempt: attempt + round + 1 },
       });
     } catch (e) {
@@ -756,7 +764,9 @@ export function postDraft(post) {
     slides: post.slides.map((s) => ({
       kind: s.kind, role: s.role || (s.kind === 'item' ? 'item' : s.kind), title: s.title || '', body: s.body || '', a: s.data?.a || '', b: s.data?.b || '', factKeys: s.factKeys,
       ...(s.data?.visual !== undefined || s.data?.imageQuery !== undefined ? { visual: s.data?.visual || null, imageQuery: s.data?.imageQuery || '' } : {}),
+      ...(s.data?.highlight ? { highlight: s.data.highlight } : {}),
     })),
+    ...(post.checks?.styleName ? { style: post.checks.styleName } : {}),
   };
   if (data.coverVisual !== undefined) d.coverVisual = data.coverVisual || null;
   d.captionIg = post.caption_ig || null;
@@ -800,6 +810,9 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
   const at = nowIso();
   db.insert('posts', { id: postId, account_id: pack.id, format_id: format.id, kind: kindName(format), grp: groupOf(format), status: 'drafting', sample: sample ? 1 : 0, slot_at: slotAt, directive_id: dv.id || null, created_at: at, updated_at: at });
   const pctx = { ...ctx, pack, postId, sources: ctx.sourcesFor ? ctx.sourcesFor(pack) : ctx.sources, subjectText: subject?.text || null };
+  // The slide style this post is drawn in (src/render/styles): the account's locked one, or in a style test the two
+  // it is trying, in turn. null for an account still on the older templates. Its texts are written and checked for it.
+  const postStyle = styleForPost(db, pack, ctx.packs || []);
   const finish = (status, patch = {}) => {
     const spend = postSpend(db, postId);
     db.update('posts', postId, { status, updated_at: nowIso(), cost_usd: spend.usd, cost_estimated: spend.estimated ? 1 : 0, ...patch });
@@ -985,14 +998,14 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
       let res;
       try {
         res = await askJson(pctx, {
-          task: 'slides', role: 'draft', system: sp.system, user: slidesUser({ format, n: items.length, outline: { ...outline, items }, facts: verifiedFacts, edits, problems: lastProblems.map(say), lastDraft: lastAnswer, hook, cta, day: postDay, pack, steer: dv.steer || null, niche: nicheForSlides(rivals) }), schema: sp.schema,
+          task: 'slides', role: 'draft', system: sp.system, user: slidesUser({ format, n: items.length, outline: { ...outline, items }, facts: verifiedFacts, edits, problems: lastProblems.map(say), lastDraft: lastAnswer, hook, cta, day: postDay, pack, steer: dv.steer || null, niche: nicheForSlides(rivals), style: postStyle }), schema: sp.schema,
           effort: EFFORT.slides, maxTokens: MAX_TOKENS.slides, meta: { recordingsDir: pack.recordingsDir, docKey: cand.key, format: format.base || format.id, attempt },
         });
       } catch (e) {
         if (e instanceof NoRecording && attempt > 0) break;
         throw e;
       }
-      const made = draftFromAnswer(pctx, pack, { format, answer: res.data, outline, items, facts, closer, hook, cta, attempt });
+      const made = draftFromAnswer(pctx, pack, { format, answer: res.data, outline, items, facts, closer, hook, cta, attempt, style: postStyle });
       draft = made.draft;
       checked = made.checked;
       step(db, postId, attempt ? 'redraft' : 'slides', checked.problems.length ? 'failed' : 'ok', { problems: checked.problems.map(say), checks: checksOf(checked.problems), fixed: made.fixes }, res.usd);
@@ -1024,7 +1037,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     }
     if (checked.problems.length) {
       // The law and honesty come first in the reason, then the facts, then the shape, then the voice.
-      const rank = (p) => (/^(compliance|honesty|brand|rule)/.test(p.code) ? 0 : p.code === 'verify' ? 1 : /^(shape|caption|keywords|length|overlay)$/.test(p.code) ? 2 : 3);
+      const rank = (p) => (/^(compliance|honesty|brand|rule)/.test(p.code) ? 0 : p.code === 'verify' ? 1 : /^(shape|caption|keywords|length|overlay|fit)$/.test(p.code) ? 2 : 3);
       const sorted = checked.problems.slice().sort((a, b) => rank(a) - rank(b));
       const kind = rank(sorted[0]) === 0 ? 'rules' : rank(sorted[0]) === 1 ? 'fact_check' : rank(sorted[0]) === 2 ? 'shape' : 'voice';
       return block(kind, `${sorted.slice(0, 3).map(say).join(' · ')}${repairs ? ` (${repairs === 1 ? 'אחרי תיקון אחד' : `אחרי ${repairs} תיקונים`})` : ''}`, { problems: sorted.map(say), checks: checksOf(sorted), repairs });
@@ -1180,7 +1193,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     const slides = draft.slides.map((s) => ({ ...s, sources: s.factKeys.map((k) => (s.role === 'clue' ? plainSource : factSource).get(k)) }));
     const outDir = path.join(ctx.mediaDir || mediaDir(), 'posts', postId);
     // Drawn in the account's saved look (src/render/style.js), whose hash the post keeps for drawing it again.
-    const look = lockedStyle(db, pack, ctx.packs || []);
+    const look = postStyle ? lookFor(db, pack, postStyle, ctx.packs || []) : lockedStyle(db, pack, ctx.packs || []);
     const files = await renderPost({ pack: { ...pack, theme: look.theme }, format, post: { id: postId, hook: draft.hook, sub: draft.sub, caption: draft.caption, token: final.gate.token, extra: extraOf(draft), ctaKind: draft.cta?.kind }, slides, photos, outDir });
     step(db, postId, 'render', 'ok', { platforms: Object.keys(files), slides: slides.length });
 
@@ -1190,7 +1203,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
       slides.forEach((s, i) =>
         db.insert('slides', {
           post_id: postId, idx: i, kind: s.kind, role: s.role || null, title: s.title, body: s.body, fact_ids_json: s.factKeys,
-          data_json: s.a || s.b || s.visual || s.imageQuery ? { a: s.a, b: s.b, ...(s.visual !== undefined ? { visual: s.visual, imageQuery: s.imageQuery || '' } : {}) } : null,
+          data_json: s.a || s.b || s.visual || s.imageQuery || s.highlight ? { a: s.a, b: s.b, ...(s.visual !== undefined ? { visual: s.visual, imageQuery: s.imageQuery || '' } : {}), ...(s.highlight ? { highlight: s.highlight } : {}) } : null,
           // A photograph the renderer had to leave off on every platform is not this post's: not shown, not credited.
           image_id: Object.keys(files).every((size) => files.dropped?.[size]?.has(i)) ? null : photos.get(i)?.id ?? null,
           files_json: Object.fromEntries(Object.entries(files).map(([k, v]) => [k, v[i]])),
@@ -1202,7 +1215,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
     return finish(status, {
       hook: draft.hook, sub: draft.sub, caption: draft.caption, caption_ig: draft.captionIg, hashtags_json: tags, review_score: worst, hook_pattern: draft.hookPattern,
       data_json: { subject: draft.subject, keywords: draft.keywords, cta: draft.cta, captionShort: draft.captionShort, question: draft.question, day: kindName(format) === 'on-this-day' ? postDay : undefined, coverVisual: draft.coverVisual },
-      checks_json: { token: final.gate.token, reviewer: review.reviewer, scores, rewrites: applied, image: image ? image.id : null, bgImage: photos.get('bg')?.id ?? null, coverImages: ['ca', 'cb'].map((k) => photos.get(k)?.id).filter(Boolean), imageSafety: image?.safety || null, images: [...photos.values()].map((p) => p.id), photoOn, style: look.hash },
+      checks_json: { token: final.gate.token, reviewer: review.reviewer, scores, rewrites: applied, image: image ? image.id : null, bgImage: photos.get('bg')?.id ?? null, coverImages: ['ca', 'cb'].map((k) => photos.get(k)?.id).filter(Boolean), imageSafety: image?.safety || null, images: [...photos.values()].map((p) => p.id), photoOn, style: look.hash, ...(postStyle ? { styleName: postStyle } : {}) },
       media_json: files, ai_label: [...photos.values()].some((p) => p.ai_generated && p.realistic) ? 1 : 0,
     });
   } catch (e) {

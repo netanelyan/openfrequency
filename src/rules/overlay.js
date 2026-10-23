@@ -34,6 +34,26 @@ export const OVERLAY = {
   labels: [],
 };
 
+/**
+ * The bands of a slide drawn in a style (src/render/styles) that hold no text, in px, per platform. TikTok mirrors
+ * its own furniture in Hebrew (the button rail moves to the left, the caption's start to the right), so both sides
+ * are kept clear, as well as the tabs on top and the caption, the account and the sound at the bottom. Instagram's
+ * 4:5 crop has only its own edges to keep. An account that keeps a wider band (overlay.safeZone) gets the wider one.
+ */
+export const SAFE_ZONES = {
+  tiktok: { top: 140, bottom: 420, right: 152, left: 152 },
+  instagram: { top: 80, bottom: 120, right: 96, left: 96 },
+};
+
+/** The bands kept clear on one platform for a styled slide: the platform's, widened where the account asks for more. */
+export function zonesFor(size, overlay = null, h = size === 'instagram' ? 1350 : 1920) {
+  const z = { ...SAFE_ZONES[size] };
+  const own = overlay?.safeZone || {};
+  // Only a band the account set itself widens it: the shared default (OVERLAY.safeZone) is the older templates'.
+  for (const k of ['top', 'bottom']) if (Number.isFinite(own[k]) && own[k] !== OVERLAY.safeZone[k]) z[k] = Math.max(z[k], Math.ceil(own[k] * h));
+  return z;
+}
+
 /** Roles whose body lines are items, one a line. */
 export const LIST_ROLES = new Set(['ranks', 'layer']);
 
@@ -201,6 +221,15 @@ function slidesOf(draft) {
 export function lineDraft(draft, pack = null) {
   const { wordsPerLine } = overlayOf(pack);
   const out = [];
+  // A highlight marks words of its headline: one whose words a rewrite or an edit took out is dropped, not checked.
+  const flatWs = (t) => String(t || '').replace(/\s+/g, ' ').trim();
+  (draft.slides || []).forEach((s, i) => {
+    const head = s.kind === 'cover' ? draft.hook : s.title;
+    if (s.highlight && !flatWs(head).includes(flatWs(s.highlight))) {
+      s.highlight = '';
+      out.push(`${s.kind === 'cover' ? 'cover' : `slide ${i}`}: highlight dropped, its words are no longer in the headline`);
+    }
+  });
   for (const sl of slidesOf(draft)) {
     for (const b of sl.blocks) {
       if (sl.list && b.body) continue;
@@ -247,8 +276,12 @@ export function labelIn(line, extra = []) {
  */
 export function overlayProblems(draft, pack = null) {
   const o = overlayOf(pack);
-  const [minW, maxW] = o.wordsPerLine;
-  const [minL, maxL] = o.linesPerSlide;
+  const [minW0, maxW] = o.wordsPerLine;
+  const [minL0, maxL] = o.linesPerSlide;
+  // A post drawn in a slide style (src/render/styles) sets its headlines far larger than text over a picture: a line
+  // holds a few words, and the style bounds the length itself (its fit check). Only the maximums apply to it.
+  const minW = draft.style ? 1 : minW0;
+  const minL = draft.style ? 1 : minL0;
   const out = [];
   const add = (where, msg) => out.push({ where, code: 'overlay', msg });
   for (const sl of slidesOf(draft)) {

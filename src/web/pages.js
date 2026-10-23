@@ -57,7 +57,14 @@ const AUDIT_HE = {
 const media = (post, platform, i) => `/media/${encodeURIComponent(post.id)}/${platform}/${i}?v=${encodeURIComponent(String(post.updated_at || '').replace(/D/g, '').slice(-10))}`;
 const formatName = (pack, id) => pack?.formats.formats.find((f) => f.id === id)?.name || id;
 
-function strip(post, platform = 'tiktok') {
+/**
+ * TikTok's own furniture drawn over a slide (the post page's "TikTok view"): the tabs on top, the button rail (on the
+ * left, as TikTok mirrors it in Hebrew), the slide dots, the account and the caption, the bar at the bottom, and the
+ * bands the styles keep clear dashed (src/rules/overlay.js SAFE_ZONES), so a line that runs under them shows.
+ */
+const tiktokMock = (handle, caption) => `<span class="tt" aria-hidden="true"><span class="tt-safe"></span><span class="tt-tabs"><i>עוקבים</i><b>בשבילך</b></span><span class="tt-col"><i class="av"></i><i></i><i></i><i></i><i></i><i class="disc"></i></span><span class="tt-dots"><i class="on"></i><i></i><i></i><i></i></span><span class="tt-cap"><b>${esc(handle ? `@${handle}` : '')}</b><span>${esc(String(caption || '').split('\n')[0].slice(0, 90))}</span></span><span class="tt-bar"></span></span>`;
+
+function strip(post, platform = 'tiktok', { mock = null } = {}) {
   const files = post.media?.[platform] || [];
   if (!files.length) return '';
   const items = post.slides.filter((s) => s.kind === 'item');
@@ -66,7 +73,7 @@ function strip(post, platform = 'tiktok') {
       const s = post.slides[i];
       const n = s?.kind === 'item' ? items.indexOf(s) + 1 : null;
       const target = n ? `#s-${post.id}-${n}` : '#';
-      return `<a href="${target}" aria-label="שקף ${i + 1}${n ? `, העובדות שלו` : ''}"><img src="${media(post, platform, i)}" alt="${esc(s?.kind === 'cover' ? post.hook : s?.title || '')}" loading="${i < 2 ? 'eager' : 'lazy'}" decoding="async" width="270" height="${platform === 'tiktok' ? 480 : 338}"><span class="n">${i + 1}/${files.length}</span>${n && s.factKeys.length ? `<span class="has">${s.factKeys.length === 1 ? 'מקור אחד' : `${s.factKeys.length} מקורות`}</span>` : ''}</a>`;
+      return `<a href="${target}" aria-label="שקף ${i + 1}${n ? `, העובדות שלו` : ''}">${mock || ''}<img src="${media(post, platform, i)}" alt="${esc(s?.kind === 'cover' ? post.hook : s?.title || '')}" loading="${i < 2 ? 'eager' : 'lazy'}" decoding="async" width="270" height="${platform === 'tiktok' ? 480 : 338}"><span class="n">${i + 1}/${files.length}</span>${n && s.factKeys.length ? `<span class="has">${s.factKeys.length === 1 ? 'מקור אחד' : `${s.factKeys.length} מקורות`}</span>` : ''}</a>`;
     })
     .join('')}</div><div class="dots" aria-hidden="true">${files.map((_, i) => `<i${i === 0 ? ' class="on"' : ''}></i>`).join('')}</div>`;
 }
@@ -373,7 +380,7 @@ ${tiktokDraftBanners(ctx, post)}
 <div>
 <section class="card acc acc-${esc(post.account_id)} post"><div class="meta"><span class="chip">${accDot(post.account_id)} ${esc(pack?.meta.displayName || post.account_id)}</span><span class="chip">${esc(formatName(pack, post.format_id))}</span>${post.slot_at ? `<span class="chip">${icon('clock')}${esc(stamp(post.slot_at))}</span>` : ''}</div>
 ${post.sub ? `<p class="subline">${esc(post.sub)}</p>` : ''}
-<h3 class="lbl">טיקטוק <span>9:16</span></h3>${strip(post, 'tiktok')}
+<h3 class="lbl">טיקטוק <span>9:16</span></h3><input type="checkbox" class="ttv" id="ttv-${esc(post.id)}"><label class="ttv-l" for="ttv-${esc(post.id)}">${icon('eye')}תצוגת טיקטוק</label>${strip(post, 'tiktok', { mock: tiktokMock(pack?.meta.handle, post.caption) })}
 ${post.media?.instagram ? `<h3 class="lbl">אינסטגרם <span>4:5</span></h3>${strip(post, 'instagram')}` : ''}
 ${trustLine(post)}
 <div class="capwrap">${captionBlock(post)}</div>
@@ -423,7 +430,7 @@ ${paused ? `<div class="paused${acc.paused_reason === 'kill' ? ' kill' : ''}">${
 <div><div class="row"><span>הנתח מהתקציב</span><b class="num">${tokenNum(spend)} / ${tokenNum(cap)} טוקנים</b></div><meter min="0" max="${cap || 1}" low="${(cap || 1) * 0.7}" high="${(cap || 1) * 0.9}" optimum="0" value="${Math.min(spend, cap || 1)}"></meter>${plan?.cut ? `<p class="small m4"><span class="chip warn">פוסט ${plan.perDay === 1 ? 'אחד' : plan.perDay} ביום במקום ${plan.planned}</span> התקציב קצר החודש, וזה החשבון שמצמצם ראשון.</p>` : ''}</div>
 <div><div class="row"><span>7 הימים האחרונים</span><b>${week.days.reduce((s, x) => s + x.n, 0)} פורסמו${week.views != null ? ` · ${k(week.views)} צפיות` : ''}</b></div>
 <div class="week" aria-label="פוסטים שפורסמו בכל יום">${week.days.map((x) => `<span title="${esc(shortDate(x.at))}: ${x.n}"><i class="${h(x.n)}"></i>${esc(weekdayNarrow(x.at))}</span>`).join('')}</div></div>
-<dl class="kv"><dt>בתור</dt><dd>${week.counts.queued || 0} ממתינים · ${week.counts.approved || 0} מאושרים</dd><dt>נחסמו השבוע</dt><dd>${week.counts.blocked || 0}</dd><dt>פרסום</dt><dd>${publishers.map((x) => `${PLATFORM_HE[x.platform] || x.platform}: ${publisherHe(x)}`).join(' · ')}</dd>${style ? `<dt>סגנון</dt><dd><span class="ltr">${esc(style.theme.template)}/${esc(style.theme.variant || 'a')}</span> · נעול מ-${esc(shortDate(style.at))}</dd>` : ''}</dl>
+<dl class="kv"><dt>בתור</dt><dd>${week.counts.queued || 0} ממתינים · ${week.counts.approved || 0} מאושרים</dd><dt>נחסמו השבוע</dt><dd>${week.counts.blocked || 0}</dd><dt>פרסום</dt><dd>${publishers.map((x) => `${PLATFORM_HE[x.platform] || x.platform}: ${publisherHe(x)}`).join(' · ')}</dd>${style ? `<dt>סגנון</dt><dd>${style.theme.style ? `סגנון ${esc(style.theme.style.name)}` : `<span class="ltr">${esc(style.theme.template)}/${esc(style.theme.variant || 'a')}</span>`} · נעול מ-${esc(shortDate(style.at))} · <a href="/styles?account=${esc(pack.id)}">להחליף סגנון</a></dd>` : ''}</dl>
 ${style?.pending ? `<div class="paused">${icon('alert')}<div><b>הסגנון בקובץ theme.json השתנה</b><div class="small">הפוסטים ממשיכים לצאת בסגנון הקודם עד שעוברים לחדש. פוסטים שכבר צוירו לא משתנים.</div></div>${postButton(ctx, `/accounts/${pack.id}/style`, 'לעבור לסגנון החדש', { cls: 'btn sm' })}</div>` : ''}
 <div class="actions p0">${!paused ? postButton(ctx, `/accounts/${pack.id}/kill`, `${icon('power')}לכבות את החשבון`, { cls: 'btn danger', confirm: 'לחצו שוב כדי לכבות' }) : ''}<a class="btn" href="/sources?account=${esc(pack.id)}">מקורות</a><a class="btn" href="/rivals?account=${esc(pack.id)}">מתחרים</a><a class="btn" href="/sounds?account=${esc(pack.id)}">סאונדים</a></div>
 </article>`;
@@ -536,6 +543,17 @@ function relChart(scored) {
 <p class="legend"><span><i class="c-up"></i>מעל החציון <b class="num">${posts.filter((p) => p.rel >= 1).length}</b></span><span><i class="c-down"></i>מתחת <b class="num">${posts.filter((p) => p.rel < 1).length}</b></span></p>`;
 }
 
+/** Each account's style test: which two styles, until when, and once settled which won, with each one's numbers. */
+function styleTestPanels(list) {
+  if (!list.length) return '';
+  const row = (name, x) => `<li><b>סגנון ${esc(name)}</b>: ${x.posts} פוסטים${x.views != null ? `, חציון ${k(Math.round(x.views))} צפיות` : ''}${x.rate != null ? `, ${(x.rate * 100).toFixed(1)}% תגובה לצפייה` : ''}</li>`;
+  return list
+    .map(({ pack, test }) => `<section class="panel"><header><h2>מבחן סגנונות · ${esc(pack.meta.displayName)}</h2></header>
+${test.result ? `<p>${test.result.winner ? `<b>${esc(test.result.winner)} ניצח וננעל.</b> ` : ''}${esc(test.result.why)}</p>${test.result.styles ? `<ul class="factlist">${Object.entries(test.result.styles).map(([n, x]) => row(n, x)).join('')}</ul>` : ''}` : `<p>רץ עד ${esc(shortDate(test.until))}: הפוסטים יוצאים לסירוגין ב-${esc(test.styles.join(' וב-'))}.</p>`}
+<p class="small"><a href="/styles?account=${esc(pack.id)}">לדף הסגנון</a></p></section>`)
+    .join('');
+}
+
 export function resultsPage(ctx, d) {
   // What the published posts did leads. The formats, and what the checks stopped, wait behind a button each.
   const sum = (p, f) => ['tiktok', 'instagram'].reduce((a, pl) => a + (p.metrics[pl]?.[f] || 0), 0);
@@ -591,6 +609,7 @@ ${kpis}
 ${measured.length ? `<div class="cols even charts"><section class="panel"><header><h2>צפיות לפי יום הפרסום</h2></header>${viewsChart(measured)}</section><section class="panel"><header><h2>מול החציון</h2></header>${d.scored.length ? relChart(d.scored) : '<p class="muted">עוד אין פוסט עם ציון: הציון נקבע 72 שעות אחרי הפרסום.</p>'}</section></div>` : ''}
 ${posts}
 ${feedbackPanels(d.feedback || [])}
+${styleTestPanels(d.styleTests || [])}
 <div class="mores">${fold('formats', 'results', 'פורמטים', formats)}${blocks ? fold('blocks-fold', 'alert', 'מה חוסם פוסטים', blocks) : ''}</div>`;
   return layout({ ...ctx, title: 'תוצאות', active: 'results' }, body);
 }

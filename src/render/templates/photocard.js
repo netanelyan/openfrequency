@@ -45,7 +45,7 @@ const without = (text, value) => {
   return value && t.startsWith(value) ? t.slice(value.length).replace(/^[\s,:;.–-]+/, '').trim() : t;
 };
 
-const NOTE = 'שווה לדעת';
+export const NOTE = 'שווה לדעת';
 
 /**
  * What a content slide's card holds, cut from its own checked text: { label, meta, card } or null for the light
@@ -88,7 +88,7 @@ export function cardOf(s) {
 }
 
 /** The small label over a light slide: what the role is, in the fixed words roles.js uses. */
-function lightLabel(s) {
+export function lightLabel(s) {
   const r = s.role;
   if (r === 'rank' && s.rank) return `מקום ${s.rank}`;
   if (r === 'layer') return depthLabel(s.n, s.of);

@@ -5,6 +5,7 @@ import { isTemplate, TEMPLATES } from '../render/templates/registry.js';
 import { COMPLIANCE, FINANCIAL, isCompliance } from '../rules/compliance.js';
 import { ctasOf, hookPatterns, isKind, KINDS, MIX } from '../formats/kinds.js';
 import { overlayConfigProblems } from '../rules/overlay.js';
+import { resolveStyle, styleConfigProblems } from '../render/styles/tokens.js';
 import { MAX_HASHTAGS } from '../rules/caption.js';
 import { FLOOR } from '../voice/tells.js';
 
@@ -175,6 +176,7 @@ export function validatePack(pack) {
     else for (const [m, n] of Object.entries(v)) if (!['maxChars', 'sentences', 'maxWords', 'minChars'].includes(m) || !(Number.isInteger(n) && n > 0)) p.push(`pack.json: writing.${k}.${m} must be maxChars, sentences, maxWords or minChars, a whole number`);
   }
   p.push(...overlayConfigProblems(meta.overlay));
+  p.push(...styleConfigProblems(meta.style));
   if ([...String(meta.displayName || '')].length > 30) p.push('pack.json: displayName is over 30 characters, the limit on Instagram and TikTok');
   if (!Array.isArray(formats.caption?.questions) || !formats.caption.questions.length) p.push('formats.json: caption.questions must list at least one question');
   const tags = [...(formats.hashtags?.broad || []), ...(formats.hashtags?.niche || [])];
@@ -258,6 +260,17 @@ export function validateAll(packs) {
   for (const plat of PLATFORMS) seen(`Zernio ${plat} account`, (x) => x.meta.zernio?.accounts?.[plat]);
   seen('visual template', (x) => `${x.theme.template}/${x.theme.variant || 'a'}`);
   seen('display font', (x) => x.theme.fonts?.display);
+  // Under the slide styles (pack.json "style") two accounts may share a style, never a style and an accent close
+  // enough to tell apart only side by side: the second customer in a niche is given another style or accent.
+  const styled = packs.filter((x) => x.meta?.style?.name && !styleConfigProblems(x.meta.style).length);
+  for (let i = 0; i < styled.length; i++) {
+    for (let k = i + 1; k < styled.length; k++) {
+      const [a, b] = [styled[i], styled[k]];
+      if (a.meta.style.name !== b.meta.style.name) continue;
+      const d = deltaE(resolveStyle(a.meta.style, a.theme.colors?.accent).colors.accent, resolveStyle(b.meta.style, b.theme.colors?.accent).colors.accent);
+      if (d < 20) p.push(`${a.meta.id} and ${b.meta.id} share style ${a.meta.style.name} with accents too close to tell apart (ΔE ${d.toFixed(1)}): give one another style or accent`);
+    }
+  }
 
   for (let i = 0; i < packs.length; i++) {
     for (let k = i + 1; k < packs.length; k++) {

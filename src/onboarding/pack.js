@@ -9,6 +9,7 @@ import { askJson } from '../llm/index.js';
 import { HEBREW } from '../pipeline/prompts.js';
 import { loadPack, readPack } from '../packs/load.js';
 import { validateAll } from '../packs/validate.js';
+import { suggestStyle } from './style.js';
 
 // A new pack, written from an onboarding: the owner's seed, the sources they
 // approved, and a look no other account has. No code: the result is the same
@@ -126,6 +127,8 @@ export async function createPack(ctx, { seed, candidates, displayName, handle, e
     compliance: FINANCIAL.test(about) ? ['il-investment-advice'] : [],
     imagery: { providers: ['pexels', 'unsplash', 'commons'] },
   };
+  // The slide style (src/render/styles), from what the account is about and its colours, away from a look-alike.
+  pack.style = { name: suggestStyle({ ...seed, displayName: pack.displayName }, theme.colors, ctx.packs).name };
   const sources = {
     sources: approved.map((c, i) => ({
       id: `${c.type}-${i + 1}-${(() => {

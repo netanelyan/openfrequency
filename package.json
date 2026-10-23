@@ -29,7 +29,9 @@
     "live-day": "node scripts/live-day.js",
     "launch": "node scripts/launch.js",
     "visuals": "node scripts/visuals-preview.js",
-    "budget": "node scripts/budget.js"
+    "budget": "node scripts/budget.js",
+    "styles:review": "node scripts/styles-review.js",
+    "styles:metrics": "node scripts/style-metrics.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",

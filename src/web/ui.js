@@ -78,6 +78,7 @@ const SPRITE = `<svg class="sr" width="0" height="0" aria-hidden="true"><defs>
 <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.9 5.5L19.5 10l-5.6 1.6L12 17l-1.9-5.4L4.5 10l5.6-1.5z"/></symbol>
 <symbol id="i-text" viewBox="0 0 24 24"><path d="M4 6h16M4 11h16M4 16h10"/></symbol>
 <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M4 14h4l2 3h4l2-3h4"/></symbol>
+<symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
 <symbol id="i-sidebar" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M15 4v16"/></symbol>
 </defs></svg>`;
 
