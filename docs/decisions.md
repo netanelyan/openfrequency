@@ -1416,3 +1416,25 @@ engine can act on, and what changed:
   later get settings of their own workspace (its posting times, a budget inside the
   operator's cap), never a global one. View-as is read-only on the server, with the
   banner accounts asks for. The switch itself is `docs/workspace-move.md`.
+
+- **The Hebrew is held to the hebrew-voice guide, in code where it can be (2026-10-23).**
+  The writer used to be told a few rules (spoken Hebrew, plural, no exclamation marks)
+  and code refused stock phrases. The packs' own cover patterns and good lines taught the
+  rest the other way: "{תאריך}: {מה קרה}", "בלי רגשות. רק קבלות", "והראשון מפתיע", "13
+  שניות. זה כל מה שזה לקח". Now every writing call gets one voice block
+  (`src/pipeline/prompts.js` `HEBREW`) and a read-aloud pass before it answers, and the
+  rewrite rebuilds a flagged sentence instead of swapping a word. The checks split in two.
+  What is ad copy or machine text every time is refused (`tellsIn`): "זה לא X, זה Y",
+  "לא עוד X", "בלי X ובלי Y", "פחות X, יותר Y", three fragments in a row, one emphatic word
+  as a sentence, a colon in a cover or a title (a score like 0:3 is a score), a label and
+  a colon, teasers, form Hebrew, translated Hebrew, ad words, engagement lines, a gendered
+  slash. Words in quotation marks are someone else's and are not held to it (a myth a slide quotes, "בספורט
+  הזה אין חוקים ואין שעון"). What is a tell only most of the time is a hint (`softTellsIn`,
+  `postTells`): "לא X אלא Y", "כ-80", "על ידי", a superlative with no number, a punch-line
+  ending, a triad, brochure words, and across the post, the same opening, the same
+  punch line, one sentence length, one favourite word. Hints go beside each line to the
+  reviewer, who reads the sentence and decides; offline they add a point each, two at
+  most, so they never block a post on their own. Refusing all of it was the
+  alternative: on the recordings the hints fire on about one text in twenty, and each
+  refusal there would have cost a redraft for a sentence that is often fine. The packs' cover patterns were rewritten with the same ids, so
+  their results stay linked, and the calls to action say the spoken imperative.

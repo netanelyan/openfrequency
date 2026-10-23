@@ -51,9 +51,15 @@ Requires Node 22.13 or newer (for `node:sqlite`); developed on 24.
   word from a stored document of an approved source. Every number on a slide must be
   in its quotes. The renderer refuses text the fact gate has not signed.
 - **Writes like a person.** Each account has its own voice guide with good and bad
-  lines. Code catches the tells of machine text (stock phrases, formal imperatives,
-  long dashes, lists of four), a reviewer scores each line, and only the flagged
-  lines are rewritten.
+  lines, and every writing call gets the same Hebrew voice: the concrete detail first,
+  everyday words, a long sentence beside a short one, and a read-aloud pass before it
+  answers. Code refuses what is always ad copy or machine text ("זה לא X, זה Y",
+  "בלי X ובלי Y", fragments in a row, a colon in a heading, teasers, form and translated
+  Hebrew, stock phrases, long dashes, lists of four). What is only usually a tell
+  ("לא X אלא Y", "כ-80", a passive "על ידי"), and what shows only across a post (every
+  sentence the same length, every slide ending on a punch line, one word everywhere),
+  goes to the reviewer as a hint beside the line. The reviewer scores each line, and
+  only the flagged lines are rewritten, as whole sentences.
 - **Draws as much as it writes.** At least half of a post's slides carry a picture:
   a licensed photograph checked against its slide, or a graphic drawn from the
   slide's own numbers.

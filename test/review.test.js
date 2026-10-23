@@ -46,13 +46,13 @@ test('a text scored 4 or more is rewritten, and the rewrite is kept when it pass
       home,
       // The first look flags the cover; the second reads the rewrite as a person's.
       () => ({ reviews: [{ index: 0, botScore: reviews++ ? 2 : 7, tells: ['too polished'], factProblem: '' }] }),
-      () => ({ rewrites: [{ index: 0, text: 'בזיליקום במרפסת: 5 דברים שהוא צריך מכם!' }] }),
+      () => ({ rewrites: [{ index: 0, text: '5 דברים שהבזיליקום במרפסת צריך מכם כדי לשרוד!' }] }),
       calls
     );
     const res = await buildPost(ctx, { pack: ctx.pack('demo'), formatKey: 'care-guide' });
     assert.equal(res.status, 'queued', res.reason);
     const post = loadPost(ctx.db, res.postId);
-    assert.equal(post.hook, 'בזיליקום במרפסת: 5 דברים\nשהוא צריך מכם.', 'the rewrite is kept, its exclamation mark fixed and its line broken in code');
+    assert.equal(post.hook, '5 דברים שהבזיליקום במרפסת\nצריך מכם כדי לשרוד.', 'the rewrite is kept, its exclamation mark fixed and its line broken in code');
     assert.equal(post.checks.rewrites.length, 1);
     assert.equal(post.review_score, 2, 'the score is the rewrite measured again, not 3 put down unread');
     assert.deepEqual(calls.filter((c) => c.task === 'review').length, 2, 'the rewritten text is scored again');
@@ -133,11 +133,11 @@ test('a rewritten text is scored again as it now reads, and one that still reads
     const ctx = withReviewer(
       home,
       (req) => (seen.push(req.user), { reviews: [{ index: 0, botScore: 7, tells: ['too polished'], factProblem: '' }] }),
-      () => ({ rewrites: [{ index: 0, text: 'בזיליקום במרפסת: 5 דברים שהוא צריך מכם' }] })
+      () => ({ rewrites: [{ index: 0, text: '5 דברים שהבזיליקום במרפסת צריך מכם כדי לשרוד' }] })
     );
     const res = await buildPost(ctx, { pack: ctx.pack('demo'), formatKey: 'care-guide' });
     assert.equal(seen.length, 2);
-    assert.match(seen[1], /^\[0\] \(cover[^)]*\) בזיליקום במרפסת: 5 דברים/m, 'the second look reads the rewrite alone');
+    assert.match(seen[1], /^\[0\] \(cover[^)]*\) 5 דברים שהבזיליקום במרפסת/m, 'the second look reads the rewrite alone');
     assert.equal(res.status, 'blocked');
     assert.equal(res.kind, 'voice');
     assert.match(res.reason, /נשמע כמו בוט \(7\/10\) גם אחרי שכתוב/);

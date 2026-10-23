@@ -6,6 +6,7 @@ import { FONTS } from '../render/fonts.js';
 import { ALL_LOOKS } from '../render/templates/registry.js';
 import { FINANCIAL } from '../rules/compliance.js';
 import { askJson } from '../llm/index.js';
+import { HEBREW } from '../pipeline/prompts.js';
 import { loadPack, readPack } from '../packs/load.js';
 import { validateAll } from '../packs/validate.js';
 
@@ -56,9 +57,9 @@ export function newTheme(existing) {
 }
 
 const STARTER_FORMATS = [
-  { id: 'explainer', name: 'איך זה עובד', about: 'One thing explained in a few steps, a fact per slide, from an approved source.', weight: 3, items: [3, 5], hooks: ['{x}: ככה זה עובד', '{n} דברים שכדאי להכיר על {x}'], closers: [{ title: 'שמרו את זה לפעם הבאה', body: 'ותשלחו למי שזה רלוונטי בשבילו' }] },
-  { id: 'n-facts', name: 'עובדות קצרות', about: 'A few short, specific facts about one subject, one per slide.', weight: 2, items: [3, 5], hooks: ['{n} דברים שלא ידעתם על {x}'], closers: [{ title: 'איזה מהם הפתיע אתכם?', body: 'שמרו את הרשימה' }] },
-  { id: 'whats-new', name: 'מה חדש', about: 'What changed recently, dated, a change per slide, from the source that announced it.', weight: 1, trial: true, items: [3, 4], hooks: ['מה השתנה ב{x} לאחרונה'], closers: [{ title: 'שמרו ותבדקו אם זה נוגע לכם', body: 'עדכונים מגיעים בהדרגה' }] },
+  { id: 'explainer', name: 'איך זה עובד', about: 'One thing explained in a few steps, a fact per slide, from an approved source.', weight: 3, items: [3, 5], hooks: ['ככה {x} עובד באמת', '{n} דברים על {x} שרוב האנשים מפספסים'], closers: [{ title: 'תשמרו את זה לפעם הבאה', body: 'ותשלחו למי שזה נוגע לו' }] },
+  { id: 'n-facts', name: 'עובדות קצרות', about: 'A few short, specific facts about one subject, one per slide.', weight: 2, items: [3, 5], hooks: ['{n} דברים שלא ידעתם על {x}'], closers: [{ title: 'איזה מהם הפתיע אתכם?', body: 'תשמרו את הרשימה' }] },
+  { id: 'whats-new', name: 'מה חדש', about: 'What changed recently, dated, a change per slide, from the source that announced it.', weight: 1, trial: true, items: [3, 4], hooks: ['מה השתנה ב{x} לאחרונה'], closers: [{ title: 'תשמרו ותבדקו אם זה נוגע לכם', body: 'העדכונים מגיעים לאט, לא לכולם באותו יום' }] },
 ];
 
 function voiceTemplate(seed, displayName) {
@@ -74,9 +75,10 @@ ${seed.audience || 'קהל ישראלי רחב'}.
 
 ## איך זה נשמע
 
-- עברית מדוברת ונכונה, משפטים קצרים, פונים ברבים.
+- עברית מדוברת ונכונה, כמו שמסבירים לחבר. פונים ברבים ("תבדקו", "תשמרו"), או בלי נושא בכלל ("נכנסים, בוחרים, שומרים").
 - מספר מדויק כשיש מספר במקור, ובלי מספרים כשאין.
-- בלי סימני קריאה, בלי הייפ, בלי "חשוב לציין" ו"בנוסף".
+- משפט ארוך ליד משפט קצר. לא שלושה משפטים קטועים ברצף, לא כותרת עם נקודתיים, לא "זה לא X, זה Y" ולא "בלי X ובלי Y".
+- לא שמים סימני קריאה, לא כותבים הייפ, ולא פותחים ב"חשוב לציין" או ב"בנוסף".
 
 ## שורות טובות
 
@@ -89,6 +91,8 @@ ${seed.audience || 'קהל ישראלי רחב'}.
 - חשוב לציין שזה פשוט מדהים!
 - ניסיתי את זה בעצמי וזה שינה לי את החיים
 - בנוסף, ניתן לבצע זאת על מנת לשפר את התוצאות.
+- מהיר. פשוט. משתלם.
+- זה לא עוד טיפ, זה שינוי של כל הגישה.
 `;
 }
 
@@ -153,7 +157,9 @@ export async function createPack(ctx, { seed, candidates, displayName, handle, e
     try {
       const { data } = await askJson(ctx, {
         task: 'voice', role: 'draft', effort: 'medium', maxTokens: 8000, expectOut: 2000, tag: 'onboarding', schema: VOICE_SCHEMA,
-        system: 'You write the voice guide for a Hebrew social account, in Hebrew, in Markdown, with exactly these sections: "## מי מדבר", "## למי", "## איך זה נשמע", "## שורות טובות" (at least 4 example lines as "- ..."), "## שורות רעות" (at least 4). The account never claims personal experience, never recommends products, addresses the audience in the plural, uses no exclamation marks. Return { voice }.',
+        system: `You write the voice guide for a Hebrew social account, in Hebrew, in Markdown, with exactly these sections: "## מי מדבר", "## למי", "## איך זה נשמע", "## שורות טובות" (at least 4 example lines as "- ..."), "## שורות רעות" (at least 4). The account never claims personal experience, never recommends products, addresses the audience in the plural, uses no exclamation marks. The guide is written the way a person talks, and its good lines are what a person who knows the niche would say out loud to a friend: specific (a number, a name, a place), with an uneven rhythm, in everyday words. The engine writes every post by these rules, so the good lines must keep them too:
+${HEBREW}
+The bad lines show what the account never sounds like: a few of the NEVER list above, and the niche's own clichés. Return { voice }.`,
         user: `Account: ${pack.displayName}. Niche: ${seed.niche}. Audience: ${seed.audience}. Example accounts the owner likes (for register only): ${examplesFromOwner.join(', ') || 'none'}.`,
       });
       if (data.voice?.length > 300) voice = data.voice;

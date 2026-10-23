@@ -5,7 +5,7 @@ accounts who it belongs to (`src/web/accounts.js`); every account (pack) belongs
 workspace, and a session sees only its workspace's (`src/web/workspace.js`). This page
 is the one-time switch on the VPS: the workspace **OpenFrequency** (`openfrequency`,
 Teder on, Toran off), its owner `natikyan153+of@gmail.com`, and the three accounts
-`builders`, `football` and `mma` moved into it.
+accounts (packs) moved into it, named below as `<PACKS>`.
 
 The superadmin (`natikyan153@gmail.com`) and the owner (`natikyan153+of@gmail.com`)
 are two different users in accounts. Accounts keeps the address as written (it only
@@ -113,7 +113,7 @@ In `private/.env`:
 ## 4. A dry run: what would move
 
 ```sh
-$RUN /opt/node24/bin/node scripts/workspace-assign.js --workspace <ID> builders football mma --dry-run
+$RUN /opt/node24/bin/node scripts/workspace-assign.js --workspace <ID> <PACKS> --dry-run
 ```
 
 This opens the database read-only, so it does not even run the migration. It prints one
@@ -122,10 +122,8 @@ line per account and changes nothing. Expect:
 ```
 dry run on /opt/open-frequency/private/data/openfrequency.db (opened read-only; nothing is written)
   the workspace column does not exist yet: the real run adds it first (the migration), then:
-  builders: no workspace -> workspace <ID>
-  football: no workspace -> workspace <ID>
-  mma: no workspace -> workspace <ID>
-a real run would change 3 account(s)
+  <pack>: no workspace -> workspace <ID>
+a real run would change N account(s)
 ```
 
 If a line says `REFUSED`, stop and read it. It could be an account name that does not
@@ -134,7 +132,7 @@ exist, or an account already in another workspace.
 ## 5. The move
 
 ```sh
-$RUN /opt/node24/bin/node scripts/workspace-assign.js --workspace <ID> builders football mma
+$RUN /opt/node24/bin/node scripts/workspace-assign.js --workspace <ID> <PACKS>
 $RUN /opt/node24/bin/node scripts/workspace-assign.js --list
 ```
 

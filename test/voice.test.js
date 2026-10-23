@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readPack } from '../src/packs/load.js';
-import { limitsFor, tellsIn } from '../src/voice/tells.js';
-import { packBlock, slidesUser } from '../src/pipeline/prompts.js';
+import { limitsFor, postTells, softTellsIn, tellsIn } from '../src/voice/tells.js';
+import { packBlock, rewritePrompt, slidesPrompt, slidesUser } from '../src/pipeline/prompts.js';
 import { experienceIn, fakeProofIn, badgeNextTo } from '../src/voice/honesty.js';
-import { heuristicReview, REWRITE_AT } from '../src/voice/review.js';
+import { BLOCK_AT, heuristicReview, hintsFor, REWRITE_AT, reviewUser } from '../src/voice/review.js';
 import { blockedQuery, checkRules } from '../src/rules/check.js';
 import { commonsLicenseOk, imageCredit, namesIn, needsCredit, once } from '../src/images/index.js';
 import { Db } from '../src/db/index.js';
@@ -148,4 +148,104 @@ test('an account can ask for a short line under the cover and short, catchy capt
   assert.match(packBlock({ ...pack, meta: {} }).text, /200 to 600 characters/);
   const user = slidesUser({ format: { kind: 'story', name: 's' }, n: 4, outline: { topic: 't', items: [] }, facts: [], pack });
   assert.match(user, /SUB: the line under the cover is at most 60 characters/);
+});
+
+// The hebrew-voice guide, in code: what is always ad copy or machine text is refused; what usually is goes to the
+// reviewer as a hint.
+const codes = (s, kind = 'slideBody') => tellsIn(s, { kind }).map((x) => x.msg);
+const refused = (s, kind) => codes(s, kind).length > 0;
+
+test("the ad structures are refused: what it isn't, a chain of reassurances, a slogan's balance, fragments", () => {
+  assert.ok(refused('זה לא עוד אתר, זה בית לעסק שלכם'));
+  assert.ok(refused('הוא לא היה כוכב, הוא היה עובד'));
+  assert.ok(refused('בלי התחייבות, בלי הפתעות ובלי אותיות קטנות'));
+  assert.ok(refused('אין סיבה לחכות ואין מה להפסיד'));
+  assert.ok(refused('פחות עבודה, יותר כסף'));
+  assert.ok(refused('מהיר. קל. זול.'));
+  assert.ok(refused('ארבעה סטודנטים מ-MIT. ארבע שנים. חברה ששווה מיליארדים.'));
+  assert.ok(refused('הבזיליקום חזר לחיים. פשוט.'), 'one emphatic word as a sentence');
+  // The same words, said as a sentence, pass.
+  assert.ok(!refused('ארבעה סטודנטים מ-MIT בנו תוך ארבע שנים חברה ששווה מיליארדים.'));
+  assert.ok(!refused('היא לא קיימת, ובכל זאת נכנסה למצעד של בילבורד.'));
+  assert.ok(!refused('29 ניצחונות בלי הפסד אחד, ואז הוא פשוט פרש.'));
+});
+
+test('a heading has no colon and no label, but a score is a score', () => {
+  assert.ok(refused('14 באוקטובר 2018: מרפסת אחת שינתה עיר', 'cover'));
+  assert.ok(refused('ינואר: 6 שעות שמש', 'slideTitle'));
+  assert.ok(refused('דעה לא פופולרית: רוב הצמחים מתים מאהבה', 'cover'));
+  assert.ok(refused('עובדה: בזיליקום צריך 6 שעות שמש'), 'a label opener in a body too');
+  assert.ok(!refused('0:3 במחצית, וליברפול עוד לקחה את הגביע', 'cover'));
+  assert.ok(!refused('ב-14 באוקטובר 2018 מרפסת אחת שינתה עיר', 'cover'));
+});
+
+test('teasers, form Hebrew, translated Hebrew, ad words and engagement lines are refused', () => {
+  assert.ok(refused('5 הצמחים שהכי פחות צריכים מים, והראשון מפתיע', 'cover'));
+  assert.ok(refused('אנחנו הולכים על אבלויב, והנה למה', 'slideTitle'));
+  assert.ok(refused('לא תאמינו מה קרה לפיקוס'));
+  assert.ok(refused('במידה והעציץ יבש, משקים'));
+  assert.ok(refused('יש לציין שהשתיל רגיש לקור'));
+  assert.ok(refused('בסופו של יום, הכול תלוי באור'));
+  assert.ok(refused('כשזה מגיע לבזיליקום, השמש קובעת'));
+  assert.ok(refused('הכלי הזה הוא מהפכה של ממש'));
+  assert.ok(refused('תייגו חבר שצריך את זה'));
+  assert.ok(refused('את/ה מוזמנ/ת לנסות'));
+  assert.ok(refused('מה???'));
+  // A headline that holds back its point is fine as plain narration in a slide's body.
+  assert.ok(refused('זו הסיבה שהוא פרש', 'cover'));
+  assert.ok(!refused('הוא נפצע בברך. זו הסיבה שהוא פרש ב-2019.'));
+});
+
+test("quoted words are someone else's: a myth as people say it keeps its own shape", () => {
+  assert.ok(!refused('"ב-MMA אין חוקים ואין שעון"', 'slideTitle'));
+  assert.ok(refused('ב-MMA אין חוקים ואין שעון', 'slideTitle'));
+  // Gershayim inside an abbreviation never open a quotation.
+  assert.ok(refused('מכבי ת"א: לא עוד קבוצה רגילה', 'cover'));
+});
+
+test('what is usually a tell is a hint for the reviewer, never a refusal', () => {
+  for (const [s, hint] of [
+    ['השרך כבר לא בסלון, אלא בחדר האמבטיה.', /לא X אלא Y/],
+    ['לפי Wix, Base44 נקנתה בכ-80 מיליון דולר.', /בערך/],
+    ['וייז נקנתה על ידי גוגל ב-2013.', /passive/],
+    ['140 שערים בליגת האלופות. אף אחד לא קרוב.', /punch line/],
+    ['הוא עשה משהו שאף אחד לא עשה לפניו. מי זה?', /names nothing/],
+  ]) {
+    assert.deepEqual(codes(s), [], `refused: ${s}`);
+    assert.ok(softTellsIn(s).some((h) => hint.test(h)), `no hint for: ${s}`);
+  }
+  assert.deepEqual(softTellsIn('בזיליקום צריך לפחות 6 שעות שמש ישירה ביום. פחות מזה, והעלים נהיים קטנים וחיוורים.'), []);
+});
+
+test('across a post: the same opening, the same punch line, one rhythm and one favourite word are noticed', () => {
+  const body = (text) => ({ kind: 'slideBody', text });
+  const notes = (texts, known) => postTells(texts, { known }).map((p) => p.note).join(' | ');
+  assert.match(notes([body('הוא ניצח את כולם. שוב.'), body('הוא ניצח בגמר. בלי רחמים.'), body('הוא ניצח בבית. כמו תמיד.')]), /open with the same word.*\| .*short punch line/);
+  const even = ['השתיל צריך שש שעות של שמש', 'העציץ צריך חור קטן בתחתית', 'האדמה צריכה להתייבש בין השקיות', 'הגבעול צריך גיזום פעם בחודש', 'העלים צריכים מקום לנשום בחלון', 'הפרחים צריכים להיקטף מוקדם בבוקר'];
+  assert.match(notes(even.map((s) => body(`${s}.`))), /every sentence is about \d words long/);
+  const fav = ['משקים בדיוק בבוקר, לפני החום.', 'גוזמים בדיוק מעל זוג עלים.', 'שותלים בדיוק בעומק של העציץ הקודם.', 'קוטפים בדיוק לפני הפריחה.'].map(body);
+  assert.match(notes(fav), /"בדיוק" in 4 texts/);
+  assert.doesNotMatch(notes(fav, 'בדיוק'), /in 4 texts/, "the post's subject may repeat");
+});
+
+test('the reviewer gets the hints beside each text, and the offline reviewer scores them without blocking on them', () => {
+  const texts = [
+    { where: 'slide 1 text', kind: 'slideBody', text: 'השרך כבר לא בסלון, אלא בחדר האמבטיה.' },
+    { where: 'slide 2 text', kind: 'slideBody', text: 'בזיליקום צריך לפחות 6 שעות שמש ביום.' },
+  ];
+  assert.deepEqual(hintsFor(texts)[1], []);
+  const user = reviewUser({ meta: { displayName: 'דמו' }, voice: '# קול\n\n## מי מדבר\n\nגנן.' }, texts, []);
+  assert.match(user, /\[0\][^\n]*\n {4}HINTS: "לא X אלא Y"/);
+  assert.doesNotMatch(user, /\[1\][^\n]*\n {4}HINTS/);
+  const [hinted, plain] = heuristicReview(texts, pack);
+  assert.ok(hinted.botScore > plain.botScore && hinted.botScore < BLOCK_AT, `hinted ${hinted.botScore}, plain ${plain.botScore}`);
+});
+
+test("the writer is told the voice: the never list, the read-aloud pass, and the rewrite rebuilds a sentence", () => {
+  const system = packBlock(pack).text;
+  assert.match(system, /HEBREW THAT SOUNDS LIKE A PERSON/);
+  assert.match(system, /"בלי X ובלי Y"/);
+  assert.doesNotMatch(system, /\(אתם, תנסו, שמרו\)/, 'the formal imperative is never given as an example of the plural');
+  assert.match(slidesPrompt(pack).system[1].text, /BEFORE YOU RETURN/);
+  assert.match(rewritePrompt(pack).system[1].text, /never swap one word/);
 });

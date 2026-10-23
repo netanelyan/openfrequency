@@ -1,7 +1,7 @@
 import { COMPLIANCE } from '../rules/compliance.js';
 import { overlayOf } from '../rules/overlay.js';
 import { BEAT, MAX_HASHTAGS, STORY } from '../rules/caption.js';
-import { CONNECTIVES, FILLER, FORMAL, LIMITS, limitsFor } from '../voice/tells.js';
+import { AD, BUREAUCRATIC, CALQUES, CONNECTIVES, FILLER, FORMAL, LIMITS, TEASER, limitsFor } from '../voice/tells.js';
 import { focusText } from '../sources/text.js';
 import { contentRange, groupOf, hookPatterns, kindName, kindOf, shapesPrompt } from '../formats/kinds.js';
 import { VISUAL_SCHEMA, visualsOf, visualsPrompt } from '../render/visuals.js';
@@ -152,6 +152,33 @@ export const REPAIR_SCHEMA = {
   additionalProperties: false,
 };
 
+// How the Hebrew sounds, in every call that writes it (the hebrew-voice guide, for a slideshow). Every "never" here
+// is also a check: the hard ones in src/voice/tells.js tellsIn, the ones that are only usually wrong as hints to
+// the reviewer (softTellsIn, postTells).
+export const HEBREW = `HEBREW THAT SOUNDS LIKE A PERSON (the cover, every slide, both captions):
+Write it the way someone who knows the subject would say it out loud to a friend: direct, a little informal, specific. A sentence that would not come out of a person's mouth does not go on a slide.
+- The concrete thing first: the number, the name, the minute, the place. "16 שערים ב-4 מונדיאלים", never "המון שערים". A claim with nothing behind it is cut, not decorated.
+- An uneven rhythm: a longer sentence beside a short one. Never every sentence the same length, and never three fragments in a row for drama ("מהיר. קל. זול."). The slides do not all open with the same word or end on a punch line, and their titles are not one template.
+- Everyday words: אפשר (not ניתן), צריך (not נדרש), בערך (not כ-), בשביל (not על מנת), אם (not במידה ו), the spoken imperative (תעקבו, תשמרו, תשלחו, תנסו), never the formal one (עקבו, שמרו, שלחו, נחשו), and the word people use over the formal one (פאונד, not ליברה). English terms the way Israelis say them (אפליקציה, לינק, באג).
+- Active sentences: who did what. "גוגל קנתה את וייז", never "וייז נקנתה על ידי גוגל".
+- Address the audience in the plural, or with no subject at all ("תוחבים אצבע לאדמה"). Never in the singular, never with a slash ("את/ה").
+- An opinion is said as an opinion, next to its numbers.
+NEVER, because each one reads as an ad or a bot. When a draft has one, rewrite the whole sentence; never swap one word:
+- "זה לא X, זה Y", "לא עוד X", or a "לא X אלא Y" punch: say what it is.
+- "בלי X ובלי Y", "אין X ואין Y": the one thing that matters, as a sentence.
+- "פחות X, יותר Y", a triad of adjectives, two perfectly balanced sentences.
+- A one-word sentence for emphasis ("פשוט.", "זהו.", "נקודה.").
+- A colon in a heading, or a label before a sentence ("דעה לא פופולרית:", "עובדה:", "14 באוקטובר 2018: ..."): one sentence, or one question ("ב-14 באוקטובר 2018 מרפסת אחת שינתה עיר"). A score stays a score ("0:3").
+- A teaser that hides the point ("זה מה שקרה כש", "הנה למה", "והראשון מפתיע", "לא תאמינו", a hyphen before the payoff). A cover may ask a real question about a named subject; it never hides who or what the post is about.
+- Big words with nothing behind them ("מהפכה", "אגדי", "משנה את כללי המשחק"), abstract nouns where a thing can be named ("חוויה", "פתרון", "פלטפורמה").
+- English translated word for word ("בסופו של יום", "עושה את ההבדל", "כשזה מגיע ל", "מה שהופך את") and the Hebrew of forms ("הננו", "בגין", "יש לציין").
+- Exclamation marks, long dashes (— or –), semicolons, an ellipsis, stacked question marks, more than one emoji on a slide.
+- A moral or a summary at the end of a slide or a caption, or a line that asks for comments, tags or shares.
+SERIOUS SUBJECTS (money, health, law, an injury, a death, a failure that hurt people): the same person, without jokes or emoji. The fact first, with its exact number and date, then what it means, in plain words.`;
+
+// The rewrite pass of the hebrew-voice guide, as the writer runs it on its own draft before returning it.
+const READ_ALOUD = `BEFORE YOU RETURN, read every text as if you were saying it to a friend. Rewrite any sentence you would not say out loud, or that sounds like an ad, a form or a translation. Cut a first sentence that only warms up and a last one that only sums up. Then read the slides one after another: if they open alike, end alike or have the same length, change some of them. Check the NEVER list one last time.`;
+
 const compliance = (pack) =>
   (pack.meta.compliance || [])
     .map((id) => `- ${COMPLIANCE[id].about}. This is law and a code check enforces it: explain how things work, never recommend.`)
@@ -186,7 +213,7 @@ function formatLine(f) {
   const hooks = hookPatterns(f)
     .map((h) => `[${h.id}] ${h.pattern}${h.examples.length ? ` (e.g. ${h.examples.map((x) => `"${x}"`).join(', ')})` : ''}`)
     .join(' / ');
-  return `- ${f.id}: "${f.name}", ${aKind(f)} post, ${lo} to ${hi} content slides. ${f.about || ''} Cover patterns (adapt, never copy word for word): ${hooks}`;
+  return `- ${f.id}: "${f.name}", ${aKind(f)} post, ${lo} to ${hi} content slides. ${f.about || ''} Cover patterns (adapt, never copy word for word; where a pattern has a colon or a teaser, say it as one plain sentence or question): ${hooks}`;
 }
 
 /**
@@ -195,7 +222,7 @@ function formatLine(f) {
  * apart), '5m' for direct calls.
  */
 export function packBlock(pack, { ttl = '5m' } = {}) {
-  const banned = [...CONNECTIVES, ...FORMAL, ...FILLER].map((t) => t.p).concat(pack.rules.bannedPhrases || []);
+  const banned = [...CONNECTIVES, ...FORMAL, ...FILLER, ...BUREAUCRATIC, ...AD, ...TEASER, ...CALQUES].map((t) => t.p).concat(pack.rules.bannedPhrases || []);
   const legacy = (pack.formats.formats || []).every((f) => kindName(f) === 'list');
   // An account that asked for short captions gets a tease, not a summary.
   const capLong = limitsFor('captionLong', pack);
@@ -229,7 +256,6 @@ EVERY POST:
 - keywords: 3 to 6 words people would search for, shown on the slides: names, the topic, the competition. At least one in Hebrew and one in English letters.
 - Today's date is in the request. Anything that happened more than a year before it is told with its year on the cover or the first slide, as what it shows or teaches now: never as news, never as if it just happened.
 - Every slide adds something the cover and the slides before it did not: no slide and no graphic repeats another's numbers or point.
-- Talk like a friend, in spoken Hebrew: the spoken imperative (תעקבו, תשמרו, תשלחו, תכתבו, תנחשו), never the formal one (עקבו, שמרו, שלחו, כתבו, נחשו), and the everyday word over the formal one (פאונד, not ליברה).
 - A claim of "the only", "the first", "never" or "every" keeps every condition its fact has: "the only player to win all six" shortened to three of them is false. Keep the whole list, or drop the "only".
 - Name what the post is about (the product, the person, the club, the fight) on the cover or the first slide: a post that never says whose story it is reads as a riddle nobody asked for.
 - story: the TikTok caption, told as a story in four beats that the code puts one a line: hook (one sentence of at most ${BEAT.hookMaxChars} characters that stops the scroll: TikTok shows it before "more"), problem (what was at stake, what went wrong, or the question the post settles), discovery (the turn: what the slides found), result (how it ended, or what it means for them now). Each beat ${BEAT.minWords} words or more, at most ${BEAT.sentences} sentences, and none repeats another. Together ${shortCaps ? `${capLong.minChars} to ${capLong.maxChars} characters: short and catchy, each beat one short line, with the names people search for` : '200 to 600 characters, in the words people search for (the names, the topic)'}. The beats retell the slides: the post's best fact, quote or twist is on a slide, never only in the caption, and the caption promises nothing the slides do not show ("what Cavani said years later" with no slide that says it reads as a broken promise). A guess-who's result never names the answer and a ranking's never names number one: it says what the last slide settles, not how. captionShort: the Instagram caption, ${capShort.maxChars < LIMITS.captionShort.maxChars ? `up to ${capShort.maxChars} characters, one catchy line` : '60 to 200 characters'} (the design puts the cover line before it). Neither has hashtags (the engine adds the post's own, ${MAX_HASHTAGS} at most), links or a question.
@@ -241,9 +267,7 @@ ${visualsPrompt(pack)}
 - coverVisual: the cover's graphic when no photograph is used: the most striking number or match-up of the post, as one visual of the types above (a stat, a compare...), or type "none" to let the design draw the kind's own art. A date is the cover's graphic only on a post about that day (this day in history, a fight's date): a past date as the biggest thing on a cover reads as old news.
 `
 }
-HEBREW, ALWAYS:
-- Spoken, correct Hebrew. Short sentences. Address the audience in the plural (אתם, תנסו, שמרו), never in the singular.
-- No exclamation marks, no long dashes, no semicolons, no ellipsis, at most one emoji per slide.
+${HEBREW}
 - Never claim to have tried, bought, used, visited or seen anything. The account explains; it does not have experiences.
 - Never mention another account, a follower count, views, a badge or "official".
 - Never these words: ${banned.join(', ')}.
@@ -286,19 +310,21 @@ const SLIDES_TASK = {
   text: `TASK: WRITE ONE POST'S TEXT.
 
 The request names the format and its kind, the content slides with their roles, the verified facts, the outline and the cover pattern to follow. Write:
-- hook: the cover line. 3 to 11 words, after the cover pattern the request names (adapt it to this post, never copy it word for word). It makes them need the second slide: a question or a promise that only the slides answer ("איך ברצלונה עשו את הבלתי אפשרי בקאמפ נואו?" pulls; "ברצלונה ניצחה 6:1" is already over), built on the post's most surprising concrete detail where the pattern allows (a score, a sum, a quote, a name). Never only the famous name of the story, and never the payoff the last slide holds. A count it promises ("3 רמזים", "5 ...") is the count of the slides that follow. A number only if it is the number of content slides, a top 5 or 10, or it appears in a fact's quote. hookPattern: that pattern's id.
+- hook: the cover line. 3 to 11 words, after the cover pattern the request names (adapt it to this post, never copy it word for word). It makes them need the second slide: a real question or a concrete fact that only the slides explain ("איך ברצלונה הפכה 4:0 ל-6:1 בקאמפ נואו?" pulls; "ברצלונה ניצחה 6:1" is already over), built on the post's most surprising concrete detail where the pattern allows (a score, a sum, a quote, a name). It names what the post is about, as one sentence or one question: no colon, no label, no teaser that hides the subject. Never only the famous name of the story, and never the payoff the last slide holds. A count it promises ("3 רמזים", "5 ...") is the count of the slides that follow. A number only if it is the number of content slides, a top 5 or 10, or it appears in a fact's quote. hookPattern: that pattern's id.
 - sub: one short line under the cover line, or "" when the cover line alone fills the cover's lines (LINES in the request).
 - subject: as in the outline (you may shorten a name).
 - slides: exactly the outline's content slides, the same roles in the same order, each { role, title: up to 60 characters, body: up to 230 characters in one to three short sentences, broken into lines as the request's LINES says (or one item a line, where the shape says so), a and b: the two values on a head-to-head stat slide and "" everywhere else, facts: the ids of the facts it states }. Every number on a slide, dates and years included, must appear in the quotes of the facts it lists.
 - story, captionShort, keywords: as the account's rules say. For a legacy list post, the story may be in "hook" alone, and captionShort and keywords may be empty.
-- question: one short question about this post's own subject that a reader could answer from their own life, or "" when none would sound natural. Never a line that fits any post ("ידעתם את זה?", "מה דעתכם?", "למי זה יכול לעזור?"): those are dropped.`,
+- question: one short question about this post's own subject that a reader could answer from their own life, or "" when none would sound natural. Never a line that fits any post ("ידעתם את זה?", "מה דעתכם?", "למי זה יכול לעזור?"): those are dropped.
+
+${READ_ALOUD}`,
 };
 
 const REWRITE_TASK = {
   cache: '5m',
   text: `TASK: REWRITE FLAGGED TEXTS.
 
-A reader flagged some texts of a post: as sounding like a bot (and said what gave each away), or as saying more than the post's facts support (a FACT PROBLEM). Rewrite each flagged text so a person would have written it, in the account's voice: natural spoken Hebrew, plural address, no exclamation marks, no long dashes. Where there is a FACT PROBLEM, say only what the facts support: drop or soften the part that goes beyond them. Keep every fact and every number that is supported; add none; keep about the same length. A TikTok caption ("caption") is a story in four lines, hook, problem, discovery and result: rewrite it as four lines again, one beat a line. Return { index, text } for each flagged text you were given, using its index. A flagged "visual" is a slide's graphic, given as its data (JSON): return it corrected as the same JSON in "text", every name and number from the facts its slide may use, or "" to drop it.`,
+A reader flagged some texts of a post: as sounding like a bot (and said what gave each away), or as saying more than the post's facts support (a FACT PROBLEM). Rewrite each flagged text so a person would have written it, in the account's voice: say it the way you would say it out loud to a friend, then write that down. A tell is in a sentence's shape as often as in a word, so rebuild the sentence around what it says; never swap one word for a synonym and keep the shape. Follow HEBREW THAT SOUNDS LIKE A PERSON, and keep the rhythm uneven: a rewritten slide does not end on a punch line because the others do. Where there is a FACT PROBLEM, say only what the facts support: drop or soften the part that goes beyond them. Keep every fact and every number that is supported; add none; keep about the same length. A TikTok caption ("caption") is a story in four lines, hook, problem, discovery and result: rewrite it as four lines again, one beat a line. Return { index, text } for each flagged text you were given, using its index. A flagged "visual" is a slide's graphic, given as its data (JSON): return it corrected as the same JSON in "text", every name and number from the facts its slide may use, or "" to drop it.`,
 };
 
 const REPAIR_TASK = {

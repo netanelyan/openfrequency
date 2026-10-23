@@ -151,10 +151,10 @@ test('an edit that invents a number is refused and nothing is saved', async () =
 test('a clean edit is checked, re-rendered and remembered as an example of the owner\'s voice', async () => {
   const cookie = await login();
   const csrf = await csrfOf(cookie);
-  const res = await post(`/post/${postId}/edit`, cookie, { _csrf: csrf, hook: 'בזיליקום במרפסת: 5 דברים שקובעים אם הוא ישרוד', sub: 'מה שעושה את ההבדל', caption: 'בזיליקום הוא צמח של קיץ, וכל אחד מהדברים האלה משפיע עליו.' });
+  const res = await post(`/post/${postId}/edit`, cookie, { _csrf: csrf, hook: '5 דברים שקובעים אם הבזיליקום במרפסת ישרוד', sub: 'ההבדל בין עציץ עייף לשיח מלא', caption: 'בזיליקום הוא צמח של קיץ, וכל אחד מהדברים האלה משפיע עליו.' });
   const out = await res.json();
   assert.equal(res.status, 200, JSON.stringify(out));
-  assert.equal(ctx.db.get('SELECT sub FROM posts WHERE id = ?', postId).sub, 'מה שעושה את ההבדל');
+  assert.equal(ctx.db.get('SELECT sub FROM posts WHERE id = ?', postId).sub, 'ההבדל בין עציץ עייף לשיח מלא');
   assert.ok(ctx.db.get('SELECT COUNT(*) AS n FROM edits WHERE post_id = ?', postId).n >= 1);
 });
 

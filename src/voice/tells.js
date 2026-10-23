@@ -25,7 +25,7 @@ const group = (label, list) => list.map((p) => ({ label, p, re: phrase(p) }));
 export const CONNECTIVES = group('stock opener or connective', [
   'חשוב לציין', 'כדאי לדעת', 'כדאי לזכור', 'שווה לדעת', 'שווה לציין', 'בנוסף', 'יחד עם זאת', 'ללא ספק', 'מעניין לציין',
   'ראוי לציין', 'לסיכום', 'כמו כן', 'נקודה שמתחברת', 'בעולם של היום', 'בעידן הנוכחי', 'בואו נצלול', 'בואו נדבר על', 'צללו פנימה',
-  'במאמר זה', 'בפוסט הזה נדבר',
+  'במאמר זה', 'בפוסט הזה נדבר', 'בפוסט הזה',
 ]);
 
 export const FORMAL = group('formal word', ['ניתן', 'הינו', 'הינה', 'הינם', 'אנו', 'על מנת', 'באפשרותכם', 'באפשרותך', 'לפיכך', 'אי לכך', 'יתרה מזאת']);
@@ -38,6 +38,50 @@ export const FILLER = group('filler adjective', [
   'בלתי נשכח', 'פנטסטי', 'פנטסטית', 'אדיר', 'אדירה',
 ]);
 
+// Hebrew a form writes and a person never says, in any register (the hebrew-voice guide, section 5).
+export const BUREAUCRATIC = group('form Hebrew, not spoken', [
+  'הננו', 'הנני', 'הרינו', 'בגין', 'יש לציין', 'יש להדגיש', 'יש לזכור', 'יש להקפיד', 'יש לוודא', 'יש לשים לב', 'יש לבצע', 'בהתאם לאמור', 'לשירותכם', 'לשירותך', 'תבוצע', 'יבוצע', 'אי לזאת',
+]);
+
+// Ad copy: claims with nothing behind them, nouns that name no thing, urgency nobody set.
+export const AD = group('ad copy', [
+  'מהפכה', 'מגדירים מחדש', 'מגדיר מחדש', 'ממציא מחדש', 'ממציאים מחדש', 'לשלב הבא', 'ערך מוסף', 'מעצימים', 'מגוון פתרונות', 'פתרון מושלם',
+  'פלטפורמה מתקדמת', 'המערכת המובילה', 'אל תפספסו', 'מהרו', 'בלי אותיות קטנות', 'בלי התחייבות', 'השליטה אצלכם',
+  'הצוות שלנו', 'אנחנו כאן בשבילכם', 'אנחנו כאן כדי',
+]);
+
+// A twist kept back to make them read on: the slides answer a question, they do not hide the subject.
+export const TEASER = group('a teaser that withholds the point', [
+  'לא תאמינו', 'והנה הקטע', 'הנה הקטע', 'הנה הסיבה', 'הנה למה', 'לא מה שאתם חושבים', 'משהו גדול בדרך', 'תתפלאו', 'התשובה תפתיע',
+  'הראשון מפתיע', 'המקום הראשון מפתיע', 'זה סיפור אמיתי', 'שאף אחד לא אומר לכם', 'שאף אחד לא מספר לכם', 'תראו מה קרה', 'ואז קרה משהו',
+]);
+
+// Plain narration in a slide's body ("זו הסיבה שהוא פרש"), a withheld payoff as a headline.
+export const HEADLINE_TEASER = group('a headline that withholds the point', ['זה מה שקרה', 'הנה מה שקרה', 'זאת הסיבה', 'זו הסיבה']);
+
+// What a chatbot says and a person in a post does not, and the lines that beg for comments.
+export const BOT = group('chatbot or engagement line', [
+  'שאלה מצוינת', 'שאלה מעולה', 'מקווה שזה עוזר', 'מקווים שזה עוזר', 'אל תהססו', 'אל תהסס', 'אשמח לעמוד', 'נשמח לעמוד',
+  'תייגו', 'תתייגו', 'תגיבו', 'תכתבו בתגובות', 'שתפו אם',
+]);
+
+// English said in Hebrew words: a sentence translated, not written.
+export const CALQUES = group('translated Hebrew', [
+  'בסופו של יום', 'עושה את ההבדל', 'עושים את ההבדל', 'לעשות את ההבדל', 'לקחת צעד אחורה', 'על בסיס יומי', 'באופן משמעותי',
+  'בצורה משמעותית', 'יותר מאי פעם', 'מעולם לא היה קל יותר', 'כל מה שצריך לדעת', 'המדריך המלא', 'מדריך מלא', 'בואו נודה', 'במילים אחרות', 'ברמה אחרת',
+]);
+
+// Phrases whose second word takes a prefix, so they cannot be matched as whole words.
+const GLUED = [
+  { label: 'form Hebrew, not spoken', p: 'במידה ו', re: /(?:^| )במידה ו/u },
+  { label: 'form Hebrew, not spoken', p: 'לא יאוחר מ', re: /(?:^| )לא יאוחר מ/u },
+  { label: 'a teaser that withholds the point', p: 'הסוד ש', re: /(?:^| )ו?הסוד ש/u },
+  { label: 'translated Hebrew', p: 'כשזה מגיע ל', re: /(?:^| )כשזה מגיע ל/u },
+  { label: 'translated Hebrew', p: 'בכל הנוגע ל', re: /(?:^| )בכל הנוגע ל/u },
+  { label: 'translated Hebrew', p: 'זה לא סוד ש', re: /(?:^| )(?:זה )?לא סוד ש/u },
+  { label: 'translated Hebrew', p: 'מה שהופך את', re: /(?:^| )מה שהופך את/u },
+];
+
 // Second-person singular forms. Posts address the audience in the plural.
 // Only unambiguous ones: the masculine future (תוכל, תרצה, תבדוק) is spelled
 // exactly like the third person feminine ("Google תוכל"), so it cannot be told
@@ -46,6 +90,27 @@ export const FILLER = group('filler adjective', [
 export const GENDERED = group('singular "you" (the audience is addressed in the plural)', [
   'אתה', 'תרצי', 'תגידי', 'תשלחי', 'תבדקי', 'תשמרי', 'תוכלי', 'תדעי', 'בא לך', 'שלך', 'אותך', 'עשית', 'כתבת', 'צילמת',
 ]);
+
+// The structures of ad copy and of machine text (the hebrew-voice guide, section 5), on the text as written.
+// "זה לא X, זה Y": what it is not, then the punch. Said plainly, it is what it is.
+const NOT_THIS = /(?:^|[\s.?,"(])(?:זה|זו|זאת|הוא|היא|הם)\s+לא\s+(?:עוד\s+|סתם\s+|רק\s+)?[^,.?\n]{1,30},\s*(?:זה|זו|זאת|הוא|היא|הם|אלא)\s/u;
+// "לא עוד X": the slogan's opener.
+const NO_MORE = /(?:^|[\s.?,"(])לא\s+עוד\s+(?![\d])/u;
+// "בלי X ובלי Y", "אין X ואין Y": reassurance in a chain.
+const WITHOUT_CHAIN = /(?:^| )ו?(בלי|אין) (?:\S+ ){1,3}ו?\1(?= )/u;
+// "פחות X, יותר Y", "יותר X, יותר Y": a sentence balanced like a slogan.
+const BALANCED = /(?:^|[\s.?"(])(?:יותר|פחות)\s+[^,.?\n]{1,25},\s*(?:יותר|פחות)\s/u;
+// "בשורה משמחת:", "דעה לא פופולרית:": a label and a colon instead of a sentence.
+const LABEL_OPENER = /(?:^|[.?!]\s+)(?:בשורה משמחת|סוף סוף|חדש|מבריק|אזהרה|עדכון|דעה(?: לא פופולרית)?|טיפ|עובדה|פאן פקט|ספוילר|רגע|חשוב|הטוויסט|התשובה|השורה התחתונה)\s*:/u;
+// "את/ה", "מוזמנ/ת": a form's slash. Rephrase to the plural, or to no subject at all.
+const GENDER_SLASH = /[א-ת]\/[א-ת]{1,2}(?![א-ת])/u;
+// "מ-ט-ר-י-ף": letters spaced out for emphasis.
+const SPACED = /(?:^|\s)(?:[א-ת]-){3,}[א-ת](?=[\s.,?]|$)/u;
+// A sentence that is only an emphatic word: "פשוט.", "זהו.", "נקודה."
+const EMPHATIC = /^(?:ו?פשוט|ו?זהו|נקודה|וזה הכל|וזה הכול|בום|וואו|תכלס|סגור)$/u;
+// Fragments for emphasis: this many very short sentences in a row ("מהיר. קל. זול.").
+const FRAGMENT_WORDS = 3;
+const FRAGMENT_RUN = 3;
 
 const MORAL = /^(?:בקיצור|בסופו של דבר|בשורה התחתונה|השורה התחתונה|וזה מה ש|כי בסוף|אז כן|ובקיצור|המסקנה)/;
 const EMOJI = /\p{Extended_Pictographic}/gu;
@@ -130,6 +195,18 @@ export const FLOOR = { captionLong: { sentences: 5, maxChars: 160 } };
  * extra: the pack's own banned phrases (rules.json bannedPhrases)
  */
 const ON_SLIDE = new Set(['cover', 'sub', 'slideTitle', 'slideBody']);
+// The texts a reader takes as a heading: no colon in them, and no payoff held back.
+const HEADLINE = new Set(['cover', 'sub', 'slideTitle']);
+
+// A quotation: a quote mark after a space or the start, words, and a quote mark before a space, punctuation or
+// the end. The gershayim inside an abbreviation (ת"א, ארה"ב) sit between letters, so they never open one.
+const QUOTED = /(?<=^|[\s(])["“״]([^"“”״\n]{2,}?)["”״](?=$|[\s.,?:)])/gu;
+
+/** A text without what it quotes: the words the account says in its own voice. */
+export const ownWords = (text) => String(text || '').replace(QUOTED, ' ').replace(/\s+/g, ' ').trim();
+
+/** Words a reader counts in a sentence: a number is one, a dash on its own is none. */
+const wordCount = (s) => String(s || '').split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length;
 
 export function tellsIn(text, { kind = 'slideBody', extra = [], pack = null } = {}) {
   const out = [];
@@ -139,8 +216,26 @@ export function tellsIn(text, { kind = 'slideBody', extra = [], pack = null } = 
   const norm = normHe(raw);
   const lim = limitsFor(kind, pack);
 
+  const headline = HEADLINE.has(kind);
   for (const t of [...CONNECTIVES, ...FORMAL, ...PRAISE, ...FILLER, ...GENDERED]) if (t.re.test(norm)) add('phrase', `${t.label}: "${t.p}"`);
+  // What someone else said, in quotation marks (a myth as people say it, a fighter's words), is theirs: the
+  // voice's own structures are checked on the rest.
+  const own = ownWords(raw);
+  const ownNorm = normHe(own);
+  for (const t of [...BUREAUCRATIC, ...AD, ...TEASER, ...BOT, ...CALQUES, ...GLUED, ...(headline ? HEADLINE_TEASER : [])]) if (t.re.test(ownNorm)) add('phrase', `${t.label}: "${t.p}"`);
   for (const p of extra) if (phrase(p).test(norm)) add('banned', `banned by the pack: "${p}"`);
+
+  // The structures are rewritten as a sentence, never patched by swapping a word.
+  const flatOwn = own.replace(/\s*\n+\s*/g, ' ');
+  if (NOT_THIS.test(flatOwn)) add('structure', '"זה לא X, זה Y": say what it is, not first what it is not');
+  if (NO_MORE.test(flatOwn)) add('structure', '"לא עוד X" is a slogan: say what it is');
+  if (WITHOUT_CHAIN.test(ownNorm)) add('structure', '"בלי X ובלי Y" (or "אין X ואין Y") is a chain of reassurances: say the one thing that matters, as a sentence');
+  if (BALANCED.test(flatOwn)) add('structure', '"פחות X, יותר Y" is balanced like a slogan: say what happened, with its number');
+  if (LABEL_OPENER.test(flatOwn)) add('structure', 'a label and a colon ("עובדה:", "דעה לא פופולרית:"): say it as a sentence');
+  if (headline && /:/.test(own.replace(/\d:\d/g, ''))) add('structure', 'a colon in a heading ("X: Y"): say it as one sentence, or as a question');
+  if (GENDER_SLASH.test(raw)) add('register', 'a gendered slash ("את/ה"): talk to them in the plural');
+  if (SPACED.test(raw)) add('register', 'letters spaced out for emphasis');
+  if (/\?{2,}|\?\s+\?/.test(raw)) add('register', 'stacked question marks');
 
   if (LONG_DASH.test(raw)) add('structure', 'a long dash (use a comma or a hyphen)');
   if (/;/.test(raw)) add('structure', 'a semicolon');
@@ -185,6 +280,19 @@ export function tellsIn(text, { kind = 'slideBody', extra = [], pack = null } = 
   }
   const last = normHe(sentences[sentences.length - 1] || '');
   if (sentences.length > 1 && MORAL.test(last)) add('structure', 'ends by summing up or drawing a moral');
+  // A list's lines are items, short by design; everywhere else a run of fragments is a drumroll.
+  if (kind !== 'slideLines') {
+    const emphatic = sentences.find((s) => EMPHATIC.test(normHe(s)));
+    if (emphatic) add('structure', `"${emphatic}" as a sentence of its own, for emphasis: join it to the sentence it stresses`);
+    let run = 0;
+    for (const s of sentences) {
+      run = wordCount(s) <= FRAGMENT_WORDS ? run + 1 : 0;
+      if (run >= FRAGMENT_RUN) {
+        add('structure', `${FRAGMENT_RUN} fragments in a row ("${sentences.slice(sentences.indexOf(s) - FRAGMENT_RUN + 1, sentences.indexOf(s) + 1).join(' ')}"): say it as one sentence`);
+        break;
+      }
+    }
+  }
 
   const len = raw.replace(/\s+/g, ' ').length;
   if (len > lim.maxChars) add('length', `${len} characters, ${lim.maxChars} at most`);
@@ -220,6 +328,7 @@ export function mechanicalFix(text) {
   sub(/(\d)\s*[—–]\s*(\d)/g, '$1-$2', 'a dash between numbers');
   sub(/\s*[—–]\s*/g, ', ', 'a long dash');
   sub(/\?!+|!+\?/g, '?', 'an exclamation mark');
+  sub(/\?(?:\s*\?)+/g, '?', 'stacked question marks');
   sub(/!+/g, '.', 'an exclamation mark');
   sub(/\s*;\s*/g, '. ', 'a semicolon');
   sub(/\s*(?:\.\.\.|…)/g, '.', 'an ellipsis');
@@ -237,4 +346,109 @@ const GENERIC_QUESTIONS = ['ידעתם את זה', 'ידעתם', 'הידעתם',
 export function isGenericQuestion(q) {
   const n = normHe(q);
   return GENERIC_QUESTIONS.some((g) => n === normHe(g));
+}
+
+// ---- hints: what often gives a text away, and sometimes does not
+//
+// A refused text costs a redraft, and a guard that refuses correct Hebrew is a broken guard. So what is a tell
+// only most of the time ("לא X אלא Y", a one-word sentence, "כ-80", "על ידי") is never refused here: it goes to the
+// reviewer as a hint beside the text, and the reviewer, who reads the sentence, decides. The offline reviewer adds
+// a little to its score for each.
+
+const NOT_BUT = /(?:^|[\s.?,"(])לא\s+[^,.?\n]{1,30},?\s+אלא\s/u;
+// "אף אחד לא קרוב.", "אף פעם.": the short closing line that tells them how to feel.
+const PUNCH_CLOSE = /^(?:ו?אף אחד|ו?אף פעם|ו?אף אחת|ו?אין|ו?לא|ו?רק|ו?עדיין|ואז)(?= |$)/u;
+const TRIAD = /(?:^|[\s,])([א-ת]{2,}),\s+([א-ת]{2,})\s+ו-?([א-ת]{2,})(?=[\s.?]|$)/u;
+const DASH_TWIST = /\s-\s[^-\n]{1,40}[.?]?$/u;
+const ABOUT = /(?:^|\s)[בול]?כ-?\s?\d/u;
+const PASSIVE_BY = /(?:^|\s)על\s+ידי\s/u;
+const SUPERLATIVE = /(?:^|\s)ה?הכי\s+\S+\s+(?:בעולם|בארץ|בישראל|בהיסטוריה|אי\s+פעם|שיש|שהיה|שהייתה)/u;
+const BROCHURE = ['חוויה', 'חוויית', 'פתרון', 'פתרונות', 'פלטפורמה', 'אקוסיסטם', 'סינרגיה', 'אופטימלי', 'אופטימלית', 'משמעותי', 'משמעותית', 'מגוון', 'איכותי', 'איכותית', 'נדרש', 'נדרשת', 'נדרשים', 'לצורך', 'אודות', 'באמצעות', 'בהתאם', 'ביצע', 'ביצעה', 'בוצע', 'בוצעה'];
+const BROCHURE_RE = BROCHURE.map((w) => ({ w, re: phrase(w) }));
+
+/** The hints in one text, as plain English notes for the reviewer. */
+export function softTellsIn(text, { kind = 'slideBody' } = {}) {
+  // A slide's line breaks are kept: a list's lines are items.
+  const raw = String(text || '').replace(QUOTED, ' ').trim();
+  if (!raw || kind === 'visual') return [];
+  const out = [];
+  const flat = raw.replace(/\s*\n+\s*/g, ' ');
+  const norm = normHe(raw);
+  const sentences = kind === 'slideLines' ? [] : sentencesOf(ON_SLIDE.has(kind) ? flat : raw);
+  if (NOT_BUT.test(flat)) out.push('"לא X אלא Y": says what it is not before what it is');
+  const last = sentences[sentences.length - 1] || '';
+  if (sentences.length > 1 && wordCount(last) <= 4 && PUNCH_CLOSE.test(normHe(last))) out.push(`ends on a punch line ("${last}")`);
+  const lone = sentences.find((s) => wordCount(s) === 1 && !/\d/.test(s));
+  if (lone && sentences.length > 1) out.push(`a one-word sentence ("${lone}")`);
+  const triad = TRIAD.exec(flat);
+  if (triad && kind !== 'slideLines') out.push(`three words in a row ("${triad[1]}, ${triad[2]} ו${triad[3]}"): a triad reads like an ad`);
+  if (HEADLINE.has(kind) && DASH_TWIST.test(flat)) out.push('a hyphen before the payoff');
+  if (ABOUT.test(raw)) out.push('"כ-" before a number: people say "בערך"');
+  // A guess-who hides its answer by design; anywhere else "something nobody did" names nothing.
+  if (/(?:^| )משהו ש?אף אחד לא/u.test(norm)) out.push('"משהו שאף אחד לא...": names nothing, say what it was');
+  if (PASSIVE_BY.test(raw)) out.push('"על ידי": a passive sentence, say who did it first');
+  if (SUPERLATIVE.test(flat) && !/\d/.test(flat)) out.push('a superlative with no number beside it');
+  const brochure = BROCHURE_RE.filter((b) => b.re.test(norm)).map((b) => b.w);
+  if (brochure.length) out.push(`brochure words: ${brochure.slice(0, 3).map((w) => `"${w}"`).join(', ')}`);
+  return out;
+}
+
+const STOP = new Set(['אבל', 'אחרי', 'אותו', 'אותה', 'אותם', 'איתו', 'איזה', 'אפשר', 'היום', 'הייתה', 'היתה', 'הוא', 'היא', 'הם', 'זה', 'זאת', 'כבר', 'כמו', 'לפני', 'לפי', 'מול', 'עוד', 'עכשיו', 'רק', 'שלו', 'שלה', 'שלהם', 'שנים', 'שנה', 'שני', 'שתי', 'אחד', 'אחת', 'כל', 'כמה', 'מאוד', 'פעם', 'יותר', 'פחות', 'הכי', 'אין', 'היה', 'היו', 'יש', 'גם', 'בין', 'תוך', 'בלי', 'עם', 'אצל', 'כדי', 'כך', 'ככה', 'למה', 'איך', 'מתי', 'איפה', 'אתם', 'אתכם', 'שלכם', 'לכם']);
+const stem = (w) => w.replace(/^(?:וה|וב|ול|ומ|וש|שה|שב|של|כש|ו|ה|ב|ל|מ|ש|כ)(?=[א-ת]{3,})/u, '');
+
+/**
+ * What only shows across a whole post: every sentence the same length, every slide opening or closing the same
+ * way, every title a question, one word everywhere. texts: [{ kind, text }] in the post's order; `known`: words that
+ * are the post's subject (its facts' claims), which may repeat. Returns [{ indexes, note }].
+ */
+export function postTells(texts, { known = '' } = {}) {
+  const out = [];
+  const at = (pred) => texts.map((t, i) => (pred(t) ? i : -1)).filter((i) => i >= 0);
+  const bodies = at((t) => t.kind === 'slideBody' && String(t.text || '').trim());
+  const titles = at((t) => t.kind === 'slideTitle' && String(t.text || '').trim());
+  const first = (i) => stem(normHe(texts[i].text).split(' ')[0] || '');
+  for (const [group, name] of [[bodies, 'slide'], [titles, 'title']]) {
+    const by = new Map();
+    for (const i of group) by.set(first(i), [...(by.get(first(i)) || []), i]);
+    for (const [w, idx] of by) if (w && idx.length >= 3) out.push({ indexes: idx, note: `${idx.length} ${name}s open with the same word ("${w}")` });
+  }
+  if (titles.length >= 3 && titles.every((i) => /\?\s*$/.test(texts[i].text))) out.push({ indexes: titles, note: 'every title is a question' });
+  // Every slide ending on a short line: a drumroll, slide after slide.
+  const punchy = bodies.filter((i) => {
+    const s = sentencesOf(String(texts[i].text).replace(/\s*\n+\s*/g, ' '));
+    return s.length >= 2 && wordCount(s[s.length - 1]) <= 3;
+  });
+  if (punchy.length >= 3) out.push({ indexes: punchy, note: `${punchy.length} slides end on a short punch line` });
+  // A person's sentences are long and short; a model's come out the same length.
+  const lens = [];
+  const where = [];
+  texts.forEach((t, i) => {
+    if (!['slideBody', 'captionLong', 'caption', 'sub'].includes(t.kind)) return;
+    for (const s of sentencesOf(String(t.text || '').replace(/\s*\n+\s*/g, ' '))) {
+      lens.push(wordCount(s));
+      where.push(i);
+    }
+  });
+  if (lens.length >= 6) {
+    const mean = lens.reduce((a, b) => a + b, 0) / lens.length;
+    const sd = Math.sqrt(lens.reduce((a, b) => a + (b - mean) ** 2, 0) / lens.length);
+    if (mean >= 4 && sd / mean < 0.25) out.push({ indexes: [...new Set(where)], note: `every sentence is about ${Math.round(mean)} words long: vary the rhythm` });
+  }
+  // One word on many texts that is not the subject: the model's favourite, not the post's.
+  const knownWords = new Set(normHe(known).split(' ').map(stem));
+  const seen = new Map();
+  texts.forEach((t, i) => {
+    if (!/^(?:slide|cover|sub|caption)/.test(t.kind)) return;
+    const mine = new Set();
+    for (const word of normHe(t.text).split(' ')) {
+      const w = stem(word);
+      if (mine.has(w) || w.length < 4 || !/^[א-ת]+$/u.test(w) || STOP.has(w) || knownWords.has(w)) continue;
+      mine.add(w);
+      const s = seen.get(w) || { word, idx: [] };
+      s.idx.push(i);
+      seen.set(w, s);
+    }
+  });
+  for (const { word, idx } of seen.values()) if (idx.length >= 4) out.push({ indexes: idx, note: `"${word}" in ${idx.length} texts` });
+  return out;
 }
