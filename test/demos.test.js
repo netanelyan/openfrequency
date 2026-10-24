@@ -14,8 +14,8 @@ import { INTERNAL_TOKEN, fakeAccounts, customer, operator, opened, tempHome } fr
 
 // A store's demo, from the website's request to the store's page (src/web/demos.js, src/demos):
 // the request is taken only from this machine with the token; the demo is built in the background, on a topic from
-// the store's field, its facts from Wikipedia, drawn on the store's photographs; nobody but the operator sees it
-// until the operator approves it; then its page is public at /s/<slug>, with the price once set.
+// the store's field, its facts from Wikipedia, drawn on Pexels photographs; once it passes its checks its page is
+// public at /s/<slug> with no one approving it, with the price once set; the operator's pages stay the operator's.
 // The store, the topic, Wikipedia, the writer, the photographs and the renderer are stand-ins (ctx.demoIo).
 
 const product = (id, title, src, price = '289.00', at = '2026-10-01') => ({ id, title, handle: `p${id}`, published_at: at, images: [{ src }, { src: `${src}?2` }], variants: [{ price, available: true }], options: [] });
@@ -154,7 +154,8 @@ test('a request builds the demo in the background; asking again for the same sto
   assert.equal(first.existing, false);
   await settle();
   const d = demo();
-  assert.equal(d.status, 'ready', d.error);
+  assert.equal(d.status, 'approved', d.error);
+  assert.equal(d.approved_by, 'auto', 'nobody approved it by hand');
   assert.match(d.slug, /^kettles-[0-9a-f]{6}$/);
   assert.match(d.docs_json, /התה התגלה/);
   assert.doesNotMatch(d.media_json, /"bg"/, 'no picture behind the page');
@@ -168,10 +169,10 @@ test('a request builds the demo in the background; asking again for the same sto
   assert.equal(db.get('SELECT COUNT(*) AS n FROM demos').n, 1);
 });
 
-test('until the operator approves it, the demo is nobody else\'s: not its page, not its slides, not the list', async () => {
+test('the store\'s page is up once it is built; the operator\'s pages and buttons stay the operator\'s', async () => {
   const d = demo();
-  assert.equal((await get(`/s/${d.slug}`)).status, 404);
-  assert.equal((await get(`/s/${d.slug}/tiktok-0.jpg`)).status, 404);
+  assert.equal((await get(`/s/${d.slug}`)).status, 200);
+  assert.equal((await get(`/s/${d.slug}/tiktok-0.jpg`)).status, 200);
   for (const p of ['/demos', `/demos/${d.id}`, `/demos/${d.id}/img/tiktok/0`]) {
     const res = await get(p, cust);
     assert.equal(res.status, 404, p);
@@ -181,24 +182,23 @@ test('until the operator approves it, the demo is nobody else\'s: not its page, 
     const res = await post(p, cust, { monthly: '1' });
     assert.ok(res.status >= 400 && res.status < 500, `${p}: ${res.status}`);
   }
-  assert.equal(demo().status, 'ready');
+  assert.equal(demo().status, 'approved');
   assert.equal(db.get("SELECT value_json FROM settings WHERE key = 'demo-offer'"), null);
 });
 
-test('the operator sees it, approves it, and the store\'s page is up: its name, its slides, where each number came from', async () => {
+test('the operator sees it, and the store\'s page shows its name, its slides, where each fact came from', async () => {
   const d = demo();
   const list = await (await get('/demos', op)).text();
   assert.match(list, /kettles\.example\.co\.il/);
   const one = await (await get(`/demos/${d.id}`, op)).text();
   assert.match(one, /לפי המסורת הסינית, התה התגלה לפני 5000 שנה/);
   assert.match(one, /הסיפור של התה/);
-  assert.match(one, /לאשר ולהעלות את העמוד/);
+  assert.doesNotMatch(one, /לאשר ולהעלות את העמוד/, 'nothing to approve');
+  assert.match(one, /באוויר/);
   const img = await get(`/demos/${d.id}/img/instagram/1`, op);
   assert.equal(img.status, 200);
   assert.equal(img.headers.get('content-type'), 'image/jpeg');
-
-  assert.equal((await post(`/demos/${d.id}/approve`, op)).status, 200);
-  assert.equal(demo().status, 'approved');
+  assert.equal((await post(`/demos/${d.id}/approve`, op)).status, 400, 'already up');
   const res = await get(`/s/${d.slug}`);
   assert.equal(res.status, 200);
   assert.match(res.headers.get('x-robots-tag'), /noindex/);

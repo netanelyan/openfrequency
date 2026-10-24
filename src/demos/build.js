@@ -16,9 +16,9 @@ import { chooseTopic, writeDemo } from './write.js';
 //
 //   new       asked for (POST /internal/lead), not read yet
 //   building  reading the store, choosing the topic, reading about it, writing, drawing
-//   ready     drawn; waits on /demos for the operator
+//   ready     drawn, waiting for the operator: only demos built before they approved themselves
 //   failed    the store could not be read, or the slides did not pass their checks: the reason is in `error`
-//   approved  the store's page is up at /s/<slug>
+//   approved  drawn and checked: the store's page is up at /s/<slug>, with no one approving it by hand
 //   removed   taken down; its page is gone
 //
 // One demo at a time per store: asking again for a store with a demo returns it, with the number that asked.
@@ -189,7 +189,9 @@ export async function buildDemo(ctx, id, { read = readStore, topic: choose = cho
           format: { id: 'demo', kind: 'story' },
           outDir: dir,
         });
-        set(db, id, { status: 'ready', post_json: post, media_json: { tiktok: files.tiktok, instagram: files.instagram } });
+        // Nobody approves a demo by hand: one that passed every check above is the store's page at once. The operator
+        // can still take it down, or have it written again, on /demos.
+        set(db, id, { status: 'approved', approved_at: nowIso(), approved_by: 'auto', post_json: post, media_json: { tiktok: files.tiktok, instagram: files.instagram } });
         break;
       } catch (e) {
         if (!(e instanceof RenderError) || round === 1) throw e;

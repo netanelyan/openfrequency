@@ -252,7 +252,7 @@ function listPage(ctx, pc) {
         )
         .join('')}</ul></section>`
     : '<div class="empty mt30"><b>עוד אין דמואים</b><span class="muted">חנות שמבקשת דמו באתר מופיעה כאן.</span></div>';
-  return layout({ ...pc, title: 'דמואים לחנויות', active: 'accounts' }, `<div class="head"><div><h1>דמואים לחנויות</h1><p class="muted">חנות שביקשה באתר דמו של תדר: מצגת אחת על נושא מהתחום שלה, על תמונות מ־Pexels. אחרי שמאשרים, העמוד שלה עולה ואפשר לשלוח לה את הקישור.</p></div></div>${offer}${list}`);
+  return layout({ ...pc, title: 'דמואים לחנויות', active: 'accounts' }, `<div class="head"><div><h1>דמואים לחנויות</h1><p class="muted">חנות שביקשה באתר דמו של תדר: מצגת אחת על נושא מהתחום שלה, על תמונות מ־Pexels. דמו שעבר את כל הבדיקות עולה לבד, ואפשר לשלוח לחנות את הקישור. אם משהו בו לא טוב, אפשר להוריד אותו או לכתוב אותו מחדש.</p></div></div>${offer}${list}`);
 }
 
 function onePage(ctx, pc, id) {
