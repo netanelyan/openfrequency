@@ -341,7 +341,7 @@ fetches each slide from `MEDIA_PUBLIC_BASE_URL`, which must be live first.
 |---|---|
 | `npm test` | every hard rule, offline, then `check:public` |
 | `npm run demo` | the fictional demo and the website ([Try it](#try-it)) |
-| `npm run web` | the website on `127.0.0.1:4700` |
+| `npm run web` | the website on `127.0.0.1:4700`, and the owner line's internal listener on `127.0.0.1:4701` |
 | `npm start` | the website and the runner: daily drafting, publishing at each slot, metrics, learning, token renewal |
 | `npm run dry -- --pack <id> --count 5 [--format <id>]` | builds posts for one pack into its own database and to disk (slides, both captions, every fact with its quote, the trace and cost); publishes nothing |
 | `npm run launch -- run\|review\|verdicts\|status\|costs --pack <id>` | an account's launch set ([below](#the-launch-set)) |
@@ -445,6 +445,8 @@ tested end to end in a clean container by `deploy/test/run.sh`.
    `OF_INTERNAL_TOKEN` (the same value as openfrequency-accounts'; sign-in is that
    service's, see [docs/workspace-move.md](docs/workspace-move.md)), `PUBLIC_HOST`, `MEDIA_PUBLIC_BASE_URL`, `OF_USER_AGENT` with a contact
    (Wikimedia rate-limits readers without one), the budget, and the keys you have.
+   For the owner line on WhatsApp, `OF_ASSISTANT_SECRET` (the same value as
+   openfrequency-toran's; [docs/internal-assistant.md](docs/internal-assistant.md)).
    Then once, as `openfrequency`: `npm run budget -- init`.
 4. **The service:** copy `deploy/openfrequency.service` to `/etc/systemd/system/`,
    `systemctl daemon-reload`, `systemctl enable --now openfrequency`. `/healthz` says `ok`.

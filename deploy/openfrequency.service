@@ -2,7 +2,9 @@
 #
 # The engine and the approval website in one process: the site on 127.0.0.1:4700
 # (Caddy in front, see Caddyfile.example) and the runner that generates,
-# publishes and reads metrics once a minute.
+# publishes and reads metrics once a minute. Beside them, the owner line's
+# internal listener on 127.0.0.1:4701 (TEDER_INTERNAL_PORT), for
+# openfrequency-toran on this machine only: never put it behind Caddy.
 #
 #   sudo useradd --system --create-home --home-dir /var/lib/openfrequency --shell /usr/sbin/nologin openfrequency
 #   sudo git clone <public repo> /opt/open-frequency
@@ -30,6 +32,7 @@ Environment=NODE_ENV=production
 Environment=OF_ENV=prod
 Environment=OF_HOME=/opt/open-frequency/private
 Environment=PORT=4700
+Environment=TEDER_INTERNAL_PORT=4701
 Environment=PLAYWRIGHT_BROWSERS_PATH=/opt/open-frequency/.browsers
 ExecStart=/usr/bin/node scripts/web.js --runner
 Restart=on-failure

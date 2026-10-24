@@ -1438,3 +1438,28 @@ engine can act on, and what changed:
   alternative: on the recordings the hints fire on about one text in twenty, and each
   refusal there would have cost a redraft for a sentence that is often fine. The packs' cover patterns were rewritten with the same ids, so
   their results stay linked, and the calls to action say the spoken imperative.
+
+- **The owner line: the posts on WhatsApp, through openfrequency-toran (2026-10-24).**
+  An owner writes to one WhatsApp number and asks about the posts waiting, approves,
+  rejects, changes a line, and gets the slides to post by hand; Teder tells them when
+  posts are ready, when it is time to post, when a post did not go out, and once a week
+  on Sunday morning. Teder never reaches WhatsApp: Toran holds the number, knows it as one
+  user of one workspace, and asks Teder's internal listener (127.0.0.1:4701, never behind
+  Caddy) with a signature over the method, the path and the body, under a secret both
+  services share (`OF_ASSISTANT_SECRET`). The listener answers for one workspace at a
+  time, and another workspace's post is not found, as on the website. Its buttons are
+  the dashboard's own functions, called with the person on WhatsApp as the actor, so an
+  approval from the phone is the same row, the same trace and the same audit line as a
+  click; the alternative, a second copy of approve and edit for the API, would have
+  drifted the first time either changed. The slides go to WhatsApp as links Meta's
+  servers can fetch without a session: `/m/<token>.jpg`, signed with `SESSION_SECRET`,
+  for one slide of one post, for 7 days. Teder's news goes through an outbox
+  (`owner_events`): an event is a row written where it happens, and a sender beside the
+  runner posts it to Toran and tries again for a day, so a run is never slowed or
+  stopped by Toran being down. When a message may reach the owner is the workspace's own
+  setting on the settings page: quiet hours (22:00 to 08:00 by default) and nothing over
+  Shabbat and the festivals, by the same calendar nothing is published in; Toran asks
+  before it writes. Teder has no monthly plan of suggestions and redos yet, so the quota
+  in the status and the summary is null, a rejection writes no replacement, and the quota
+  warning, written and tested, waits for a plan to measure. `docs/internal-assistant.md`
+  is the contract as Teder answers it.

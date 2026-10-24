@@ -5,7 +5,10 @@
 # in private/.env (the site then insists on HTTPS through this proxy, and on a
 # password).
 
-# The approval website. Only Caddy talks to it; it listens on 127.0.0.1.
+# The approval website. Only Caddy talks to it; it listens on 127.0.0.1. It also
+# serves the owner line's signed slide links (/m/<token>.jpg), which WhatsApp
+# fetches without a session. The owner line's internal listener (127.0.0.1:4701)
+# has no name here, and must never get one.
 teder.example.com {
 	encode zstd gzip
 	reverse_proxy 127.0.0.1:4700
