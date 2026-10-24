@@ -171,7 +171,6 @@ function mustBeSendable(db, pack, post, t, platforms, { stepName = 'publish', be
   if (problems.length) {
     db.update('posts', post.id, { status: 'blocked', reason: `בדיקת העובדות נכשלה ${before}: ${problems[0]}`, updated_at: nowIso() });
     step(db, post.id, stepName, 'failed', { kind: 'fact_check', problems });
-    pauseAccount(db, pack.id, 'fact_check', problems[0]);
     throw new PublishRefused(`fact check failed ${stepName === 'publish' ? 'before publishing' : 'before the TikTok draft'}: ${problems[0]}`, 'fact_check');
   }
 

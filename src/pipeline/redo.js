@@ -18,8 +18,8 @@ import { REDO_REASON_HE } from '../budget/quota.js';
 //
 // The replacement takes the rejected post's slot while that is still ahead, and waits without one otherwise. A
 // replacement our checks block is our retry, not their redo: it is tried once more, and if that is blocked too the
-// customer is told and nothing is counted. The rails act on it as on any post (a failed fact check pauses the
-// account, the customer's cap pauses it and tells the operator).
+// customer is told and nothing is counted. The rails act on it as on any post (a failed fact check blocks it and is
+// tried again, the customer's cap pauses the account and tells the operator).
 
 /** Attempts at a replacement before the customer is told it could not be written. */
 export const REDO_ATTEMPTS = 2;
@@ -84,10 +84,9 @@ export async function redoPost(ctx, post, { reason, note: said = '' }) {
       return { ok: true, postId: res.postId, status: res.status, why: null };
     }
     why = res.reason;
-    if (res.kind === 'fact_check') pauseAccount(db, pack.id, 'fact_check', res.reason);
     if (res.kind === 'budget') pauseAccount(db, pack.id, 'budget', res.reason);
     if (res.kind === 'customer_cap') await capPause(ctx, pack, res.reason);
-    if (['fact_check', 'budget', 'customer_cap'].includes(res.kind)) break;
+    if (['budget', 'customer_cap'].includes(res.kind)) break;
   }
   note(db, post.id, { redo: 'failed', why: String(why || '').slice(0, 300), tried, at: nowIso() });
   audit(db, { action: 'redo_failed', accountId: pack.id, postId: post.id, detail: { reason, why, tried } });

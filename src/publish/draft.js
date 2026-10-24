@@ -10,7 +10,7 @@ import { israelDate } from '../schedule/israel.js';
 import { loadPost } from '../pipeline/build.js';
 import { exportPost } from '../pipeline/export.js';
 import { waitingImages } from '../images/index.js';
-import { canRun, pauseAccount } from '../autonomy/rails.js';
+import { canRun } from '../autonomy/rails.js';
 import { notify } from '../notify/index.js';
 import { externalPosts, matchDraft, postBody, publishZernio, zernioConfigured } from './zernio.js';
 import { captionOf, publicUrls, publisherFor, recheck, soundFor, tiktokMode } from './index.js';
@@ -177,7 +177,6 @@ async function fallback(ctx, pack, post, { t, said }) {
     flow.error = `בדיקת העובדות נכשלה לפני הפרסום האוטומטי: ${problems[0]}`;
     save(db, post.id, results);
     step(db, post.id, 'tiktok', 'failed', { flow: 'stopped', kind: 'fact_check', problems });
-    pauseAccount(db, pack.id, 'fact_check', problems[0]);
     await said('fallback_failed', `${pack.meta.displayName}: הפרסום האוטומטי נעצר`, `${oneLine(post.hook)}\n${flow.error}`);
     return { state: 'stopped' };
   }

@@ -56,8 +56,8 @@ import { markTopic, readyTopics, topicDocs } from '../topics/index.js';
 // source, and a blocked post says exactly where and why it stopped.
 //
 // Returns { postId, status: 'queued'|'sample'|'blocked', reason, kind }. `kind`
-// names a blocked post's failure for the safety rails: 'fact_check' pauses the
-// account in every mode, 'budget' pauses it until the money is there,
+// names a blocked post's failure for the safety rails: 'fact_check' blocks that
+// post alone, 'budget' pauses the account until the money is there,
 // 'customer_cap' pauses it until the next month and tells the operator.
 //
 // THE CUSTOMER'S MONTH (src/budget/quota.js). A post that is not a sample is

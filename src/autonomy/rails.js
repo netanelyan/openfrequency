@@ -5,8 +5,9 @@ import { notify } from '../notify/index.js';
 
 // The safety rails, in every mode:
 //   - a kill switch per account and a global one
-//   - auto-pause on a failed fact check, a platform strike, a streak of publish
-//     errors, an exhausted budget, or the customer's own monthly cap
+//   - auto-pause on a platform strike, a streak of publish errors, an exhausted
+//     budget, or the customer's own monthly cap. A failed fact check blocks its
+//     post and nothing else: the account goes on
 // A paused account says why, on the website, and stays paused until the owner
 // resumes it, except a budget pause, which lifts itself when the month turns,
 // and a customer-cap pause, which lifts when the month turns or the operator
@@ -15,7 +16,7 @@ import { notify } from '../notify/index.js';
 export const PAUSE_REASONS = {
   kill: 'מתג הכיבוי הופעל',
   manual: 'הושהה ידנית',
-  fact_check: 'בדיקת עובדות נכשלה',
+  fact_check: 'בדיקת עובדות נכשלה', // no longer set; an account paused for it before still says so
   strike: 'הפלטפורמה דחתה פוסט כהפרת מדיניות',
   publish_errors: 'רצף שגיאות פרסום',
   budget: 'התקציב החודשי נגמר',

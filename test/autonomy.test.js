@@ -114,7 +114,7 @@ test('nothing publishes on Shabbat, even approved, even asked by hand (hard rule
   }
 });
 
-test('a source removed after drafting blocks the post before publishing and pauses the account (failed fact check)', async () => {
+test('a source removed after drafting blocks the post before publishing, and the account goes on (failed fact check)', async () => {
   const { home, cleanup } = tempHome();
   try {
     const ctx = contextFor(home);
@@ -124,7 +124,7 @@ test('a source removed after drafting blocks the post before publishing and paus
     await assert.rejects(publishPost(ctx, res.postId, { t: tuesday('12:45') }), /fact check failed/);
     assert.equal(ctx.db.get('SELECT status FROM posts WHERE id = ?', res.postId).status, 'blocked');
     const acc = ctx.db.get("SELECT status, paused_reason FROM accounts WHERE id = 'demo'");
-    assert.deepEqual({ ...acc }, { status: 'paused', paused_reason: 'fact_check' });
+    assert.deepEqual({ ...acc }, { status: 'active', paused_reason: null });
   } finally {
     cleanup();
   }

@@ -1355,7 +1355,7 @@ engine can act on, and what changed:
   publishes to TikTok in this mode, and nothing falls back. The draft meets every rail
   a post at its slot meets: a draft is a write to TikTok, so none goes on Shabbat or a
   yom tov (hard rule 9), nor for a paused account, a picture waiting for a person, or a
-  fact that no longer holds (the post is blocked and the account paused, as at the
+  fact that no longer holds (the post is blocked, as at the
   slot). A held draft is sent at the runner's first tick the rails allow, and at the
   slot at the latest. The state is saved before the send, so a tick or a second click
   sends no other; a send cut off mid-way is tried again after 15 minutes, three times
@@ -1458,3 +1458,10 @@ engine can act on, and what changed:
   kept. The demos list and a demo's page say how often it was opened and in how many
   browsers. Demos built before this are ready when they were approved, and taken down
   when the audit log says so.
+- **A failed fact check blocks its post, not the account** (2026-10-24). It used to
+  pause the account in every mode, until the owner resumed it by hand: one cover that
+  cited the wrong quote for a score (6:1, which another quote of the same post held)
+  stopped an account's whole day. The gate is unchanged, so a number no quote holds still never
+  goes out; only the pause is gone, when drafting, redoing, publishing and at the
+  TikTok fallback. A redo blocked by it is tried again like any other blocked one.
+  An account paused for it before this still says so until it is resumed.

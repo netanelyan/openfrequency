@@ -229,8 +229,9 @@ draws an account's last post from another database (a launch set) for that page.
 | **Auto** | posts go out; a daily summary is written to the website |
 
 In every mode there is a kill switch per account and a global one, and an automatic
-pause on a failed fact check, a platform strike, a streak of publish errors or an
-exhausted budget. A paused account says why. In Digest and Auto, a post the reviewer
+pause on a platform strike, a streak of publish errors or an exhausted budget. A
+paused account says why. A failed fact check blocks that one post, and the account
+goes on. In Digest and Auto, a post the reviewer
 found a little machine-like waits for the owner anyway.
 
 At 72 hours the runner reads each post's numbers (TikTok through Zernio, Instagram

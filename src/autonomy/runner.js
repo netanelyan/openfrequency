@@ -98,10 +98,10 @@ export async function generate(ctx, plans, report) {
       if (directive?.id) db.update('directives', directive.id, { used_post_id: res.postId });
       db.update('posts', res.postId, { mode_at_queue: db.get('SELECT mode FROM accounts WHERE id = ?', pack.id)?.mode });
       report.generated.push({ account: pack.id, post: res.postId, status: res.status, reason: res.reason, cost: res.cost });
-      if (res.kind === 'fact_check') pauseAccount(db, pack.id, 'fact_check', res.reason);
+      // A failed fact check blocks that post alone: the account goes on with the rest of its day.
       if (res.kind === 'budget') pauseAccount(db, pack.id, 'budget', res.reason);
       if (res.kind === 'customer_cap') await capPause(ctx, pack, res.reason);
-      if (res.kind === 'fact_check' || res.kind === 'budget' || res.kind === 'customer_cap') stopped.add(pack.id);
+      if (res.kind === 'budget' || res.kind === 'customer_cap') stopped.add(pack.id);
     } catch (e) {
       if (e instanceof PausedError) stopped.add(pack.id);
       else report.errors.push({ account: pack.id, step: 'generate', error: e.message });
