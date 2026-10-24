@@ -190,7 +190,7 @@ export function demoPage(demo, { offer }) {
 <section class="hero">
 <div class="marks">${mark()}${tederMark()}</div>
 <h1>הכנו ${esc(le(name))}<span class="hl"><bdi>${esc(name)}</bdi></span> מצגת לטיקטוק ולאינסטגרם</h1>
-<p class="lede">עברנו על האתר שלכם${st.products ? `, על ${esc(st.products)} המוצרים` : ''}. תדר בחר נושא מהתחום שלכם, כתב עליו מצגת ועיצב אותה על התמונות מהאתר.</p>
+<p class="lede">עברנו על האתר שלכם${st.products ? `, על ${esc(st.products)} המוצרים` : ''}. תדר בחר נושא מהתחום שלכם, כתב עליו מצגת ועיצב אותה.</p>
 <section class="read" aria-labelledby="read-h"><h2 id="read-h">מה קראנו באתר שלכם</h2>
 ${stats ? `<dl class="stats">${stats}</dl>` : ''}
 ${articles.length ? `<div class="pages"><span>הערכים שתדר קרא על הנושא</span><ul>${articles.map((a) => `<li>${esc(articleName(a.title))}</li>`).join('')}</ul></div>` : ''}
@@ -252,7 +252,7 @@ function listPage(ctx, pc) {
         )
         .join('')}</ul></section>`
     : '<div class="empty mt30"><b>עוד אין דמואים</b><span class="muted">חנות שמבקשת דמו באתר מופיעה כאן.</span></div>';
-  return layout({ ...pc, title: 'דמואים לחנויות', active: 'accounts' }, `<div class="head"><div><h1>דמואים לחנויות</h1><p class="muted">חנות שביקשה באתר דמו של תדר: מצגת אחת על נושא מהתחום שלה, על התמונות מהאתר שלה. אחרי שמאשרים, העמוד שלה עולה ואפשר לשלוח לה את הקישור.</p></div></div>${offer}${list}`);
+  return layout({ ...pc, title: 'דמואים לחנויות', active: 'accounts' }, `<div class="head"><div><h1>דמואים לחנויות</h1><p class="muted">חנות שביקשה באתר דמו של תדר: מצגת אחת על נושא מהתחום שלה, על תמונות מ־Pexels. אחרי שמאשרים, העמוד שלה עולה ואפשר לשלוח לה את הקישור.</p></div></div>${offer}${list}`);
 }
 
 function onePage(ctx, pc, id) {
