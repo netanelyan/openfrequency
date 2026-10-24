@@ -8,6 +8,7 @@ import { buildDemo, readDemo, requestDemo } from '../demos/build.js';
 import { DemoError } from '../demos/store.js';
 import { ActionError } from './actions.js';
 import { contrast } from '../render/color.js';
+import { LOGOS } from './logos.js';
 import { esc, layout, ofMark, postButton, stamp, tederMark } from './ui.js';
 
 // Stores' demos on the website (src/demos):
@@ -216,10 +217,20 @@ const INCLUDES = ['מצגות בעברית שתדר כותב ומעצב בשבי
 const JOIN = 'https://openfrequency.co.il/join?p=teder';
 const articleName = (title) => String(title || '').replace(/\s*\(Wikipedia[^)]*\)\s*$/, '');
 
+// The systems the team connects Teder to, for every business: their marks, then a tile for anything else, and a note
+// on what is built when nothing exists yet. The same on every page, nothing in it about the store; as on Toran's
+// (openfrequency-toran src/pitch/page.ts, linksSec).
+const LINKS = `<section class="links" aria-labelledby="links-h"><h2 id="links-h">מותאם לעסק שלכם. החיבורים עלינו.</h2>
+<p class="links-lede">הצוות שלנו מגדיר את תדר לפי הקול של העסק שלכם ומחבר אותו למערכות שלכם: הקטלוג של החנות, החשבונות ברשתות החברתיות, ספריית התמונות והקבצים. כל מערכת שיש לה API. ההתאמה והחיבורים הם חלק מהשירות, בלי תוספת תשלום.</p>
+<ul class="logos" aria-label="חלק מהמערכות שתדר מתחבר אליהן">${LOGOS.map((l) => `<li${l.box ? ' class="wide"' : ''} title="${l.name}"><svg viewBox="${l.box || '0 0 24 24'}" role="img" aria-label="${l.name}"><path fill="${l.color}" d="${l.path}"/></svg></li>`).join('')}<li class="more"><span class="plus" aria-hidden="true">+</span><span>וכל חיבור נוסף שתרצו וקיים בעולם</span></li></ul>
+<div class="glass links-note"><h3>וכשצריך משהו שעוד לא קיים, מפתחים אותו.</h3>
+<p>אנחנו חברת פיתוח: אפליקציות, אוטומציות וסוכני AI. מערכת ניהול, חיבור שאין לו לוגו כאן, או זרימת עבודה שתפורה לעסק שלכם: הצוות שבנה את תדר בונה גם אותם, וגם זה כלול בשירות.</p></div>
+</section>`;
+
 /**
  * The store's page, built like Toran's (openfrequency-toran src/pitch/page.ts): what was read on its site and the
- * way in beside its products, on its own photograph; then the slideshow itself; then what Teder would do for it and
- * what that costs. No script: the two sizes are two radio buttons and CSS.
+ * way in beside its products, on its own photograph; then the slideshow itself; then what the team fits and connects;
+ * then what Teder would do for it and what that costs. No script: the two sizes are two radio buttons and CSS.
  */
 export function demoPage(demo, { offer }) {
   const name = demo.store?.name || demo.domain;
@@ -273,6 +284,7 @@ ${shelfHtml}
 </section>
 <p class="caption">את הנושא בחר תדר, ואת המצגת הוא כתב ועיצב. לא שינינו בה מילה.${(demo.post?.photos || []).length ? ' התמונות מ־<a href="https://www.pexels.com" rel="noopener noreferrer">Pexels</a>.' : ''}</p>
 ${facts.length ? `<details class="glass facts"><summary>מאיפה כל עובדה</summary><ul>${facts.map((f) => `<li><b>${esc(f.claim)}</b><q>${esc(f.quote)}</q>${f.url ? `<a href="${esc(f.url)}" rel="noopener noreferrer">${esc(articleName(f.source) || f.url)}</a>` : ''}</li>`).join('')}</ul></details>` : ''}
+${LINKS}
 <section class="price" aria-labelledby="price-h"><h2 id="price-h">אם תפעילו את תדר</h2>
 <div class="glass price-card">
 <div class="price-main">

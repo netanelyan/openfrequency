@@ -239,6 +239,24 @@ test('the price the operator sets is on the store\'s page, VAT and the setup fee
   assert.ok(page.includes('מה כלול במחיר'));
 });
 
+test("the store's page says the team fits Teder to the business and connects it, with the systems' marks, before the price", async () => {
+  const d = demo();
+  const page = await (await get(`/s/${d.slug}`)).text();
+  const sec = page.match(/<section class="links" aria-labelledby="links-h">[\s\S]*?<\/section>/)?.[0];
+  assert.ok(sec, 'the section');
+  assert.ok(page.indexOf(sec) < page.indexOf('<section class="price"'), 'before the price card');
+  assert.ok(page.indexOf(sec) > page.indexOf('id="show"'), 'after the slideshow');
+  assert.ok(sec.includes('<h2 id="links-h">מותאם לעסק שלכם. החיבורים עלינו.</h2>'));
+  assert.ok(sec.includes('ההתאמה והחיבורים הם חלק מהשירות, בלי תוספת תשלום.'), 'the lede, at no extra cost');
+  for (const name of ['TikTok', 'Instagram', 'Facebook', 'YouTube', 'Shopify', 'WooCommerce', 'Wix', 'Google Drive', 'Canva'])
+    assert.ok(sec.includes(`role="img" aria-label="${name}"`), name);
+  assert.ok(sec.includes('<li class="wide" title="WooCommerce">'), 'the wordmark on a wider tile');
+  assert.ok(sec.includes('<span>וכל חיבור נוסף שתרצו וקיים בעולם</span>'), 'the tile for anything else');
+  assert.ok(sec.includes('<h3>וכשצריך משהו שעוד לא קיים, מפתחים אותו.</h3>'), 'the note');
+  assert.ok(sec.includes('הצוות שבנה את תדר בונה גם אותם, וגם זה כלול בשירות.'));
+  assert.doesNotMatch(sec, /style=|<img|https?:\/\//, 'inline SVG only, no inline style and nothing loaded from elsewhere');
+});
+
 test("a view of the store's page by someone not signed in is an open; a cookie counts the browsers; never the operator's, never its pictures", async () => {
   const d = demo();
   db.run('DELETE FROM demo_opens');
