@@ -255,14 +255,26 @@ test('the Settings page shows the month against the cap: spent, forecast, posts 
   const dev = await (await get('/settings', `${cookie}; of_dev=1`)).text();
   for (const s of ['OF_BUDGET_MONTHLY_USD', 'נתח']) assert.ok(dev.includes(s), s);
   const csrf = await csrfOf(cookie);
-  // The owner types tokens, 100 to a dollar, and reads tokens: no dollar sign outside developer mode.
-  assert.doesNotMatch(html, /\$\d/);
-  let res = await post('/settings/budget', cookie, { _csrf: csrf, budget: '40000' });
+  // The operator reads and types dollars, as the ledger counts: there are no tokens.
+  assert.doesNotMatch(html, /טוקנ/);
+  let res = await post('/settings/budget', cookie, { _csrf: csrf, budget: '400' });
   assert.equal(res.status, 400, 'never above OF_BUDGET_MONTHLY_USD');
-  res = await post('/settings/budget', cookie, { _csrf: csrf, budget: '1000' });
+  res = await post('/settings/budget', cookie, { _csrf: csrf, budget: '10' });
   assert.equal(res.status, 200);
-  assert.match(await (await get('/settings', cookie)).text(), /<b class="num">[\d,]+ \/ 1,000<\/b>/, 'a cap of 1,000 tokens is $10');
+  assert.match(await (await get('/settings', cookie)).text(), /\/ <span class="num ltr">\$10<\/span><\/b>/, 'a cap of $10');
   await post('/settings/budget', cookie, { _csrf: csrf, budget: '0' });
+});
+
+test("a customer's Settings say the plan: 40 suggestions, 10 redos, small changes free; never the budget or money", async () => {
+  const cookie = await login();
+  const html = await (await get('/settings', cookie)).text();
+  assert.match(html, /id="plan"/);
+  assert.match(html, /40 הצעות לפוסטים, ו-10 החלפות/);
+  assert.match(html, /שינויים קטנים לא נספרים בכלל/);
+  assert.match(html, /נוצלו \d+ מתוך 40 הצעות · \d+ מתוך 10 החלפות/);
+  assert.ok(!html.includes('תקציב חודשי'), "the budget is the operator's");
+  for (const p of ['/', '/settings', '/accounts']) assert.doesNotMatch(await (await get(p, cookie)).text(), /טוקנ|\$\d/, `${p} shows tokens or dollars`);
+  assert.match(await (await get('/', cookie)).text(), /<span class="lbl">הצעות<\/span>/, "the header counts the month's suggestions");
 });
 
 test('a changed theme.json waits on the Accounts page until the owner applies it', async () => {

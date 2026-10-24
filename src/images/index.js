@@ -253,6 +253,11 @@ export async function findImage(ctx, { pack, query, postId = null, claim = '', w
     // names them too: a search can return a photo of somebody else from the same event.
     const names = namesOf(query);
     for (const c of found) {
+      // A redo for its photographs: the customer turned these down on the post it replaces.
+      if (ctx.avoidImages?.has(`${c.provider}:${c.providerId}`)) {
+        miss('the customer turned it down');
+        continue;
+      }
       if (describes(c.alt, block)) {
         miss('a blocked word in its description');
         continue;

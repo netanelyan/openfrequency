@@ -144,6 +144,7 @@ function snapshotB() {
     push: db.all('SELECT * FROM push_subs WHERE workspace_id = 2 ORDER BY id'),
     onboarding: db.all('SELECT * FROM onboarding WHERE workspace_id = 2 ORDER BY id'),
     demos: db.all('SELECT * FROM demos ORDER BY id'),
+    assistant: db.all('SELECT * FROM assistant_prefs WHERE workspace_id = 2'),
     settings: db.all('SELECT key, value_json FROM settings ORDER BY key'),
     facts: existsSync(factsDir) ? readdirSync(factsDir).map((f) => [f, readFileSync(path.join(factsDir, f), 'utf8')]) : [],
   });
@@ -193,11 +194,16 @@ test('the positive controls: B sees its own things, and the operator sees every 
   assert.match((await (await get('/notifications/latest.json', op)).json()).title, /LooseNotice/, "the operator's latest is any account's");
 });
 
-test("A's money is A's: the month's spend and cap in A's header are its own accounts' share, not the server's", async () => {
-  const tokensIn = async (cookie) => Number(/טוקנים החודש: ([\d,]+) מתוך/.exec(await (await get('/', cookie)).text())[1].replace(/,/g, ''));
-  const mine = await tokensIn(A.cookie);
-  const all = await tokensIn(fake.session(operator()).cookie);
-  assert.ok(all - mine >= 500, `B's $5 (500 tokens) is not in A's count (A ${mine}, server ${all})`);
+test("A's month is A's: the suggestions in A's header are its own account's, and no page shows A the money", async () => {
+  const [used, limit] = /הצעות החודש: (\d+) מתוך (\d+)/.exec(await (await get('/', A.cookie)).text()).slice(1).map(Number);
+  const own = ctx.db.get("SELECT COUNT(*) AS n FROM posts WHERE account_id = 'alpha' AND quota_kind = 'suggestion'").n;
+  assert.ok(own > 0, 'A has a suggestion this month');
+  assert.equal(used, own, "A's header counts A's suggestions, none of B's or the loose account's");
+  assert.equal(limit, 40, 'at the default plan');
+  for (const p of ['/', '/accounts', '/settings', `/post/${A.post}`]) {
+    const body = await (await get(p, A.cookie)).text();
+    assert.doesNotMatch(body, /טוקנ|\$\d/, `${p} shows A tokens or dollars`);
+  }
   const settings = await (await get('/settings', A.cookie)).text();
   assert.doesNotMatch(settings, MARK);
 });
@@ -212,6 +218,8 @@ const casesFor = () => {
     [`/post/${B.post}/unapprove`],
     [`/post/${B.post}/reject`, { reason: 'A rejects B' }],
     [`/post/${B.post}/edit`, { hook: 'A was here', sub: '', caption: 'A was here' }],
+    [`/post/${B.post}/slide/1/photo`, { image: 'none' }],
+    [`/post/${B.post}/slide/1/remove`],
     [`/post/${B.post}/publish-now`],
     [`/post/${B.post}/takedown`, { notice: 'a takedown notice from A for B', platform: 'tiktok' }],
     [`/post/${B.post}/image-ok`],
@@ -223,6 +231,7 @@ const casesFor = () => {
     ['/accounts/bravo/style-test', { on: '1' }],
     ['/accounts/bravo/kill'],
     ['/accounts/bravo/resume'],
+    ['/accounts/bravo/quota', { suggested: '1', redos: '0', cap: '0' }],
     ['/accounts/loose/kill'],
     ['/settings/kill', { on: '1' }],
     ['/settings/budget', { budget: '100' }],
@@ -252,6 +261,8 @@ const casesFor = () => {
     // A browser's endpoint is a secret only that browser has; A turning off B's is refused, A's own is A's.
     ['/push/unsubscribe', { endpoint: 'https://fcm.googleapis.com/fcm/send/bravo-browser' }, { ownOk: true }],
     ['/push/subscribe', { endpoint: 'https://fcm.googleapis.com/fcm/send/alpha-browser' }, { ownOk: true }],
+    // The WhatsApp assistant's choices are the session's workspace's: A sets A's, whatever the form names.
+    ['/settings/whatsapp', { workspace: '2', 'ev_post.ready': '1', quiet_nights: '1' }, { ownOk: true }],
     ['/new', { niche: 'AlphaNiche' }, { ownOk: true }],
     [`/new/${B.onboarding}/create`, { displayName: 'A in B', handle: 'a.in.b' }],
     [`/new/${B.onboarding}/samples`],

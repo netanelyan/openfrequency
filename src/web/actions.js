@@ -2,13 +2,15 @@ import path from 'node:path';
 import { waitingImages } from '../images/index.js';
 import { now, nowIso } from '../core/clock.js';
 import { audit, setSetting, step } from '../core/store.js';
-import { loadPost, checkPost, formatOfPost, igCaption, postDraft } from '../pipeline/build.js';
+import { loadPost, checkPost, formatOfPost, igCaption, postDraft, textsOf } from '../pipeline/build.js';
+import { drawAgain, photoChoices, withImages } from '../pipeline/light.js';
+import { redoPost } from '../pipeline/redo.js';
+import { reviewTexts } from '../voice/review.js';
 import { lineDraft } from '../rules/overlay.js';
-import { kindName, kindOf } from '../formats/kinds.js';
+import { kindName } from '../formats/kinds.js';
 import { confirmDeleted, recordTakedown } from '../publish/takedown.js';
-import { renderPost } from '../render/render.js';
-import { lockStyle, lockedStyle, styleByHash } from '../render/style.js';
-import { pauseAccount, resumeAccount } from '../autonomy/rails.js';
+import { lockStyle } from '../render/style.js';
+import { canRun, liftCapPause, pauseAccount, resumeAccount } from '../autonomy/rails.js';
 import { publishPost, retireDraft, sendDraft, tiktokMode } from '../publish/index.js';
 import { restAt } from '../schedule/shabbat.js';
 import { timeHe } from './ui.js';
@@ -20,9 +22,11 @@ import { subscribe, unsubscribe } from '../notify/index.js';
 import { catalogSource } from '../sources/catalog.js';
 import { robotsAllows } from '../sources/robots.js';
 import { israelDate } from '../schedule/israel.js';
-import { DEFAULT_MONTHLY_USD } from '../budget/ledger.js';
+import { BudgetError, DEFAULT_MONTHLY_USD, postSpend } from '../budget/ledger.js';
+import { MAX_PLAN, REDO_REASONS, REJECT_REASON_HE, room, setPlan } from '../budget/quota.js';
 import { addBankTopic, removeTopic, setWatchList } from '../topics/index.js';
 import { owns } from './workspace.js';
+import { EVENT_TYPES, setPrefs } from '../assistant/data.js';
 
 // What each button does. Every action is a function (ctx, user, params, form)
 // that returns { ok, message, redirect } or throws an ActionError with a message
@@ -43,6 +47,9 @@ const mustPost = (ctx, id) => {
   if (!post || !owns(ctx, post.account_id)) throw new ActionError('הפוסט לא נמצא', 404);
   return post;
 };
+
+/** Where a change came from, beside the person: the WhatsApp assistant's are marked (src/assistant/api.js). */
+const via = (user, detail = null) => (user.via ? { ...(detail || {}), via: user.via } : detail);
 
 /** The engine's own context (every account), for its work once the row is known to be the session's. */
 const engineOf = (ctx) => ctx.global || ctx;
@@ -71,7 +78,7 @@ export function approve(ctx, user, { id }) {
   const post = mustPost(ctx, id);
   if (post.status !== 'queued') throw new ActionError(`אי אפשר לאשר פוסט במצב "${post.status}"`);
   ctx.db.update('posts', id, { status: 'approved', approved_at: nowIso(), approved_by: user.name, updated_at: nowIso() });
-  audit(ctx.db, { actor: user.name, action: 'approve', accountId: post.account_id, postId: id });
+  audit(ctx.db, { actor: user.name, action: 'approve', accountId: post.account_id, postId: id, detail: via(user) });
   const pack = ctx.pack(post.account_id);
   if (pack && tiktokMode(pack) === 'draft-now' && pack.meta.platforms.includes('tiktok')) {
     const rest = restAt(now());
@@ -115,14 +122,42 @@ export function unapprove(ctx, user, { id }) {
   return { ok: true, message: `האישור בוטל. הפוסט חזר להמתנה.${left ? ` ${DRAFT_LEFT}` : ''}` };
 }
 
+/**
+ * Reject a post, with a reason (src/budget/quota.js REDO_REASONS) and the customer's own words. While the month has
+ * redos left, a replacement is written beside the answer with that reason (src/pipeline/redo.js) and counted as a
+ * redo once it reaches them; when they are used up, the post is only discarded. A sample, or an account that cannot
+ * generate now (paused, the kill switch), gets no replacement and uses no redo. `job` (not sent to the browser) is
+ * the replacement being written, for the tests.
+ */
 export function reject(ctx, user, { id }, form) {
   const post = mustPost(ctx, id);
   if (!['queued', 'approved', 'sample'].includes(post.status)) throw new ActionError(`אי אפשר לדחות פוסט במצב "${post.status}"`);
-  const reason = [String(form.reason || '').trim(), String(form.note || '').trim()].filter(Boolean).join(': ').slice(0, 300) || 'נדחה';
+  // A reason that is not one of the form's (an older page) is kept as the customer's words, under "something else".
+  const given = String(form.reason || '').trim();
+  const code = REDO_REASONS.includes(given) ? given : 'other';
+  const said = [REDO_REASONS.includes(given) ? '' : given, String(form.note || '').trim()].filter(Boolean).join(': ').slice(0, 300);
+  const reason = `${REJECT_REASON_HE[code]}${said ? `: ${said}` : ''}`.slice(0, 300);
   const left = retireDraft(ctx.db, post);
-  ctx.db.update('posts', id, { status: 'rejected', reason, updated_at: nowIso() });
-  audit(ctx.db, { actor: user.name, action: 'reject', accountId: post.account_id, postId: id, detail: { reason } });
-  return { ok: true, message: `נדחה. הסיבה נשמרה.${left ? ` ${DRAFT_LEFT}` : ''}` };
+  const engine = engineOf(ctx);
+  const q = room(ctx.db, post.account_id, { redo: true });
+  const redo = !post.sample && q.ok && canRun(ctx.db, post.account_id).ok && Boolean(engine.pack(post.account_id));
+  const rejected = { reason: code, note: said, by: user.name, at: nowIso(), redo: redo ? 'writing' : post.sample ? 'sample' : q.ok ? 'paused' : 'none' };
+  ctx.db.update('posts', id, { status: 'rejected', reason, reject_json: rejected, updated_at: nowIso() });
+  audit(ctx.db, { actor: user.name, action: 'reject', accountId: post.account_id, postId: id, detail: via(user, { reason, redo: rejected.redo }) });
+  const draftLeft = left ? ` ${DRAFT_LEFT}` : '';
+  if (!redo) {
+    const why = post.sample ? 'נדחה. הסיבה נשמרה.' : !q.ok ? `נדחה, והפוסט ירד. כל ${q.usage.redos.limit} ההחלפות של החודש נוצלו, אז לא נכתב פוסט במקומו.` : 'נדחה. הכתיבה בחשבון עצורה כרגע, אז לא נכתב פוסט במקומו וההחלפה לא ירדה מהמכסה.';
+    return { ok: true, message: `${why}${draftLeft}` };
+  }
+  // Started here, not awaited: redoPost holds the redo (its first drafting row) before it first waits.
+  const job = redoPost(engine, loadPost(ctx.db, id), { reason: code, note: said }).catch((e) => {
+    ctx.log?.(`redo ${id}: ${e.stack || e.message}`);
+    return { ok: false, why: e.message };
+  });
+  const after = q.usage.redos.left - 1;
+  const result = { ok: true, message: `נדחה. פוסט חלופי נכתב עכשיו ויגיע לאישור בעוד כמה דקות. ${after === 0 ? 'זו ההחלפה האחרונה של החודש.' : after === 1 ? 'נשארה עוד החלפה אחת החודש.' : `נשארו עוד ${after} החלפות החודש.`}${draftLeft}` };
+  Object.defineProperty(result, 'job', { value: job });
+  return result;
 }
 
 /** The owner deleted a post's old TikTok drafts in the app: the reminder on the post goes away. */
@@ -177,24 +212,9 @@ export async function edit(ctx, user, { id }, form) {
   const engine = engineOf(ctx);
   const { problems, gate } = checkPost({ ...engine, packs: engine.packs }, pack, draft, post.facts, format);
   if (problems.length) throw new ActionError('הבדיקות עצרו את השינוי', 422, { problems: problems.map((p) => `${p.where}: ${p.msg}`), values: { ...form } });
+  await factCheckChanged(ctx, { post, pack, draft, form });
 
-  const names = new Map(ctx.db.all('SELECT id, name FROM sources WHERE account_id = ?', pack.id).map((r) => [r.id, r.name]));
-  const sourceOf = new Map(post.facts.map((f) => [f.key, names.get(f.source_id)]));
-  const slides = draft.slides.map((s) => ({ ...s, sources: s.factKeys.map((k) => sourceOf.get(k)) }));
-  const image = post.checks?.image ? ctx.db.get('SELECT * FROM images WHERE id = ?', post.checks.image) : null;
-  const outDir = path.dirname(post.media.tiktok?.[0] || post.media.instagram?.[0]);
-  const extra = { captionIg: draft.captionIg || '', keywords: draft.keywords || [], subject: draft.subject || {}, cta: draft.cta?.text || '' };
-  // Drawn again as it was drawn: in the look it went out in, with every photograph it had (each slide's, the one
-  // behind the slides, a head-to-head's two faces). An edit used to bring back the cover's photograph alone.
-  const look = styleByHash(ctx.db, pack, post.checks?.style) || lockedStyle(ctx.db, pack, engineOf(ctx).packs);
-  const img = (imageId) => (imageId ? ctx.db.get('SELECT * FROM images WHERE id = ?', imageId) : null);
-  const photos = new Map(
-    [...post.slides.map((s) => [s.idx, img(s.image_id)]), ['bg', img(post.checks?.bgImage)], ...(post.checks?.coverImages || []).map((x, k) => [k ? 'cb' : 'ca', img(x)])].filter(([, p]) => p?.file)
-  );
-  const files = await renderPost({
-    pack: { ...pack, theme: look.theme }, format, post: { id, hook: draft.hook, sub: draft.sub, caption: draft.caption, token: gate.token, extra, ctaKind: draft.cta?.kind }, slides,
-    ...(photos.size ? { photos } : { photo: image, photoOn: kindOf(format).photo }), outDir,
-  });
+  const { files, look } = await drawAgain(engine, { post, pack, format, draft: withImages(draft, post), token: gate.token });
 
   ctx.db.tx(() => {
     const changes = [];
@@ -213,14 +233,128 @@ export async function edit(ctx, user, { id }, form) {
     });
     for (const c of changes) ctx.db.insert('edits', { post_id: id, account_id: post.account_id, ...c, user_id: user.id, at: nowIso() });
     ctx.db.update('posts', id, { hook: draft.hook, sub: draft.sub, caption: draft.caption, caption_ig: draft.captionIg, data_json: { ...post.data, captionShort: draft.captionShort }, media_json: files, checks_json: { ...post.checks, token: gate.token, edited: true, style: look.hash }, updated_at: nowIso() });
-    step(ctx.db, id, 'edit', 'ok', { by: user.name, changes: changes.length });
-    audit(ctx.db, { actor: user.name, action: 'edit', accountId: post.account_id, postId: id, detail: { changes: changes.length } });
+    saveFiles(ctx.db, id, files);
+    step(ctx.db, id, 'edit', 'ok', via(user, { by: user.name, changes: changes.length }));
+    audit(ctx.db, { actor: user.name, action: 'edit', accountId: post.account_id, postId: id, detail: via(user, { changes: changes.length }) });
   });
   // A draft sent before the edit is the old text: it stays in the app for the owner to delete, and the new one goes.
   if (post.status === 'approved' && retireDraft(ctx.db, loadPost(ctx.db, id))) {
     return draftBeside(ctx, id, { ok: true, message: `נשמר ועבר את הבדיקות. השקפים רונדרו מחדש, וטיוטה חדשה נשלחת לטיקטוק. ${DRAFT_LEFT}`, redirect: `/post/${id}` });
   }
   return { ok: true, message: 'נשמר ועבר את הבדיקות. השקפים רונדרו מחדש.', redirect: `/post/${id}` };
+}
+
+/**
+ * The one model call a light edit makes: the reviewer's fact check, on the texts the customer changed and nothing
+ * else, billed to the post (tag edit-check, src/budget/quota.js ledger). A text that says more than its facts is
+ * refused, as the engine's own would be; how much it sounds like a bot is the customer's call. Offline the reviewer
+ * is the code's and costs nothing. A cap that stops the check stops the edit: nothing is saved unchecked.
+ */
+async function factCheckChanged(ctx, { post, pack, draft, form }) {
+  const before = new Map(textsOf(postDraft(post)).map((t) => [t.where, String(t.text || '')]));
+  const changed = textsOf(draft).filter((t) => before.get(t.where) !== String(t.text || ''));
+  if (!changed.length) return;
+  const engine = engineOf(ctx);
+  let review;
+  try {
+    review = await reviewTexts({ ...engine, pack, postId: post.id }, { pack, texts: changed, facts: post.facts.filter((f) => f.verified), tag: 'edit-check' });
+  } catch (e) {
+    if (e instanceof BudgetError) throw new ActionError('בדיקת העובדות לא רצה כי התקציב של החודש נגמר, אז השינוי לא נשמר.', 422, { values: { ...form } });
+    throw e;
+  } finally {
+    ctx.db.update('posts', post.id, { cost_usd: postSpend(ctx.db, post.id).usd });
+  }
+  const bad = review.reviews.map((r, i) => ({ ...r, where: changed[i].where })).filter((r) => r.factProblem);
+  if (bad.length) throw new ActionError('בדיקת העובדות עצרה את השינוי', 422, { problems: bad.map((r) => `${r.where}: ${r.factProblem}`), values: { ...form } });
+}
+
+/** Each slide's rendered files, as the post's media now has them. */
+function saveFiles(db, id, files) {
+  const n = db.get('SELECT COUNT(*) AS n FROM slides WHERE post_id = ?', id).n;
+  for (let i = 0; i < n; i++) db.run('UPDATE slides SET files_json = ? WHERE post_id = ? AND idx = ?', JSON.stringify(Object.fromEntries(Object.entries(files).map(([k, v]) => [k, v[i]]))), id, i);
+}
+
+/** After a light edit of an approved post: its TikTok draft is the old one, so a new one goes. */
+function redrawn(ctx, id, post, message) {
+  if (post.status === 'approved' && retireDraft(ctx.db, loadPost(ctx.db, id))) return draftBeside(ctx, id, { ok: true, message: `${message} טיוטה חדשה נשלחת לטיקטוק. ${DRAFT_LEFT}`, redirect: `/post/${id}` });
+  return { ok: true, message, redirect: `/post/${id}` };
+}
+
+const lightPost = (ctx, id) => {
+  const post = mustPost(ctx, id);
+  if (!['queued', 'approved', 'sample'].includes(post.status)) throw new ActionError(`אי אפשר לערוך פוסט במצב "${post.status}"`);
+  const pack = ctx.pack(post.account_id);
+  return { post, pack, format: formatOfPost(ctx.db, pack, post) };
+};
+
+/**
+ * Another photograph on one slide: one this post already fetched and screened (photoChoices), or none. Only drawn
+ * again: the text, and so the gate's token, do not change, and no model is asked.
+ */
+export async function swapPhoto(ctx, user, { id, idx }, form) {
+  const { post, pack, format } = lightPost(ctx, id);
+  const i = Number(idx);
+  const slide = post.slides[i];
+  if (!slide) throw new ActionError('אין שקף כזה', 404);
+  const want = String(form.image || '') === 'none' ? null : Number(form.image);
+  if (want != null && !photoChoices(ctx.db, post).some((img) => img.id === want)) throw new ActionError('התמונה הזו לא מהפוסט הזה', 404);
+  if ((slide.image_id ?? null) === want) return { ok: true, message: 'זו כבר התמונה של השקף.', redirect: `/post/${id}` };
+  const draft = withImages(postDraft(post), post);
+  draft.slides[i].imageId = want;
+  // The cover's photograph is the post's lead one too: credited, and drawn where the kind puts it.
+  const checks = i === 0 ? { ...post.checks, image: want } : post.checks;
+  const { files, look } = await drawAgain(engineOf(ctx), { post: { ...post, checks }, pack, format, draft, token: post.checks?.token });
+  ctx.db.tx(() => {
+    ctx.db.run('UPDATE slides SET image_id = ? WHERE post_id = ? AND idx = ?', want, id, i);
+    saveFiles(ctx.db, id, files);
+    ctx.db.update('posts', id, { media_json: files, checks_json: { ...checks, edited: true, style: look.hash }, updated_at: nowIso() });
+    step(ctx.db, id, 'edit', 'ok', { by: user.name, photo: { slide: i, from: slide.image_id ?? null, to: want } });
+    audit(ctx.db, { actor: user.name, action: 'photo_swapped', accountId: post.account_id, postId: id, detail: { slide: i, from: slide.image_id ?? null, to: want } });
+  });
+  return redrawn(ctx, id, post, want ? 'התמונה הוחלפה והשקפים צוירו מחדש.' : 'התמונה הוסרה מהשקף והשקפים צוירו מחדש.');
+}
+
+/**
+ * One content slide removed. The facts, the law and the voice are checked again as for any edit (a caption that
+ * leans on the removed slide's fact is refused); the format's shape, how many slides and how many carry a graphic, is
+ * the customer's call. Drawn again with a new token, no model asked.
+ */
+export async function removeSlide(ctx, user, { id, idx }) {
+  const { post, pack, format } = lightPost(ctx, id);
+  const i = Number(idx);
+  if (post.slides[i]?.kind !== 'item') throw new ActionError('אין שקף תוכן כזה', 404);
+  if (post.slides.filter((s) => s.kind === 'item').length <= 1) throw new ActionError('זה השקף היחיד עם תוכן, ולכן אי אפשר להסיר אותו.');
+  const draft = withImages(postDraft(post), post);
+  draft.slides.splice(i, 1);
+  const engine = engineOf(ctx);
+  const { problems, gate } = checkPost({ ...engine, packs: engine.packs }, pack, draft, post.facts, format);
+  const hard = problems.filter((p) => p.code !== 'shape');
+  if (hard.length) throw new ActionError(`השקף לא הוסר: ${hard.slice(0, 2).map((p) => `${p.where}: ${p.msg}`).join(' · ')}`, 422);
+  const { files, look } = await drawAgain(engine, { post, pack, format, draft, token: gate.token });
+  ctx.db.tx(() => {
+    ctx.db.run('DELETE FROM slides WHERE post_id = ? AND idx = ?', id, i);
+    // One at a time, upwards, so no two rows share an index on the way.
+    for (const s of ctx.db.all('SELECT idx FROM slides WHERE post_id = ? AND idx > ? ORDER BY idx', id, i)) ctx.db.run('UPDATE slides SET idx = ? WHERE post_id = ? AND idx = ?', s.idx - 1, id, s.idx);
+    saveFiles(ctx.db, id, files);
+    ctx.db.update('posts', id, { media_json: files, checks_json: { ...post.checks, token: gate.token, edited: true, style: look.hash }, updated_at: nowIso() });
+    step(ctx.db, id, 'edit', 'ok', { by: user.name, removed: { slide: i, title: post.slides[i].title } });
+    audit(ctx.db, { actor: user.name, action: 'slide_removed', accountId: post.account_id, postId: id, detail: { slide: i } });
+  });
+  return redrawn(ctx, id, post, 'השקף הוסר והשקפים צוירו מחדש.');
+}
+
+/**
+ * The operator sets an account's month: suggested slideshows, redos and the cost cap in dollars. An empty field is
+ * the default. A cap raised over what was spent lifts a cap pause at once.
+ */
+export function setQuota(ctx, user, { id }, form) {
+  operatorOnly(user);
+  if (!ctx.pack(id)) throw new ActionError('אין חשבון כזה', 404);
+  const r = setPlan(ctx.db, id, { suggested: form.suggested, redos: form.redos, capUsd: form.cap });
+  if (r.problems) throw new ActionError(`לא נשמר. הצעות והחלפות הן מספר שלם עד ${MAX_PLAN.suggested}, והתקרה היא סכום בדולרים עד ${MAX_PLAN.capUsd}.`, 422);
+  const lifted = liftCapPause(ctx.db, id, user.name);
+  audit(ctx.db, { actor: user.name, action: 'quota', accountId: id, detail: { suggested: r.suggested, redos: r.redos, capUsd: r.capUsd, lifted } });
+  return { ok: true, message: `נשמר: ${r.suggested} הצעות ו-${r.redos} החלפות בחודש, ותקרה של $${r.capUsd}.${lifted ? ' החשבון חזר לכתוב.' : ''}` };
 }
 
 export function setMode(ctx, user, { id }, form) {
@@ -264,14 +398,13 @@ export function globalKill(ctx, user, _p, form) {
 export function setBudget(ctx, user, _p, form) {
   operatorOnly(user);
   const hard = Number(process.env.OF_BUDGET_MONTHLY_USD) > 0 ? Number(process.env.OF_BUDGET_MONTHLY_USD) : DEFAULT_MONTHLY_USD;
-  // The owner types tokens (100 to a dollar); the cap is kept in dollars, as the ledger counts.
+  // In dollars, as the ledger counts, to the cent.
   const t = Number(form.budget);
-  const max = Math.round(hard * 100);
-  if (!(t >= 0 && t <= max)) throw new ActionError(`התקרה צריכה להיות בין 0 ל-${max.toLocaleString('en-US')} טוקנים`);
-  const n = t / 100;
+  if (!(t >= 0 && t <= hard)) throw new ActionError(`התקרה צריכה להיות בין $0 ל-$${hard}`);
+  const n = Math.round(t * 100) / 100;
   setSetting(ctx.db, 'globalBudgetUsd', n);
   audit(ctx.db, { actor: user.name, action: 'global_budget', detail: { usd: n || hard } });
-  return { ok: true, message: n ? `התקרה לחודש הזה: ${t.toLocaleString('en-US')} טוקנים.` : `התקרה חזרה ל-${max.toLocaleString('en-US')} טוקנים.` };
+  return { ok: true, message: n ? `התקרה לחודש הזה: $${n}.` : `התקרה חזרה ל-$${hard}.` };
 }
 
 export function setGenerateAt(ctx, user, _p, form) {
@@ -419,6 +552,18 @@ export function removeSoundAction(ctx, user, _p, form) {
   if (!gone) throw new ActionError('אין סאונד כזה', 404);
   audit(ctx.db, { actor: user.name, action: 'sound_removed', accountId: pack.id, detail: { name: gone.name } });
   return { ok: true, message: `"${gone.name}" הוסר.`, redirect: `/sounds?account=${encodeURIComponent(pack.id)}` };
+}
+
+/**
+ * The customer's choices for the WhatsApp assistant (src/assistant/data.js): which messages reach them, and their
+ * quiet hours. Every box on the form is sent; one left unticked is off.
+ */
+export function setAssistantPrefs(ctx, user, _p, form) {
+  if (ctx.workspaceId == null) throw new ActionError('את זה בוחר כל לקוח בחשבון שלו', 403);
+  const events = Object.fromEntries(EVENT_TYPES.map((k) => [k, form[`ev_${k}`] === '1']));
+  const r = setPrefs(ctx.db, ctx.workspaceId, { events, quiet: { nights: form.quiet_nights === '1', shabbat: form.quiet_shabbat === '1' } }, { by: user.name });
+  audit(ctx.db, { actor: user.name, action: 'assistant_prefs', detail: { workspace: ctx.workspaceId, ...r } });
+  return { ok: true, message: 'נשמר.' };
 }
 
 /** A browser asks for notifications: its push endpoint is kept. */

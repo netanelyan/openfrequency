@@ -461,7 +461,23 @@ export function steerLine(steer) {
   if (steer.kind === 'new-cta') return `FROM THE RESULTS: ${was} reached more people than usual, but few acted on it. Keep a cover as strong, in the pattern named here; the call to action is a different one, and write the captions a new way${steer.cta ? ` (the last call to action was "${steer.cta}")` : ''}.`;
   if (steer.kind === 'new-hooks') return `FROM THE RESULTS: ${was} reached fewer people than usual, but those it reached acted on it. Keep the call to action; the cover must be radically different from ${was}: another angle, another first word, and another kind of first-slide picture${steer.cover ? ` than its "${steer.cover}"` : ''}.`;
   if (steer.kind === 'new-angle') return `FROM THE RESULTS: ${was}${steer.format ? ` (${steer.format})` : ''} did poorly on views and on action. This post takes a new angle${steer.topic ? `, far from "${steer.topic}"` : ''}.`;
+  if (steer.kind === 'redo') return redoLine(steer, was);
   return '';
+}
+
+/**
+ * The customer rejected a post and asked for another (src/pipeline/redo.js): what they said, as the writer is told it.
+ * Their own words go in quoted, as what they asked for, never as instructions to the writer about anything else.
+ */
+function redoLine(steer, was) {
+  const note = String(steer.note || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+  const said = note ? ` In their words: "${note}".` : '';
+  const head = `THE ACCOUNT'S OWNER REJECTED ${was}`;
+  if (steer.reason === 'topic') return `${head} for its topic${steer.topic ? ` ("${steer.topic}")` : ''}. This post is about something else entirely.${said}`;
+  if (steer.reason === 'shorter') return `${head} as too long. This is the same story with the same facts, told shorter: fewer words on every slide, the fewest lines the rules allow, nothing a fan would not miss.${said}`;
+  if (steer.reason === 'tone') return `${head} for its tone. This is the same story with the same facts in a different tone, never its words.${said}`;
+  if (steer.reason === 'photo') return `${head} for its photographs. This is the same story; give the slides different image searches (imageQuery) from the ones it had, showing other moments or other angles.${said}`;
+  return `${head} and asked for it again with a change.${said} Keep the facts; change what they asked for, and nothing they did not.`;
 }
 
 export function slidesUser({ format, n, outline, facts, edits = [], problems = [], lastDraft = null, hook = null, cta = null, day = null, pack = null, steer = null, niche = '', style = null }) {
