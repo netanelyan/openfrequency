@@ -53,5 +53,5 @@ export const KEYS = [
   { name: 'PEXELS_API_KEY', group: 'images', what: 'Pexels photographs', he: 'Pexels: תמונות ברישיון' },
   { name: 'UNSPLASH_ACCESS_KEY', group: 'images', what: 'Unsplash photographs', he: 'Unsplash: תמונות ברישיון' },
   { name: 'SESSION_SECRET', group: 'website', what: "signs the forms' CSRF tokens", he: 'חתימה על הטפסים באתר' },
-  { name: 'OF_INTERNAL_TOKEN', group: 'website', what: 'asks openfrequency-accounts who is signed in', he: 'הבדיקה מול שירות הכניסה מי נכנס' },
+  { name: 'OF_INTERNAL_TOKEN', group: 'website', what: 'asks openfrequency-accounts who is signed in, and lets the website hand in a demo request', he: 'הבדיקה מול שירות הכניסה מי נכנס, ובקשות לדמו שמגיעות מהאתר' },
 ];

@@ -105,6 +105,7 @@ before(async () => {
   db.insert('notifications', { account_id: 'loose', kind: 'draft', title: 'LooseNotice', body: 'loose body', url: '/', created_at: t });
   B.onboarding = 'o-bravo-flow';
   db.insert('onboarding', { id: B.onboarding, seed_json: { niche: 'BravoNiche' }, status: 'review', workspace_id: 2, candidates_json: { candidates: [], formats: [] }, created_at: t, updated_at: t });
+  B.demo = db.insert('demos', { slug: 'loose-shop-abcdef', url: 'https://loose-shop.example', domain: 'loose-shop.example', whatsapp: '972500000000', status: 'ready', store_json: { name: 'Loose Shop' }, topic_json: { niche: 'loose topic', angle: 'loose', articles: [], products: [] }, media_json: { tiktok: [], instagram: [] }, created_at: t, updated_at: t });
   db.insert('spend', { account_id: 'bravo', api: 'anthropic', usd: 5, tag: 'bravo-test', month: monthKey(), at: t });
   const day = '2026-10-21';
   db.run('INSERT INTO summaries (day, account_id, text, data_json, at) VALUES (?, NULL, ?, NULL, ?)', day, 'חשבון bravo: 3 פורסמו\nחשבון loose: 1 פורסמו', t);
@@ -142,6 +143,7 @@ function snapshotB() {
     edits: db.all("SELECT * FROM edits WHERE account_id = 'bravo' ORDER BY id"),
     push: db.all('SELECT * FROM push_subs WHERE workspace_id = 2 ORDER BY id'),
     onboarding: db.all('SELECT * FROM onboarding WHERE workspace_id = 2 ORDER BY id'),
+    demos: db.all('SELECT * FROM demos ORDER BY id'),
     settings: db.all('SELECT key, value_json FROM settings ORDER BY key'),
     facts: existsSync(factsDir) ? readdirSync(factsDir).map((f) => [f, readFileSync(path.join(factsDir, f), 'utf8')]) : [],
   });
@@ -154,6 +156,7 @@ const pagesFor = () => [
   '/?account=bravo', '/posts?account=bravo', '/accounts?account=bravo', '/results?account=bravo', '/sources?account=bravo', '/facts?account=bravo', '/topics?account=bravo', '/rivals?account=bravo', '/sounds?account=bravo', '/settings?account=loose',
   `/post/${B.post}`, `/media/${B.post}/tiktok/0`, `/media/${B.post}/instagram/0`, `/new/${B.onboarding}`,
   '/styles?account=bravo', `/styles/img/bravo/${B.post}-000000/A/0`,
+  '/demos', `/demos/${B.demo}`, `/demos/${B.demo}/img/tiktok/0`,
 ];
 
 test('workspace A sees nothing of workspace B, or of an account in no workspace: on every page, by every way in', async () => {
@@ -254,6 +257,12 @@ const casesFor = () => {
     [`/new/${B.onboarding}/samples`],
     [`/new/${B.onboarding}/reviewed`],
     [`/new/${B.onboarding}/live`],
+    // A store's demo is the operator's alone: no customer approves, rewrites or takes one down, or sets its price.
+    [`/demos/${B.demo}/approve`],
+    [`/demos/${B.demo}/redo`],
+    [`/demos/${B.demo}/other`],
+    [`/demos/${B.demo}/remove`],
+    ['/demos/offer', { monthly: '1', setup: '1', vat: 'included' }],
   ];
 };
 

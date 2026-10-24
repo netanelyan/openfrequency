@@ -519,4 +519,32 @@ export const MIGRATIONS = [
   ALTER TABLE push_subs ADD COLUMN workspace_id INTEGER;
   DROP TABLE users;
   `,
+  `
+  -- A store's demo (src/demos): a store asked for one on openfrequency.co.il (POST /internal/lead), Teder read its
+  -- catalogue, chose a topic from its field, read Wikipedia on it, wrote one slideshow that ends on the store, and
+  -- drew it on the store's own photographs. The operator reviews it
+  -- on /demos, and an approved one is the store's page at /s/<slug>. A demo is no account and belongs to no workspace:
+  -- only the operator sees it, until the store becomes a customer.
+  CREATE TABLE demos (
+    id            INTEGER PRIMARY KEY,
+    slug          TEXT NOT NULL UNIQUE,          -- /s/<slug>: the store's name in Latin letters and a random tail
+    url           TEXT NOT NULL,                 -- the store's homepage, as asked for
+    domain        TEXT NOT NULL,
+    whatsapp      TEXT,                          -- the number that asked, 9725XXXXXXXX
+    origin        TEXT NOT NULL DEFAULT 'website',
+    status        TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new','building','ready','failed','approved','removed')),
+    error         TEXT,                          -- why it is not ready: the store could not be read, the slides failed
+    store_json    TEXT,                          -- { name, currency, accent }
+    topic_json    TEXT,                          -- { niche, angle, articles, products }: what the slideshow is about
+    docs_json     TEXT,                          -- [{ key, url, title, text }]: the store's catalogue and the articles,
+                                                 -- what every fact quotes word for word
+    post_json     TEXT,                          -- { hook, sub, caption, slides, facts, token }
+    media_json    TEXT,                          -- { tiktok: [file], instagram: [file], bg: file }
+    created_at    TEXT NOT NULL,
+    updated_at    TEXT NOT NULL,
+    approved_at   TEXT,
+    approved_by   TEXT
+  );
+  CREATE INDEX demos_domain ON demos(domain);
+  `,
 ];

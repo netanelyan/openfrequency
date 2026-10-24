@@ -791,6 +791,7 @@ ${ctx.operator ? `<section class="panel"><header><h2>מתי נכתבים הפו�
 </div>
 <div>
 ${budgetPanel(ctx, d, { dev })}
+${ctx.operator ? `<section class="panel"><header><h2>דמואים לחנויות</h2><a class="end" href="/demos">לרשימה</a></header><p class="muted m0">חנויות שביקשו באתר דמו של תדר, ומה מחכה לבדיקה שלכם.</p></section>` : ''}
 <section class="panel"><header><h2>החשבון שלך</h2></header><p class="muted m0">נכנסתם בתור <b class="ltr">${esc(ctx.user?.email || '')}</b>${ctx.operator ? ', ורואים את החשבונות של כל הלקוחות.' : `, בחשבון <b>${esc(ctx.workspace?.name || '')}</b>.`}</p><div class="actions p0 mt12"><a class="btn" href="${esc(ctx.links?.logout || '#')}">${icon('logout')}יציאה</a></div></section>
 ${ctx.operator ? `<section class="panel"><header><h2>עצירת חירום</h2><span class="end">${s.globalKill ? '<span class="chip bad">הכל עצור</span>' : ''}</span></header>
 <p class="muted">עוצר את כל החשבונות מיד. אף פוסט לא נכתב ולא מתפרסם עד שמפעילים מחדש.</p>
@@ -807,6 +808,7 @@ export function morePage(ctx) {
   const body = `<div class="head"><h1>עוד</h1></div><nav class="list" aria-label="עוד">
 ${row('/new', 'plus', 'חשבון חדש', 'ממקור ועד חמישה פוסטים לדוגמה')}
 ${row('/settings', 'settings', 'הגדרות', ctx.operator ? 'כיבוי כללי, תקציב, מפתחות' : 'התראות, תקציב, החשבון שלך')}
+${ctx.operator ? row('/demos', 'accounts', 'דמואים לחנויות', 'חנויות שביקשו דמו באתר') : ''}
 <a class="danger" href="${esc(ctx.links?.logout || '#')}"><span class="ico">${icon('logout')}</span><span class="t"><b>יציאה</b></span></a></nav>`;
   return layout({ ...ctx, title: 'עוד', active: 'more' }, body);
 }

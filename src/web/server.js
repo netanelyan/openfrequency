@@ -15,6 +15,7 @@ import * as pages from './pages.js';
 import * as act from './actions.js';
 import { onboardingRoutes } from './onboarding.js';
 import { previewFile, stylesRoutes } from './styles.js';
+import { demoPage, demosRoutes, demoThemeCss, goneHtml, intake, offerOf, publicDemo, sendPreview, sendSlide } from './demos.js';
 import { loadPost } from '../pipeline/build.js';
 import { lockedStyle } from '../render/style.js';
 import { latestNotification } from '../notify/index.js';
@@ -135,6 +136,7 @@ export function createHandler(ctx, { port, env = process.env, accounts = null } 
     ['POST', /^\/post\/([\w-]+)\/old-drafts-deleted$/, (c, u, m) => act.oldDraftsDeleted(c, u, { id: m[1] })],
     ...onboardingRoutes(),
     ...stylesRoutes(),
+    ...demosRoutes(),
   ];
 
   const handler = async function handler(req, res) {
@@ -161,6 +163,21 @@ export function createHandler(ctx, { port, env = process.env, accounts = null } 
         if (p === '/healthz') return send(req, res, 200, 'ok', 'text/plain; charset=utf-8');
         // The service worker, from the root so its scope is the whole site.
         if (p === '/sw.js') return send(req, res, 200, readFileSync(path.join(STATIC, 'sw.js')), 'text/javascript; charset=utf-8', { 'cache-control': 'no-cache', 'service-worker-allowed': '/' });
+        // A store's demo page (src/web/demos.js): public once the operator approved it, never indexed.
+        if (p === '/static/demo.css') return send(req, res, 200, readFileSync(path.join(STATIC, 'demo.css')), 'text/css; charset=utf-8', { 'cache-control': 'public, max-age=3600' });
+        const dm = /^\/s\/([a-z0-9-]{3,40})(?:\/(?:(tiktok|instagram|p)-(\d{1,2})\.jpg|(theme)\.css|(logo)))?$/.exec(p);
+        if (dm) {
+          const demo = publicDemo(ctx.db, dm[1]);
+          if (dm[4]) return demo ? send(req, res, 200, demoThemeCss(demo), 'text/css; charset=utf-8', { 'cache-control': 'public, max-age=600' }) : send(req, res, 404, '', 'text/css; charset=utf-8');
+          if (dm[2] || dm[5]) return sendSlide(ctx, res, demo, dm[2] === 'p' ? 'shelf' : dm[2] || 'logo', dm[3]) || send(req, res, 404, 'no such slide', 'text/plain; charset=utf-8');
+          if (!demo) return send(req, res, 404, goneHtml(), 'text/html; charset=utf-8', { 'x-robots-tag': 'noindex' });
+          return send(req, res, 200, demoPage(demo, { offer: offerOf(ctx.db) }), 'text/html; charset=utf-8', { 'x-robots-tag': 'noindex, nofollow', 'referrer-policy': 'no-referrer' });
+        }
+      }
+      // A store asked for a demo on openfrequency.co.il: the website's lead service, on this machine, with its token.
+      if (req.method === 'POST' && p === '/internal/lead') {
+        const [status, body] = await intake(ctx, req, env);
+        return json(req, res, status, body);
       }
 
       // ---- everything else needs a session that accounts vouches for (src/web/accounts.js). A page may use an answer
@@ -279,6 +296,9 @@ export function createHandler(ctx, { port, env = process.env, accounts = null } 
         res.writeHead(200, { 'content-type': 'image/jpeg', 'content-length': statSync(file).size, 'cache-control': 'private, max-age=3600', 'x-content-type-options': 'nosniff' });
         return createReadStream(file).pipe(res);
       }
+      // ---- a demo's slides on its operator page (src/web/demos.js); for anyone else there is no such thing
+      const dp = /^\/demos\/(\d+)\/img\/(tiktok|instagram)\/(\d+)$/.exec(p);
+      if (dp) return sendPreview(ctx, user, res, dp) || send(req, res, 404, 'no such slide', 'text/plain; charset=utf-8');
       // Each account's colour; it names the accounts, so a browser keeps it per session (vary: cookie).
       if (p === '/static/accounts.css') return send(req, res, 200, accountsCss(c), 'text/css; charset=utf-8', { 'cache-control': 'private, max-age=600', vary: 'cookie' });
 
@@ -336,6 +356,7 @@ export function createHandler(ctx, { port, env = process.env, accounts = null } 
         return page(pages.rivalsPage(pc, { ...data.rivalsFor(c, cur), packs: sc.packs }));
       }
       if (p === '/more') return page(pages.morePage(pc));
+      if (/^\/demos(\/|$)/.test(p) && !user.operator) return page(pages.notFoundPage(pc), 404);
       for (const [method, re, fn] of ROUTES) {
         const m = method === 'GET' && re.exec(p);
         if (m) return page(await fn(c, user, m, Object.fromEntries(url.searchParams), pc));

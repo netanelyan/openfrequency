@@ -954,3 +954,18 @@ details.more[open] > summary { background: var(--fill-2); }
 .stylecol .sw { display: inline-block; width: 12px; height: 12px; border-radius: 50%; vertical-align: -1px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.2); }
 .warnline { display: flex; gap: 6px; align-items: flex-start; color: var(--warn, #b26b00); }
 .warnline svg.i { width: 15px; height: 15px; flex: none; margin-top: 2px; }
+
+/* ---- the operator's demos (src/web/demos.js) */
+.d-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.d-list li { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.d-list li:last-child { border-bottom: 0; padding-bottom: 0; }
+.d-offer { display: flex; align-items: end; gap: 12px; flex-wrap: wrap; }
+.d-offer label { display: grid; gap: 4px; font-size: 14px; }
+.d-offer input { width: 120px; }
+.d-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: start; }
+.d-shots { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px; }
+.d-shots img { flex: none; width: 150px; border-radius: 10px; }
+.d-shots.ig img { width: 180px; }
+.d-factlist { display: grid; gap: 10px; margin: 0; padding-inline-start: 18px; }
+.d-factlist q { display: block; color: var(--ink-3); font-size: 14px; }
+.d-doc { white-space: pre-wrap; font: inherit; font-size: 14px; color: var(--ink-2); margin: 0; }

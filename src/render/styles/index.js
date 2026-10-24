@@ -96,9 +96,11 @@ function drawA(m, slide, g, S) {
 <div class="card">${m.kicker ? `<div class="clbl">${he(m.kicker)}</div>` : ''}${row}${m.body ? `<i class="rule"></i>${txt('p', 'bd', S, 'body', m.body, g)}` : ''}</div>${ctaHtml(m)}${srcHtml(slide)}</div>`,
     };
   }
+  // theme.options.fullPhoto (a store's demo, src/demos/build.js): the slide's photograph fills it, as the cover's
+  // does, and the text stands at the bottom, over the fade into the ground.
   return {
-    bt: photo ? g.y(660) : g.y(280),
-    html: `${photoHtml(slide)}${photo ? '<div class="ov"></div>' : ''}
+    bt: photo ? (slide.fullPhoto ? g.y(700) : g.y(660)) : g.y(280),
+    html: `${photoHtml(slide, slide.fullPhoto ? 'ph full' : 'ph')}${photo ? '<div class="ov"></div>' : ''}
 <div class="blk">${txt('h2', 'hl', S, 'title', m.title, g, { highlight: m.highlight })}${gfx(m)}${m.list ? listHtml(m.body, S, g) : txt('p', 'bd', S, 'tbody', m.body, g)}${ctaHtml(m)}${srcHtml(slide)}</div>`,
   };
 }
@@ -108,6 +110,8 @@ const CSS_A = (g, S) => `
 .ph.full{height:100%}
 .ov{position:absolute;inset:0 0 auto 0;height:${g.y(940)}px;background:linear-gradient(to bottom,rgba(var(--bg-rgb),0) ${g.y(520)}px,rgba(var(--bg-rgb),1) ${g.y(940)}px)}
 .k-cover .ov{height:100%;background:linear-gradient(to bottom,rgba(var(--bg-rgb),0) 35%,rgba(var(--bg-rgb),.92) 72%,rgba(var(--bg-rgb),1) 100%)}
+.full-photo.k-item .ov{height:100%;background:linear-gradient(to bottom,rgba(var(--bg-rgb),.05) 0%,rgba(var(--bg-rgb),.25) 30%,rgba(var(--bg-rgb),.9) 60%,rgba(var(--bg-rgb),.97) 100%)}
+.full-photo.k-item .blk{justify-content:flex-end}
 .blk{gap:${g.y(36)}px}
 .blk.cov{justify-content:flex-end;bottom:${g.y(460)}px}
 .blk.cov.mid{justify-content:center;top:${g.y(400)}px}
@@ -360,8 +364,9 @@ mark.hi{color:inherit;background:none}
 `;
 
 /** The whole page of one styled slide. `slide.photo` (or `slide.split`) is its own photograph, when it has one. */
-export function stylePage({ theme, size, slide, overlay = null }) {
+export function stylePage({ theme, size, slide: given, overlay = null }) {
   const st = theme.style;
+  const slide = theme.options?.fullPhoto && st.name === 'A' ? { ...given, fullPhoto: true } : given;
   const S = STYLES[st.name];
   const g = geo(size, overlay);
   const m = slideModel(slide);
@@ -379,7 +384,7 @@ ${base(g, st.colors, S)}
 ${CSS[st.name](g, S)}
 ${VISUAL_CSS}
 </style></head>
-<body class="st st-${st.name} k-${slide.kind === 'cover' ? 'cover' : slide.kind === 'end' ? 'end' : 'item'} s-${size}${hasPhoto(slide) ? ' has-photo' : ' no-photo'}" style="--bt:${d.bt}px" data-style="${st.name}" data-safe="${z.top},${z.right},${z.bottom},${z.left}"${d.lift != null ? ` data-lift="${d.lift}"` : ''} data-outline="0">
+<body class="st st-${st.name} k-${slide.kind === 'cover' ? 'cover' : slide.kind === 'end' ? 'end' : 'item'} s-${size}${hasPhoto(slide) ? ' has-photo' : ' no-photo'}${slide.fullPhoto && hasPhoto(slide) ? ' full-photo' : ''}" style="--bt:${d.bt}px" data-style="${st.name}" data-safe="${z.top},${z.right},${z.bottom},${z.left}"${d.lift != null ? ` data-lift="${d.lift}"` : ''} data-outline="0">
 ${d.html}
 <div class="probe">א</div>
 </body></html>`;
