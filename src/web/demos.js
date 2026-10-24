@@ -1,6 +1,6 @@
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import path from 'node:path';
-import { timingSafeEqual } from 'node:crypto';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { dataDir } from '../core/paths.js';
 import { audit, getSetting, setSetting } from '../core/store.js';
 import { nowIso } from '../core/clock.js';
@@ -8,13 +8,18 @@ import { buildDemo, readDemo, requestDemo } from '../demos/build.js';
 import { DemoError } from '../demos/store.js';
 import { ActionError } from './actions.js';
 import { contrast } from '../render/color.js';
-import { esc, layout, ofMark, postButton, tederMark } from './ui.js';
+import { esc, layout, ofMark, postButton, stamp, tederMark } from './ui.js';
 
 // Stores' demos on the website (src/demos):
 //
 //   POST /internal/lead      a demo asked for on openfrequency.co.il (openfrequency-web/server/lead.mjs): from this
 //                            machine only, with OF_INTERNAL_TOKEN and no X-Forwarded-For, so never through Caddy
-//   GET  /s/<slug>           the store's page, public and never indexed, once the operator approved its demo
+//   GET  /internal/demos     every demo, newest first, at most 500, with its page's address while it is public and
+//                            its opens, for the operator's dashboard on Toran (openfrequency-toran docs/operator.md,
+//                            section 2); under the same checks as /internal/lead, JSON, Cache-Control: no-store
+//   GET  /s/<slug>           the store's page, public and never indexed, once its demo passed every check. A view by
+//                            anyone not signed in to OpenFrequency is an open (demo_opens), with a random id in its
+//                            own cookie (of_v, a year) to count the browsers; never the address
 //   GET  /s/<slug>/<file>    its slides, p-N.jpg (its products), logo (the store's), theme.css (the store's colour)
 //   GET  /demos              the operator's list: each store, where its demo is, what to do with it; the price the
 //                            pages show
@@ -56,7 +61,7 @@ const STATUS = { new: 'חדש', building: 'בבנייה', ready: 'מוכן לב�
 
 // ---------------------------------------------------------------- the intake
 
-/** Whether a request is the website's lead service on this machine. */
+/** Whether a request is a service on this machine with the token: the website's lead service, Toran's dashboard. */
 export function fromWebsite(req, env) {
   const token = String(env.OF_INTERNAL_TOKEN || '').trim();
   if (token.length < 32 || req.headers['x-forwarded-for']) return false;
@@ -98,6 +103,64 @@ export async function intake(ctx, req, env, opts = {}) {
     throw e;
   }
 }
+
+// ---------------------------------------------------------------- the dashboard on Toran
+
+/** Each demo with how often its page was opened: newest first, at most `limit`, or the one `id`. */
+export function demosWithOpens(db, { limit = 500, id = null } = {}) {
+  return db.all(
+    `WITH d AS (SELECT * FROM demos ${id == null ? 'ORDER BY created_at DESC, id DESC LIMIT ?' : 'WHERE id = ?'})
+     SELECT d.*, COUNT(o.id) AS opens, COUNT(DISTINCT o.visitor) AS visitors, MAX(o.at) AS last_open_at
+     FROM d LEFT JOIN demo_opens o ON o.demo_id = d.id GROUP BY d.id ORDER BY d.created_at DESC, d.id DESC`,
+    id == null ? limit : Number(id)
+  );
+}
+
+/** GET /internal/demos. `origin` is where the store's pages are, https://<PUBLIC_HOST> on the VPS. Returns [status, body]. */
+export function demosFeed(ctx, req, env, { origin }) {
+  if (!fromWebsite(req, env)) return [403, { ok: false, error: 'forbidden' }];
+  const demos = demosWithOpens(ctx.db, { limit: 500 }).map((row) => {
+    const d = readDemo(row);
+    return {
+      id: d.id,
+      domain: d.domain,
+      url: d.url,
+      name: d.store?.name || null,
+      status: d.status,
+      whatsapp: d.whatsapp || null,
+      // Public is what /s/<slug> serves (publicDemo): approved, which a demo taken down no longer is.
+      pageUrl: d.status === 'approved' ? `${origin}/s/${d.slug}` : null,
+      createdAt: d.created_at,
+      readyAt: d.ready_at || null,
+      approvedAt: d.approved_at || null,
+      removedAt: d.removed_at || null,
+      error: d.error || null,
+      opens: d.opens,
+      visitors: d.visitors,
+      lastOpenAt: d.last_open_at || null,
+    };
+  });
+  return [200, { demos }];
+}
+
+// ---------------------------------------------------------------- the opens
+
+const VISITOR = 'of_v';
+
+/** The browser's visitor id from its cookie, and the Set-Cookie that gives it one when it has none (like Toran's tn_v). */
+export function visitorOf(jar, { https }) {
+  const have = /^[\w-]{16,40}$/.test(jar[VISITOR] || '') ? jar[VISITOR] : null;
+  if (have) return { visitor: have, cookie: null };
+  const visitor = randomBytes(12).toString('base64url');
+  return { visitor, cookie: `${VISITOR}=${visitor}; Path=/s; Max-Age=31536000; SameSite=Lax; HttpOnly${https ? '; Secure' : ''}` };
+}
+
+/** One view of a store's page by someone not signed in. */
+export const recordOpen = (db, demoId, visitor) => db.insert('demo_opens', { demo_id: demoId, visitor, at: nowIso() });
+
+const times = (n) => (n === 1 ? 'פעם אחת' : n === 2 ? 'פעמיים' : `${n} פעמים`);
+/** How often the page was opened, for the operator: "נפתח 3 פעמים, ב־2 דפדפנים". */
+const opensLine = (d) => (d.opens ? `נפתח ${times(d.opens)}, ${d.visitors === 1 ? 'בדפדפן אחד' : `ב־${d.visitors} דפדפנים`}` : 'עוד לא נפתח');
 
 // ---------------------------------------------------------------- the store's page
 
@@ -235,7 +298,7 @@ const operatorOnly = (user) => {
 };
 
 function listPage(ctx, pc) {
-  const rows = ctx.db.all('SELECT * FROM demos ORDER BY id DESC LIMIT 200').map(readDemo);
+  const rows = demosWithOpens(ctx.db, { limit: 200 }).map(readDemo);
   const o = offerOf(ctx.db);
   const sel = (v) => (o.vat === v ? ' selected' : '');
   const offer = `<section class="panel"><header><h2>המחיר בעמודים של החנויות</h2></header>
@@ -248,7 +311,7 @@ function listPage(ctx, pc) {
   const list = rows.length
     ? `<section class="panel"><ul class="d-list">${rows
         .map(
-          (d) => `<li><a href="/demos/${d.id}"><b dir="ltr">${esc(d.domain)}</b></a><span class="chip">${esc(STATUS[d.status] || d.status)}</span>${d.whatsapp ? `<a class="muted small" dir="ltr" href="https://wa.me/${esc(d.whatsapp)}">${esc(d.whatsapp)}</a>` : ''}${d.status === 'approved' ? `<a class="small" href="/s/${esc(d.slug)}">העמוד</a>` : ''}${d.error ? `<span class="muted small">${esc(d.error)}</span>` : ''}</li>`
+          (d) => `<li><a href="/demos/${d.id}"><b dir="ltr">${esc(d.domain)}</b></a><span class="chip">${esc(STATUS[d.status] || d.status)}</span>${d.whatsapp ? `<a class="muted small" dir="ltr" href="https://wa.me/${esc(d.whatsapp)}">${esc(d.whatsapp)}</a>` : ''}${d.status === 'approved' ? `<a class="small" href="/s/${esc(d.slug)}">העמוד</a>` : ''}${d.status === 'approved' || d.opens ? `<span class="muted small">${esc(opensLine(d))}</span>` : ''}${d.error ? `<span class="muted small">${esc(d.error)}</span>` : ''}</li>`
         )
         .join('')}</ul></section>`
     : '<div class="empty mt30"><b>עוד אין דמואים</b><span class="muted">חנות שמבקשת דמו באתר מופיעה כאן.</span></div>';
@@ -256,7 +319,7 @@ function listPage(ctx, pc) {
 }
 
 function onePage(ctx, pc, id) {
-  const d = readDemo(ctx.db.get('SELECT * FROM demos WHERE id = ?', Number(id)));
+  const d = readDemo(demosWithOpens(ctx.db, { id })[0]);
   if (!d) throw new ActionError('אין דמו כזה', 404);
   const btn = (act, label, cls = 'btn') => postButton(pc, `/demos/${d.id}/${act}`, label, { cls });
   const actions = [
@@ -269,7 +332,7 @@ function onePage(ctx, pc, id) {
   const facts = (d.post?.facts || []).map((f) => `<li><b>${esc(f.claim)}</b><q>${esc(f.quote)}</q><span class="muted small">${esc(f.source || f.doc || '')}</span>${f.verified ? '' : ` <span class="chip bad">${esc(f.error)}</span>`}</li>`).join('');
   const body = `<div class="head"><div><a class="muted small back" href="/demos">חזרה לדמואים</a><h1 dir="ltr">${esc(d.domain)}</h1>
 <p class="muted"><span class="chip">${esc(STATUS[d.status] || d.status)}</span> ${esc(d.store?.name || '')}${d.topic?.niche ? ` · ${esc(d.topic.niche)}` : ''}${d.whatsapp ? ` · <a dir="ltr" href="https://wa.me/${esc(d.whatsapp)}">${esc(d.whatsapp)}</a>` : ''}</p>
-${d.status === 'approved' ? `<p><a href="/s/${esc(d.slug)}">העמוד של החנות</a></p>` : ''}${d.error ? `<p class="err">${esc(d.error)}</p>` : ''}</div><div class="d-actions">${actions}</div></div>
+${d.status === 'approved' || d.opens ? `<p>${d.status === 'approved' ? `<a href="/s/${esc(d.slug)}">העמוד של החנות</a> · ` : ''}<span class="muted">${esc(opensLine(d))}${d.last_open_at ? `, לאחרונה ${esc(stamp(d.last_open_at))}` : ''}</span></p>` : ''}${d.error ? `<p class="err">${esc(d.error)}</p>` : ''}</div><div class="d-actions">${actions}</div></div>
 ${d.media?.tiktok?.length ? `<section class="panel"><header><h2>השקפים</h2></header><div class="d-shots">${shots('tiktok')}</div><div class="d-shots ig">${shots('instagram')}</div><p>${esc(d.post?.caption || '')}</p></section>` : ''}
 ${facts ? `<section class="panel"><header><h2>העובדות</h2></header><ul class="d-factlist">${facts}</ul></section>` : ''}
 ${d.topic?.angle ? `<section class="panel"><header><h2>הנושא</h2></header><p>${esc(d.topic.niche)}</p><p class="muted small" dir="ltr">${esc(d.topic.angle)}</p></section>` : ''}
@@ -324,7 +387,7 @@ export function demosRoutes() {
           return { ok: true, message: 'העמוד של החנות באוויר', redirect: `/demos/${d.id}` };
         }
         if (act === 'remove') {
-          ctx.db.update('demos', d.id, { status: 'removed', updated_at: nowIso() });
+          ctx.db.update('demos', d.id, { status: 'removed', removed_at: nowIso(), updated_at: nowIso() });
           audit(ctx.db, { actor: user.name, action: 'demo_removed', detail: { id: d.id, domain: d.domain } });
           return { ok: true, message: 'הדמו הורד, והעמוד שלו כבר לא עולה', redirect: '/demos' };
         }

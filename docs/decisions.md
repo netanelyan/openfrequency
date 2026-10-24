@@ -1438,3 +1438,23 @@ engine can act on, and what changed:
   alternative: on the recordings the hints fire on about one text in twenty, and each
   refusal there would have cost a redraft for a sentence that is often fine. The packs' cover patterns were rewritten with the same ids, so
   their results stay linked, and the calls to action say the spoken imperative.
+
+- **Toran's dashboard reads the store demos and how often their pages were opened
+  (2026-10-24).** The operator's dashboard is Toran's home page now, and it lists Teder's
+  demos beside Toran's own leads (openfrequency-toran `docs/operator.md`, section 2).
+  Teder answers `GET /internal/demos` with every demo, newest first, at most 500: its
+  store, its status, the number that asked, when it was made, ready, approved and taken
+  down, why it failed, and its page's address while the page is public (approved), else
+  null. The address is `https://<PUBLIC_HOST>/s/<slug>`; on a laptop with no public name,
+  the address the request came to. The route sits beside `POST /internal/lead` under the
+  same checks: the token, a loopback socket, no `X-Forwarded-For`, so Caddy never passes
+  it on; the answer is never cached. An open is a view of the store's page itself, not of
+  its slides, its logo or its colour, by a browser that is not signed in to OpenFrequency:
+  a session accounts vouches for, or one it knows and refuses here (another product's
+  customer, a closed workspace), is not counted. A browser without a session cookie never
+  makes Teder ask accounts, and an answer that fails leaves it a visitor. The browsers are
+  counted the way Toran counts its pitch pages, by a random id in a cookie of the page's
+  own (`of_v`, a year, HttpOnly, SameSite=Lax, Secure over HTTPS); the address is never
+  kept. The demos list and a demo's page say how often it was opened and in how many
+  browsers. Demos built before this are ready when they were approved, and taken down
+  when the audit log says so.

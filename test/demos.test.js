@@ -6,7 +6,7 @@ import { Db } from '../src/db/index.js';
 import { loadAll } from '../src/packs/load.js';
 import { makeContext } from '../src/engine.js';
 import { listen } from '../src/web/server.js';
-import { running } from '../src/web/demos.js';
+import { fromWebsite, running } from '../src/web/demos.js';
 import { checkDraft, checkFact } from '../src/demos/write.js';
 import { readArticles } from '../src/demos/build.js';
 import { storeDocument } from '../src/demos/store.js';
@@ -16,6 +16,8 @@ import { INTERNAL_TOKEN, fakeAccounts, customer, operator, opened, tempHome } fr
 // the request is taken only from this machine with the token; the demo is built in the background, on a topic from
 // the store's field, its facts from Wikipedia, drawn on Pexels photographs; once it passes its checks its page is
 // public at /s/<slug> with no one approving it, with the price once set; the operator's pages stay the operator's.
+// Toran's dashboard reads every demo and its opens at /internal/demos, under the checks /internal/lead has; an open is
+// a view of the page by someone not signed in, and its browsers are counted by a cookie.
 // The store, the topic, Wikipedia, the writer, the photographs and the renderer are stand-ins (ctx.demoIo).
 
 const product = (id, title, src, price = '289.00', at = '2026-10-01') => ({ id, title, handle: `p${id}`, published_at: at, images: [{ src }, { src: `${src}?2` }], variants: [{ price, available: true }], options: [] });
@@ -110,6 +112,8 @@ const get = (p, cookie = '') => fetch(`${base}${p}`, { redirect: 'manual', heade
 const csrfOf = async (cookie) => /name="_csrf" value="([^"]+)"/.exec(await (await get('/settings', cookie)).text())[1];
 const post = async (p, cookie, body = {}) =>
   fetch(`${base}${p}`, { method: 'POST', redirect: 'manual', headers: { cookie, 'content-type': 'application/x-www-form-urlencoded', 'x-of-ajax': '1' }, body: new URLSearchParams({ _csrf: await csrfOf(cookie), ...body }).toString() });
+const feed = (headers = {}, at = base) => fetch(`${at}/internal/demos`, { headers: { authorization: `Bearer ${INTERNAL_TOKEN}`, ...headers } });
+const opens = (id) => db.get('SELECT COUNT(*) AS opens, COUNT(DISTINCT visitor) AS visitors FROM demo_opens WHERE demo_id = ?', id);
 const settle = () => Promise.all([...running.values()]);
 const demo = () => db.get("SELECT * FROM demos WHERE domain = 'kettles.example.co.il'");
 
@@ -235,6 +239,76 @@ test('the price the operator sets is on the store\'s page, VAT and the setup fee
   assert.ok(page.includes('מה כלול במחיר'));
 });
 
+test("a view of the store's page by someone not signed in is an open; a cookie counts the browsers; never the operator's, never its pictures", async () => {
+  const d = demo();
+  db.run('DELETE FROM demo_opens');
+  const first = await get(`/s/${d.slug}`);
+  assert.equal(first.status, 200);
+  const set = first.headers.get('set-cookie');
+  assert.match(set, /^of_v=[\w-]{16}; Path=\/s; Max-Age=31536000; SameSite=Lax; HttpOnly$/, 'a random id, a year, HttpOnly, Lax (Secure only over HTTPS)');
+  const v = set.split(';')[0];
+  const again = await get(`/s/${d.slug}`, v);
+  assert.equal(again.headers.get('set-cookie'), null, 'a browser that has one keeps it');
+  assert.deepEqual({ ...opens(d.id) }, { opens: 2, visitors: 1 }, 'the same browser twice: two opens, one visitor');
+  await get(`/s/${d.slug}`);
+  assert.deepEqual({ ...opens(d.id) }, { opens: 3, visitors: 2 }, 'another browser');
+  for (const p of ['tiktok-0.jpg', 'instagram-1.jpg', 'p-0.jpg', 'logo', 'theme.css']) assert.equal((await get(`/s/${d.slug}/${p}`, v)).status, 200, p);
+  await fetch(`${base}/s/${d.slug}`, { method: 'HEAD' });
+  assert.equal(opens(d.id).opens, 3, 'its pictures, its colour and a HEAD are no opens');
+  for (const who of [op, cust]) assert.equal((await get(`/s/${d.slug}`, `${who}; ${v}`)).status, 200);
+  assert.equal(opens(d.id).opens, 3, 'a signed-in session, the operator or a customer, never counts');
+  await get(`/s/${d.slug}`, 'of_session=not-a-session-anyone-has-000000');
+  assert.equal(opens(d.id).opens, 4, 'a session cookie accounts does not know is a visitor');
+  await get(`/s/${d.slug.slice(0, -1)}x`);
+  assert.equal(db.get('SELECT COUNT(*) AS n FROM demo_opens').n, 4, 'a page that is not there is no open');
+  assert.doesNotMatch(JSON.stringify(db.all('SELECT * FROM demo_opens')), /127\.0\.0\.1|::1/, 'never the address');
+  const list = await (await get('/demos', op)).text();
+  assert.ok(list.includes('נפתח 4 פעמים, ב־3 דפדפנים'), "on the operator's list");
+  const one = await (await get(`/demos/${d.id}`, op)).text();
+  assert.match(one, /נפתח 4 פעמים, ב־3 דפדפנים, לאחרונה /, 'and on its page, with the last one');
+});
+
+test("Toran's dashboard reads every demo at /internal/demos: from this machine alone, with the token, not through the proxy", async () => {
+  for (const [headers, why] of [[{ authorization: '' }, 'no token'], [{ authorization: 'Bearer wrong' }, 'a wrong token'], [{ authorization: `Bearer ${INTERNAL_TOKEN}x` }, 'a longer one'], [{ 'x-forwarded-for': '203.0.113.9' }, 'through Caddy']]) {
+    const res = await feed(headers);
+    assert.equal(res.status, 403, why);
+    assert.equal(res.headers.get('cache-control'), 'no-store');
+    assert.doesNotMatch(await res.text(), /kettles/, why);
+  }
+  const req = (remoteAddress, headers = {}) => ({ headers: { authorization: `Bearer ${INTERNAL_TOKEN}`, ...headers }, socket: { remoteAddress } });
+  const env = { OF_INTERNAL_TOKEN: INTERNAL_TOKEN };
+  assert.equal(fromWebsite(req('203.0.113.9'), env), false, 'a socket that is not loopback');
+  assert.equal(fromWebsite(req('10.0.0.5'), env), false);
+  assert.ok(fromWebsite(req('127.0.0.1'), env) && fromWebsite(req('::1'), env) && fromWebsite(req('::ffff:127.0.0.1'), env));
+  assert.equal(fromWebsite(req('127.0.0.1'), { OF_INTERNAL_TOKEN: 'short' }), false, 'a token under 32 characters opens nothing');
+  assert.notEqual((await fetch(`${base}/internal/demos`, { method: 'POST', headers: { authorization: `Bearer ${INTERNAL_TOKEN}` } })).status, 200, 'a GET only');
+
+  const res = await feed();
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('cache-control'), 'no-store');
+  assert.match(res.headers.get('content-type'), /^application\/json/);
+  const { demos } = await res.json();
+  const d = demo();
+  assert.equal(demos.length, 1);
+  assert.deepEqual(Object.keys(demos[0]), ['id', 'domain', 'url', 'name', 'status', 'whatsapp', 'pageUrl', 'createdAt', 'readyAt', 'approvedAt', 'removedAt', 'error', 'opens', 'visitors', 'lastOpenAt']);
+  const last = db.get('SELECT MAX(at) AS at FROM demo_opens WHERE demo_id = ?', d.id).at;
+  assert.deepEqual(demos[0], {
+    id: d.id, domain: 'kettles.example.co.il', url: d.url, name: 'חנות הקומקומים', status: 'approved', whatsapp: '972529876543',
+    pageUrl: `${base}/s/${d.slug}`, createdAt: d.created_at, readyAt: d.approved_at, approvedAt: d.approved_at, removedAt: null, error: null,
+    opens: 4, visitors: 3, lastOpenAt: last,
+  });
+  assert.match(demos[0].readyAt, /^\d{4}-\d\d-\d\dT/);
+
+  // On the VPS the page's address is the public name's, over HTTPS, whatever address Toran asked at.
+  const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'd'.repeat(40), ...fake.env, PUBLIC_HOST: 'teder.example.test' } });
+  try {
+    const out = await (await feed({}, `http://127.0.0.1:${s.port}`)).json();
+    assert.equal(out.demos[0].pageUrl, `https://teder.example.test/s/${d.slug}`);
+  } finally {
+    s.server.close();
+  }
+});
+
 test('taken down, the page is gone; a demo taken down is not written again', async () => {
   const d = demo();
   assert.equal((await post(`/demos/${d.id}/remove`, op)).status, 200);
@@ -243,4 +317,27 @@ test('taken down, the page is gone; a demo taken down is not written again', asy
   const res = await lead({ url: 'kettles.example.co.il', whatsapp: '972501234567' });
   assert.equal((await res.json()).existing, false, 'asking after a takedown starts a new demo');
   await settle();
+});
+
+test('the dashboard sees a demo taken down without its page, and the new one first; at most 500, newest first', async () => {
+  const { demos } = await (await feed()).json();
+  assert.equal(demos.length, 2);
+  const [fresh, gone] = demos;
+  assert.ok(fresh.id > gone.id, 'newest first');
+  assert.equal(gone.status, 'removed');
+  assert.equal(gone.pageUrl, null, 'not public: no address');
+  assert.match(gone.removedAt, /^\d{4}-\d\d-\d\dT/);
+  assert.equal(gone.opens, 4, 'its opens stay');
+  assert.equal(fresh.status, 'approved');
+  assert.equal(fresh.pageUrl, `${base}/s/${db.get('SELECT slug FROM demos WHERE id = ?', fresh.id).slug}`);
+  assert.deepEqual([fresh.opens, fresh.visitors, fresh.lastOpenAt], [0, 0, null]);
+  const t = '2020-01-01T00:00:00.000Z';
+  db.tx(() => {
+    for (let i = 0; i < 505; i++) db.insert('demos', { slug: `old-${String(i).padStart(4, '0')}`, url: `https://old${i}.example`, domain: `old${i}.example`, status: 'failed', error: 'x', created_at: t, updated_at: t });
+  });
+  const many = (await (await feed()).json()).demos;
+  assert.equal(many.length, 500);
+  assert.equal(many[0].id, fresh.id, 'the newest still first');
+  assert.deepEqual([many.at(-1).name, many.at(-1).pageUrl, many.at(-1).readyAt], [null, null, null], 'a demo that knows nothing of its store has no name');
+  db.run("DELETE FROM demos WHERE slug LIKE 'old-%'");
 });

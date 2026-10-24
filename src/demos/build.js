@@ -191,7 +191,8 @@ export async function buildDemo(ctx, id, { read = readStore, topic: choose = cho
         });
         // Nobody approves a demo by hand: one that passed every check above is the store's page at once. The operator
         // can still take it down, or have it written again, on /demos.
-        set(db, id, { status: 'approved', approved_at: nowIso(), approved_by: 'auto', post_json: post, media_json: { tiktok: files.tiktok, instagram: files.instagram } });
+        const at = nowIso();
+        set(db, id, { status: 'approved', ready_at: at, approved_at: at, approved_by: 'auto', post_json: post, media_json: { tiktok: files.tiktok, instagram: files.instagram } });
         break;
       } catch (e) {
         if (!(e instanceof RenderError) || round === 1) throw e;

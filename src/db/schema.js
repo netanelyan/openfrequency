@@ -547,4 +547,24 @@ export const MIGRATIONS = [
   );
   CREATE INDEX demos_domain ON demos(domain);
   `,
+  `
+  -- The operator's dashboard on Toran reads every demo (GET /internal/demos, src/web/demos.js): when it was ready,
+  -- when it was taken down, and how often its page was opened. ready_at is when it last passed every check (a demo
+  -- built before this is ready when it was approved); removed_at is when the operator took it down, from the audit
+  -- log where it says, else its last change.
+  ALTER TABLE demos ADD COLUMN ready_at TEXT;
+  ALTER TABLE demos ADD COLUMN removed_at TEXT;
+  UPDATE demos SET ready_at = approved_at WHERE approved_at IS NOT NULL;
+  UPDATE demos SET removed_at = COALESCE((SELECT MAX(at) FROM audit WHERE action = 'demo_removed' AND json_extract(detail_json, '$.id') = demos.id), updated_at)
+    WHERE status = 'removed';
+  -- One row per view of a store's page (/s/<slug>, the page itself, not its pictures) by someone not signed in to
+  -- OpenFrequency. visitor is a random id the page's own cookie carries for a year; never the address.
+  CREATE TABLE demo_opens (
+    id            INTEGER PRIMARY KEY,
+    demo_id       INTEGER NOT NULL REFERENCES demos(id),
+    visitor       TEXT NOT NULL,
+    at            TEXT NOT NULL
+  );
+  CREATE INDEX demo_opens_demo ON demo_opens(demo_id, at);
+  `,
 ];

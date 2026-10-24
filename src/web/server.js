@@ -15,7 +15,7 @@ import * as pages from './pages.js';
 import * as act from './actions.js';
 import { onboardingRoutes } from './onboarding.js';
 import { previewFile, stylesRoutes } from './styles.js';
-import { demoPage, demosRoutes, demoThemeCss, goneHtml, intake, offerOf, publicDemo, sendPreview, sendSlide } from './demos.js';
+import { demoPage, demosFeed, demosRoutes, demoThemeCss, goneHtml, intake, offerOf, publicDemo, recordOpen, sendPreview, sendSlide, visitorOf } from './demos.js';
 import { loadPost } from '../pipeline/build.js';
 import { lockedStyle } from '../render/style.js';
 import { latestNotification } from '../notify/index.js';
@@ -100,6 +100,16 @@ export function createHandler(ctx, { port, env = process.env, accounts = null } 
   const hosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`, ...(publicHost ? [publicHost] : [])]);
   const origins = new Set([`http://127.0.0.1:${port}`, `http://localhost:${port}`, ...(publicHost ? [`https://${publicHost}`] : [])]);
 
+  // Whether the browser is signed in to OpenFrequency: a session accounts vouches for, or one it knows and refuses
+  // here (another product's customer, a closed workspace). No session cookie never asks accounts; an answer that
+  // fails (accounts down) leaves the browser a visitor.
+  const signedIn = async (jar, https) => {
+    const sid = sessionIdFrom(jar, { https });
+    if (!sid) return false;
+    const a = await who.whoIs(sid);
+    return a.status === 200 || (a.status === 403 && ['no_membership', 'workspace_disabled', 'product_disabled'].includes(a.body?.error));
+  };
+
   const ROUTES = [
     ['POST', /^\/post\/([\w-]+)\/approve$/, (c, u, m) => act.approve(c, u, { id: m[1] })],
     ['POST', /^\/posts\/approve-all$/, (c, u, m, f) => act.approveAll(c, u, {}, f)],
@@ -171,12 +181,21 @@ export function createHandler(ctx, { port, env = process.env, accounts = null } 
           if (dm[4]) return demo ? send(req, res, 200, demoThemeCss(demo), 'text/css; charset=utf-8', { 'cache-control': 'public, max-age=600' }) : send(req, res, 404, '', 'text/css; charset=utf-8');
           if (dm[2] || dm[5]) return sendSlide(ctx, res, demo, dm[2] === 'p' ? 'shelf' : dm[2] || 'logo', dm[3]) || send(req, res, 404, 'no such slide', 'text/plain; charset=utf-8');
           if (!demo) return send(req, res, 404, goneHtml(), 'text/html; charset=utf-8', { 'x-robots-tag': 'noindex' });
-          return send(req, res, 200, demoPage(demo, { offer: offerOf(ctx.db) }), 'text/html; charset=utf-8', { 'x-robots-tag': 'noindex, nofollow', 'referrer-policy': 'no-referrer' });
+          // The page itself, opened by someone not signed in, is an open; its pictures and its colour are not.
+          const { visitor, cookie } = visitorOf(jar, { https: secure });
+          if (req.method === 'GET' && !(await signedIn(jar, secure))) recordOpen(ctx.db, demo.id, visitor);
+          return send(req, res, 200, demoPage(demo, { offer: offerOf(ctx.db) }), 'text/html; charset=utf-8', { 'x-robots-tag': 'noindex, nofollow', 'referrer-policy': 'no-referrer', ...(cookie ? { 'set-cookie': cookie } : {}) });
         }
       }
       // A store asked for a demo on openfrequency.co.il: the website's lead service, on this machine, with its token.
       if (req.method === 'POST' && p === '/internal/lead') {
         const [status, body] = await intake(ctx, req, env);
+        return json(req, res, status, body);
+      }
+      // The operator's dashboard on Toran reads every demo and its opens: the same checks, on this machine alone. The
+      // pages' address is the public name's; without one (a laptop), the address this request came to.
+      if (req.method === 'GET' && p === '/internal/demos') {
+        const [status, body] = demosFeed(ctx, req, env, { origin: publicHost ? `https://${publicHost}` : `http://${host}` });
         return json(req, res, status, body);
       }
 
