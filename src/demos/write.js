@@ -71,7 +71,7 @@ THE SLIDES:
 - every number on a slide (a year, a count, a price) is in a quote that slide cites.
 - cta: the last slide, from the topic to the store: why someone who cares about this would want to see what the store has, and where (its domain). It may cite facts from the store's catalogue (key "store"); no number the catalogue does not say. title at most ${FIT.ctaTitle} characters, body at most ${FIT.ctaBody}.
 - caption: two or three short sentences, ending with a real question to the reader. No hashtags.
-- image: for the cover (coverImage), each content slide and the last slide, a search in a stock-photo library (Pexels), two to five English words: a place, an object, a moment or a mood that fits that slide ("empty stadium at night", "doctor checking pulse", "trophy on a table"). The library has no photographs of real people, so never a name; never a logo, a shirt, a jersey, a kit, a poster, a sign or text. The cover's is the strongest picture of the topic, and no two slides ask for the same picture.
+- image: for the cover (coverImage), each content slide and the last slide, a search in a stock-photo library (Pexels), two to five English words: a place, an object, a moment or a mood that fits that slide ("empty stadium at night", "doctor checking pulse", "trophy on a table"). The library has no photographs of real people, so never a name; never a logo, a shirt, a jersey, a kit, a poster, a sign or text. The cover's is the strongest picture of the topic, the last slide's is a scene of the field too (never the store's goods), and no two slides ask for the same picture.
 Speak as the store's account to its followers, in the plural (אתם). No exclamation marks, no emoji.
 
 ${HEBREW}`;

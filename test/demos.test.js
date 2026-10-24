@@ -60,6 +60,7 @@ const io = {
   write: async (_ctx, { store, docs }) => checkDraft(docs, DRAFT, { domain: store.domain }),
   photo: async (_ctx, { pack, query }) => {
     searched.push({ query, providers: pack.meta.imagery?.providers });
+    if (query === DRAFT.cta.image) return null; // nothing found: the slide stands on the cover's photograph
     return { file: PHOTO, author: 'A Photographer', license: 'Pexels License', source_url: `https://www.pexels.com/photo/${encodeURIComponent(query)}` };
   },
   render: async ({ outDir, photos }) => {
@@ -160,7 +161,7 @@ test('a request builds the demo in the background; asking again for the same sto
   assert.match(d.store_json, /logo\.jpg/, "the store's logo, saved");
   assert.deepEqual(searched.map((s) => s.query), [DRAFT.coverImage, ...DRAFT.items.map((s) => s.image), DRAFT.cta.image], "each slide's own search, in order");
   assert.ok(searched.every((s) => JSON.stringify(s.providers) === '["pexels"]'), 'Pexels only');
-  assert.equal(JSON.parse(d.post_json).photos.length, 5, 'each photograph credited');
+  assert.equal(JSON.parse(d.post_json).photos.length, 4, 'each photograph found, credited');
   const again = await (await lead({ url: 'kettles.example.co.il', whatsapp: '972529876543' })).json();
   assert.deepEqual([again.id, again.existing], [first.id, true]);
   assert.equal(demo().whatsapp, '972529876543', 'the latest number that asked');

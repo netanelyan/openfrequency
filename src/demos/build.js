@@ -176,6 +176,8 @@ export async function buildDemo(ctx, id, { read = readStore, topic: choose = cho
         credits.push({ slide: i, query, author: img.author || null, license: img.license || null, url: img.source_url || null });
       }
       if (!photos.has(0)) throw new DemoError(`לא מצאנו ב־Pexels תמונה לשער ("${post.images?.[0] || ''}")${Object.keys(why).length ? `: ${Object.keys(why).slice(0, 2).join('; ')}` : ''}`);
+      // A slide whose search found nothing (refused, or no result) stands on the cover's photograph, never on nothing.
+      for (let i = 1; i < (post.images || []).length; i++) if (!photos.has(i)) photos.set(i, photos.get(0));
       post.photos = credits;
       try {
         const files = await render({
