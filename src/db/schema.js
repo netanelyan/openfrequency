@@ -547,4 +547,69 @@ export const MIGRATIONS = [
   );
   CREATE INDEX demos_domain ON demos(domain);
   `,
+  `
+  -- A customer's month (src/budget/quota.js): how many slideshows it is suggested, how many rejected ones are written
+  -- again, and the most its posts may cost. NULL is the default (40, 10, $12); the operator sets another per account.
+  ALTER TABLE accounts ADD COLUMN plan_suggested INTEGER;
+  ALTER TABLE accounts ADD COLUMN plan_redos INTEGER;
+  ALTER TABLE accounts ADD COLUMN cap_usd REAL;
+
+  -- What a post was to the customer: a suggestion (it passed every check and reached them), a redo (it replaced a post
+  -- they rejected, redo_of) or a retry (our checks blocked it: our cost, never theirs). quota_month is the Israel month
+  -- it reached them in. reject_json is why they rejected it and what became of it ({ reason, note, redo, replacement }).
+  ALTER TABLE posts ADD COLUMN quota_kind TEXT CHECK (quota_kind IN ('suggestion','redo','retry'));
+  ALTER TABLE posts ADD COLUMN quota_month TEXT;
+  ALTER TABLE posts ADD COLUMN redo_of TEXT;
+  ALTER TABLE posts ADD COLUMN reject_json TEXT;
+  CREATE INDEX posts_quota ON posts(account_id, quota_month, quota_kind);
+
+  -- The posts made before this: every one that reached the customer was a suggestion, every blocked one ours. The
+  -- month is read from created_at three hours ahead of UTC (Israel's summer clock), close enough for a month's count.
+  UPDATE posts SET quota_kind = 'suggestion', quota_month = strftime('%Y-%m', created_at, '+3 hours')
+    WHERE sample = 0 AND status NOT IN ('drafting','blocked','sample');
+  UPDATE posts SET quota_kind = 'retry', quota_month = strftime('%Y-%m', created_at, '+3 hours')
+    WHERE sample = 0 AND status = 'blocked';
+  `,
+  `
+  -- The WhatsApp assistant (openfrequency-toran, src/assistant): every signed request's nonce, kept a little longer
+  -- than a signature lives, so the same request is refused the second time even across a restart.
+  CREATE TABLE assistant_nonces (
+    nonce         TEXT PRIMARY KEY,
+    at            TEXT NOT NULL
+  );
+  CREATE INDEX assistant_nonces_at ON assistant_nonces(at);
+
+  -- What Teder tells the assistant: one row per event, found from the posts (src/assistant/events.js) and sent,
+  -- signed, when the customer's quiet hours allow. key makes each event once (post.ready:<post>, weekly.summary:<ws>:<day>).
+  -- state: pending | sent | off (the customer turned the type off) | stale (no longer true when its turn came) |
+  -- expired | failed. data_json is what the payload is built from at sending, never the payload itself.
+  CREATE TABLE assistant_events (
+    id            INTEGER PRIMARY KEY,
+    key           TEXT NOT NULL UNIQUE,
+    type          TEXT NOT NULL,
+    workspace_id  INTEGER NOT NULL,
+    account_id    TEXT,
+    post_id       TEXT,
+    data_json     TEXT,
+    state         TEXT NOT NULL,
+    attempts      INTEGER NOT NULL DEFAULT 0,
+    not_before    TEXT NOT NULL,
+    expires_at    TEXT NOT NULL,
+    last_error    TEXT,
+    created_at    TEXT NOT NULL,
+    sent_at       TEXT
+  );
+  CREATE INDEX assistant_events_due ON assistant_events(state, not_before);
+
+  -- A customer's choices for the assistant: which events reach them, and their quiet hours. No row is the default:
+  -- every event, and quiet at night and on Shabbat.
+  CREATE TABLE assistant_prefs (
+    workspace_id  INTEGER PRIMARY KEY,
+    events_json   TEXT NOT NULL,
+    quiet_nights  INTEGER NOT NULL DEFAULT 1,
+    quiet_shabbat INTEGER NOT NULL DEFAULT 1,
+    updated_at    TEXT NOT NULL,
+    updated_by    TEXT
+  );
+  `,
 ];

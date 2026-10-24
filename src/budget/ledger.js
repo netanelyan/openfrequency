@@ -16,6 +16,12 @@ import { BATCH_FACTOR, MODEL_RATES } from './pricing.js';
 // accounts when it cuts the weakest one's volume; its allocation, when there is
 // one for this month, is the account's cap.
 //
+// EACH CUSTOMER HAS A CAP OF ITS OWN on top: the most one account may cost in a
+// month, whatever its share ($12 unless the operator set another on the
+// website, src/budget/quota.js). It fails closed: an account with no row, or a
+// cap that is not a number, may spend nothing. Hitting it pauses the account
+// and tells the operator (rails.js capPause).
+//
 // HOW THE CAP HOLDS. Every paid call reserves its ceiling first: the most it can
 // possibly cost, from the size of the prompt in bytes (no token is shorter than
 // a byte) and max_tokens (no answer is longer), at the dearest rate the call can
@@ -109,6 +115,17 @@ export function monthReserved(db, accountId, t = now()) {
 }
 
 export const DEFAULT_MONTHLY_USD = 20;
+/** The most one customer's account may cost in a month when the operator set nothing else. */
+export const DEFAULT_CUSTOMER_CAP_USD = 12;
+
+/** One account's own monthly cap in dollars: its cap_usd, $12 when unset, 0 when there is no row or no number. */
+export function customerCap(db, accountId) {
+  const row = db.get('SELECT cap_usd FROM accounts WHERE id = ?', accountId);
+  if (!row) return 0;
+  if (row.cap_usd == null) return DEFAULT_CUSTOMER_CAP_USD;
+  const n = Number(row.cap_usd);
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+}
 /** The share of the cap kept for engine-wide work (a new account's discovery and samples). */
 export const ENGINE_RESERVE = 0.05;
 
@@ -133,19 +150,25 @@ export function baseShare(db, accountId, env = process.env) {
 }
 
 /**
- * The caps that apply to a call: the global one, and the account's (the
- * planner's allocation for this month if there is one, else its share; never
- * above the pack's own budget.monthlyUsd when the pack sets one).
+ * The caps that apply to a call: the global one, the account's (the planner's
+ * allocation for this month if there is one, else its share; never above the
+ * pack's own budget.monthlyUsd when the pack sets one), and the customer's own.
  */
 export function caps(db, pack, { t = now(), env = process.env } = {}) {
   const global = globalCap(db, env);
-  if (!pack) return { global, account: 0 };
+  if (!pack) return { global, account: 0, customer: 0 };
   const alloc = getSetting(db, `budget:alloc:${monthKey(t)}`, null)?.[pack.id];
   let account = Number(alloc) > 0 ? Number(alloc) : baseShare(db, pack.id, env);
   const own = Number(pack.meta?.budget?.monthlyUsd);
   if (own > 0) account = Math.min(account, own);
-  return { global, account: Math.min(account, global) };
+  return { global, account: Math.min(account, global), customer: customerCap(db, pack.id) };
 }
+
+/**
+ * The account a call is for, or null for engine-wide work. A context outside any one account (onboarding) carries the
+ * engine's pack lookup where a pack would be: that is no account, and counts against the global cap alone.
+ */
+const accountOf = (pack) => (pack && typeof pack.id === 'string' ? pack : null);
 
 /**
  * Refuse a call that would cross a cap. `estimateUsd` is the most this call can
@@ -153,6 +176,7 @@ export function caps(db, pack, { t = now(), env = process.env } = {}) {
  * against the global cap only.
  */
 export function guard(db, { pack = null, estimateUsd = 0, t = now(), env = process.env } = {}) {
+  pack = accountOf(pack);
   const c = caps(db, pack, { t, env });
   const all = monthSpend(db, undefined, t).usd + monthReserved(db, undefined, t).usd;
   if (all + estimateUsd > c.global + 1e-12) {
@@ -162,6 +186,9 @@ export function guard(db, { pack = null, estimateUsd = 0, t = now(), env = proce
     const mine = monthSpend(db, pack.id, t).usd + monthReserved(db, pack.id, t).usd;
     if (mine + estimateUsd > c.account + 1e-12) {
       throw new BudgetError(`${pack.id}: this month's share is used up ($${mine.toFixed(2)} of $${c.account.toFixed(2)}${estimateUsd ? `, this call could cost up to $${estimateUsd.toFixed(3)}` : ''})`, { scope: 'account', accountId: pack.id, spent: mine, cap: c.account });
+    }
+    if (mine + estimateUsd > c.customer + 1e-12) {
+      throw new BudgetError(`${pack.id}: the customer's monthly cap is reached ($${mine.toFixed(2)} of $${c.customer.toFixed(2)}${estimateUsd ? `, this call could cost up to $${estimateUsd.toFixed(3)}` : ''})`, { scope: 'customer', accountId: pack.id, spent: mine, cap: c.customer });
     }
   }
 }
@@ -174,7 +201,7 @@ export function guard(db, { pack = null, estimateUsd = 0, t = now(), env = proce
 export function reserve(db, { pack = null, postId = null, usd, tag = null, t = now(), env = process.env }) {
   return db.tx(() => {
     guard(db, { pack, estimateUsd: usd, t, env });
-    return db.insert('reservations', { account_id: pack?.id ?? null, post_id: postId, usd, tag, month: monthKey(t), at: nowIso() });
+    return db.insert('reservations', { account_id: accountOf(pack)?.id ?? null, post_id: postId, usd, tag, month: monthKey(t), at: nowIso() });
   });
 }
 

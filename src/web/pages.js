@@ -1,4 +1,4 @@
-import { accDot, csrfField, dayHe, esc, icon, k, layout, MODE_HE, postButton, shortDate, stamp, statusChip, tederMark, timeHe, tok, tokenNum, TOKENS_PER_USD, usd, weekdayNarrow } from './ui.js';
+import { accDot, csrfField, dayHe, esc, icon, k, layout, MODE_HE, postButton, shortDate, stamp, statusChip, tederMark, timeHe, usd, weekdayNarrow } from './ui.js';
 import { PAUSE_REASONS } from '../autonomy/rails.js';
 import { FLOW_HE, draftNote, flowState } from '../publish/draft.js';
 import { CATALOG } from '../sources/catalog.js';
@@ -7,6 +7,7 @@ import { BOXES, MEASURES, PRIORITY } from '../metrics/feedback.js';
 import { RIVALS } from '../pipeline/rivals.js';
 import { readFileSync } from 'node:fs';
 import { PARTS as TOPIC_PARTS, PASS as PASS_TOPIC } from '../topics/index.js';
+import { DEFAULT_CUSTOMER_CAP_USD, DEFAULT_PLAN, MAX_PLAN, REDO_REASONS, REJECT_REASON_HE } from '../budget/quota.js';
 
 const VERSION = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version;
 
@@ -17,10 +18,71 @@ const KIND_HE = Object.fromEntries(Object.entries(KINDS).map(([k2, v]) => [k2, v
 // The words on the pages are Hebrew; what came from a source (an English quote,
 // a URL) keeps its own direction inside an isolated run.
 
-const REJECT_REASONS = ['לא מעניין', 'טעות בעובדה', 'הקול לא נכון', 'נושא שכבר היה', 'העיצוב לא עובד'];
+/**
+ * The rejection form: a reason (each one steers the replacement, src/pipeline/redo.js) and the customer's own words.
+ * `left` is the month's redos left, when the page knows it.
+ */
+function rejectForm(ctx, post, { ajax = null, left = null } = {}) {
+  const tail = left == null ? '' : left > 0 ? `<p class="muted small m0">פוסט חלופי ייכתב לפי הסיבה. ${left === 1 ? 'נשארה החלפה אחת' : `נשארו ${left} החלפות`} החודש.</p>` : '<p class="muted small m0">ההחלפות של החודש נוצלו, אז דחייה רק מורידה את הפוסט.</p>';
+  return `<form class="rejectbox" id="reject-${esc(post.id)}" method="post" action="/post/${esc(post.id)}/reject"${ajax ? ` data-ajax="${ajax}"` : ''}>${csrfField(ctx)}
+<label class="f">למה לדחות?<select name="reason">${REDO_REASONS.map((r) => `<option value="${r}">${esc(REJECT_REASON_HE[r])}</option>`).join('')}</select></label>
+<input type="text" name="note" placeholder="מה לשנות, במילים שלכם (לא חובה)" maxlength="300">
+${tail}<button class="btn danger" type="submit">לדחות את הפוסט</button></form>`;
+}
+
+/** What a post counted as in the customer's month (src/budget/quota.js). */
+const QUOTA_KIND_HE = { suggestion: 'הצעה', redo: 'החלפה', retry: 'לא נספר, הבדיקות שלנו עצרו אותו' };
+
+const PROVIDER_HE = { pexels: 'Pexels', unsplash: 'Unsplash', commons: 'ויקישיתוף', pack: 'מהחשבון', rendered: 'מצויר' };
+
+/** Light edits on a post's page: another of its own photographs on a slide, or a slide removed. Drawn again only. */
+function lightPanel(ctx, d) {
+  const { post } = d;
+  const items = post.slides.filter((s) => s.kind === 'item').length;
+  const rows = post.slides
+    .map((s, i) => {
+      const name = s.kind === 'cover' ? 'שער' : s.kind === 'closer' ? 'שקף סיום' : `שקף ${i}`;
+      const photo = d.photos.length
+        ? `<form method="post" action="/post/${esc(post.id)}/slide/${i}/photo" class="inline">${csrfField(ctx)}<label class="f">תמונה<select name="image"><option value="none"${s.image_id ? '' : ' selected'}>בלי תמונה</option>${d.photos.map((img) => `<option value="${img.id}"${img.id === s.image_id ? ' selected' : ''}>${esc(String(img.alt || img.query || `תמונה ${img.id}`).slice(0, 60))} · ${esc(PROVIDER_HE[img.provider] || img.provider)}</option>`).join('')}</select></label><button class="btn sm" type="submit">להחליף</button></form>`
+        : '';
+      const remove = s.kind === 'item' && items > 1 ? postButton(ctx, `/post/${post.id}/slide/${i}/remove`, 'להוריד את השקף', { cls: 'btn sm ghost', confirm: 'לחצו שוב כדי להוריד את השקף' }) : '';
+      if (!photo && !remove) return '';
+      return `<li><img src="${media(post, 'tiktok', i)}" alt="" width="72" height="128" loading="lazy"><div><b>${esc(name)}</b>${s.title ? ` <span class="muted small">${esc(String(s.title).replace(/\n/g, ' ').slice(0, 60))}</span>` : ''}<div class="actions p0">${photo}${remove}</div></div></li>`;
+    })
+    .join('');
+  if (!rows) return '';
+  return `<section class="panel" id="light"><header><h2>שינויים קטנים</h2></header>
+<p class="muted small">מחליפים תמונה באחת שכבר נמצאה לפוסט הזה, או מורידים שקף, והשקפים מצוירים מחדש. זה לא נספר כהחלפה. את הטקסט עורכים בטופס שמתחת.</p>
+<ol class="lightlist">${rows}</ol></section>`;
+}
+
+/** Where a redo stands, on the rejected post and on the one that replaced it. */
+function redoBanners(d) {
+  const { post } = d;
+  const out = [];
+  if (d.redoOf) out.push(`<div class="banner info">${icon('edit')}<div><b>פוסט חלופי</b><p>נכתב במקום <a href="/post/${esc(d.redoOf.id)}">${esc(d.redoOf.hook || 'פוסט שנדחה')}</a>.${d.redoOf.reason ? ` סיבת הדחייה: ${esc(d.redoOf.reason)}.` : ''}</p></div></div>`);
+  const r = post.status === 'rejected' ? post.reject : null;
+  if (r?.redo === 'writing') out.push(`<div class="banner info">${icon('clock')}<div><b>פוסט חלופי נכתב עכשיו</b><p>הוא יגיע לאישור בעוד כמה דקות.</p></div></div>`);
+  if (r?.redo === 'queued' && d.replacement) out.push(`<div class="banner info">${icon('check')}<div><b>נכתב פוסט חלופי</b><p><a href="/post/${esc(d.replacement.id)}">${esc(d.replacement.hook || 'לפוסט החלופי')}</a></p></div></div>`);
+  if (r?.redo === 'failed') out.push(`<div class="banner warn">${icon('alert')}<div><b>הפוסט החלופי לא נכתב</b><p>הבדיקות שלנו עצרו את מה שנכתב במקומו, ולכן ההחלפה לא ירדה מהמכסה.</p></div></div>`);
+  if (r?.redo === 'none') out.push(`<div class="banner info">${icon('alert')}<div><b>לא נכתב פוסט חלופי</b><p>ההחלפות של החודש נוצלו כשהפוסט נדחה.</p></div></div>`);
+  return out.join('');
+}
 const STEP_HE = {
   format: 'פורמט', viral: 'נושא שנבחר קודם', topic: 'מסמכים מהמקורות', outline: 'מתווה ועובדות', facts: 'אימות עובדות', slides: 'כתיבת שקפים', redraft: 'כתיבה מחדש', rewrite: 'שכתוב מה שנשמע כמו בוט', review: 'בדיקת "נשמע כמו בוט"', verify: 'שער העובדות',
   image: 'תמונה', render: 'רינדור', queue: 'לתור', publish: 'פרסום', blocked: 'נחסם', error: 'שגיאה', edit: 'עריכה', subject: 'נושא השבוע', takedown: 'הודעת הסרה',
+  whatsapp: 'מוואטסאפ',
+};
+/** What a customer did through the WhatsApp assistant, in the post's trace. */
+const WHATSAPP_HE = { approve: 'אישור', reject: 'דחייה', edit: 'עריכה' };
+/** The assistant's messages, as the Settings page lists them (src/assistant/data.js EVENT_TYPES). */
+const EVENT_HE = {
+  'post.ready': 'פוסט חדש מחכה לאישור',
+  'post.reminder': 'הגיעה השעה לפרסם פוסט',
+  'post.published': 'פוסט עלה',
+  'post.unposted': 'עברה שעה והפוסט עוד לא עלה',
+  'quota.low': 'נשארו 8 הצעות החודש',
+  'weekly.summary': 'סיכום השבוע, ביום ראשון ב-9:00',
 };
 // The checks on the Results page's block rates, by the names src/pipeline/build.js checkOf gives them.
 const CHECK_HE = {
@@ -50,7 +112,7 @@ const AUDIT_HE = {
   login: 'כניסה', approve: 'אישור פוסט', unapprove: 'ביטול אישור', reject: 'דחיית פוסט', edit: 'עריכה', publish_now: 'פרסום ידני', published: 'פורסם', publish_failed: 'פרסום נכשל',
   auto_approved: 'אושר אוטומטית', dev_mode: 'מצב מפתח נפתח', topic_added: 'נושא נוסף לבנק', topic_removed: 'נושא הוסר', watch_saved: 'רשימת מעקב נשמרה', mode: 'שינוי מצב', pause: 'השהיה', resume: 'חידוש', global_kill_on: 'כיבוי כללי', global_kill_off: 'הפעלה מחדש', global_budget: 'תקציב כללי',
   takedown: 'הודעת הסרה', takedown_deleted: 'נמחק ידנית אחרי הודעה', image_ok: 'תמונה נבדקה בעין', mix_changed: 'יחס בידור ומספרים זז',
-  generate_at: 'שעת ייצור', source_approved: 'מקור אושר', source_removed: 'מקור הוסר', source_added: 'מקור נוסף', user_added: 'משתמש נוסף',
+  generate_at: 'שעת ייצור', assistant_prefs: 'הגדרות וואטסאפ', source_approved: 'מקור אושר', source_removed: 'מקור הוסר', source_added: 'מקור נוסף', user_added: 'משתמש נוסף',
   publish_retry: 'פרסום יחזור על עצמו', fact_added: 'עובדה נוספה', fact_confirmed: 'עובדה נבדקה שוב', fact_removed: 'עובדה הוסרה', rival_added: 'מתחרה נוסף', rival_updated: 'מתחרה עודכן', rival_removed: 'מתחרה הוסר', format_dropped: 'פורמט נשר', format_promoted: 'פורמט הוכח', format_returned: 'פורמט חזר', onboarding: 'חשבון חדש', went_live: 'חשבון עלה לאוויר',
 };
 
@@ -138,10 +200,7 @@ ${decide ? postButton(ctx, `/post/${post.id}/approve`, `${icon('check')}אישו
 ${decide ? `<button class="btn ghost" type="button" data-toggle="#reject-${esc(post.id)}" aria-expanded="false">${icon('x')}דחייה</button>` : ''}
 ${post.status === 'approved' ? postButton(ctx, `/post/${post.id}/unapprove`, 'ביטול אישור', { cls: 'btn ghost', ajax: 'reload' }) : ''}
 </div>
-${decide ? `<form class="rejectbox" id="reject-${esc(post.id)}" method="post" action="/post/${esc(post.id)}/reject" data-ajax="remove">${csrfField(ctx)}
-<label class="f">למה לדחות?<select name="reason">${REJECT_REASONS.map((r) => `<option>${esc(r)}</option>`).join('')}<option value="">אחר</option></select></label>
-<input type="text" name="note" placeholder="הערה (לא חובה), עוזרת לכתיבה הבאה" maxlength="300">
-<button class="btn danger" type="submit">לדחות את הפוסט</button></form>` : ''}
+${decide ? rejectForm(ctx, post, { ajax: 'remove' }) : ''}
 ${captionDetails(post)}
 ${factsBlock(post)}
 </article>`;
@@ -158,7 +217,8 @@ function stopBanners(ctx, d) {
   if (ctx.globalKill) out.push(`<div class="banner bad">${icon('power')}<div><b>מתג הכיבוי הכללי מופעל.</b><p>אף חשבון לא כותב פוסטים ולא מפרסם עד שמפעילים מחדש.</p></div>${ctx.operator ? postButton(ctx, '/settings/kill', 'הפעלה מחדש', { cls: 'btn sm', fields: { on: '0' } }) : ''}</div>`);
   for (const g of d.groups) {
     if (g.acc?.status === 'paused') out.push(`<div class="banner warn">${icon('alert')}<div><b>${esc(g.pack.meta.displayName)} מושהה (${esc(PAUSE_REASONS[g.acc.paused_reason] || g.acc.paused_reason)})</b>${g.acc.paused_detail ? `<p>${esc(g.acc.paused_detail)}</p>` : ''}</div><a class="btn sm" href="/accounts?account=${esc(g.pack.id)}#acc-${esc(g.pack.id)}">לחשבון</a></div>`);
-    else if (g.reached) out.push(`<div class="banner warn">${icon('alert')}<div><b>הנתח של ${esc(g.pack.meta.displayName)} מהתקציב נגמר.</b><p>פוסטים חדשים לא ייכתבו בו עד שהתוכנית החודשית תפנה לו כסף, או עד החודש הבא.</p></div></div>`);
+    else if (g.reached && ctx.operator) out.push(`<div class="banner warn">${icon('alert')}<div><b>הנתח של ${esc(g.pack.meta.displayName)} מהתקציב נגמר.</b><p>פוסטים חדשים לא ייכתבו בו עד שהתוכנית החודשית תפנה לו כסף, או עד החודש הבא.</p></div></div>`);
+    else if (g.quota && g.quota.suggested.used >= g.quota.suggested.limit) out.push(`<div class="banner info">${icon('alert')}<div><b>${esc(g.pack.meta.displayName)} ניצל את ${g.quota.suggested.limit} ההצעות של החודש.</b><p>פוסטים חדשים ייכתבו בו מתחילת החודש הבא.</p></div></div>`);
   }
   return out.join('');
 }
@@ -190,13 +250,13 @@ export function needsYou(d, max = 6) {
 /** A short list of posts, one line each, every line a link. */
 const postLines = (rows) => `<div class="list todo">${rows.map((r) => `<a href="${esc(r.href)}">${r.acc ? accDot(r.acc) : `<span class="ico${r.bad ? ' bad' : ''}">${icon(r.ic)}</span>`}<span class="tx"><b>${esc(r.title)}</b><span class="muted small">${esc(r.sub)}</span></span><span class="go">${icon('chev')}</span></a>`).join('')}</div>`;
 
-/** Yesterday in numbers, one row per account; folded, with one arrow (the panel's own). */
-function summaryPanel(d) {
+/** Yesterday in numbers, one row per account; folded, with one arrow (the panel's own). Its cost is the operator's. */
+function summaryPanel(ctx, d) {
   const rows = d.summaryRows || [];
   const name = (id) => d.groups.find((g) => g.pack.id === id)?.pack.meta.displayName || id;
   const table = rows.length
-    ? `<table class="table sumtab"><thead><tr><th>חשבון</th><th>פורסמו</th><th>טוקנים</th></tr></thead><tbody>${rows
-        .map((r) => `<tr><td>${accDot(r.account_id)} ${esc(name(r.account_id))}</td><td>${n(r.data.published?.length || 0, 'ok')}</td><td class="num">${tokenNum(r.data.spend)}</td></tr>`)
+    ? `<table class="table sumtab"><thead><tr><th>חשבון</th><th>פורסמו</th>${ctx.operator ? '<th>עלות</th>' : ''}</tr></thead><tbody>${rows
+        .map((r) => `<tr><td>${accDot(r.account_id)} ${esc(name(r.account_id))}</td><td>${n(r.data.published?.length || 0, 'ok')}</td>${ctx.operator ? `<td class="num">${usd(r.data.spend)}</td>` : ''}</tr>`)
         .join('')}</tbody></table>`
     : `<p class="lede">${esc(d.summary.text).replace(/\n/g, '<br>')}</p>`;
   return `<details class="panel home-panel"><summary><h2 class="inline">סיכום ${esc(shortDate(`${d.summary.day}T12:00:00Z`))}</h2></summary>${table}</details>`;
@@ -242,7 +302,7 @@ ${stopBanners(ctx, d)}
 ${todo.rows.length ? `${postLines(todo.rows)}${todo.more ? `<p class="small"><a href="/posts">ועוד ${todo.more}</a></p>` : ''}` : '<p class="muted">אין מה לאשר כרגע. הפוסטים הבאים ייכתבו בשעה שקבעתם בהגדרות.</p>'}
 </section>
 ${tiktokPanel(d)}
-${d.summary ? summaryPanel(d) : ''}`;
+${d.summary ? summaryPanel(ctx, d) : ''}`;
   return layout({ ...ctx, title: 'היום', active: 'today' }, body);
 }
 
@@ -258,7 +318,7 @@ export function allPage(ctx, d) {
   const others = needsYou(d, 100).rows.filter((r) => !r.acc);
   const accounts = `<div class="acctab" role="table" aria-label="היום בכל חשבון">
 <div class="r h" role="row"><span role="columnheader">חשבון</span><span role="columnheader">מחכים</span><span role="columnheader">מתוזמנים</span><span role="columnheader">פורסמו</span></div>
-${d.groups.map((g) => `<a class="r" role="row" href="/?account=${esc(g.pack.id)}"><span class="who" role="cell">${accDot(g.pack.id)}<span><b>${esc(g.pack.meta.displayName)}</b><small>${esc(g.acc?.status === 'paused' ? 'מושהה' : MODE_HE[g.acc?.mode || 'approve'][0])} · ${tokenNum(g.spend)} טוקנים</small></span></span>${['waiting', 'scheduled', 'published'].map((key) => `<span role="cell">${n(g[key].length, TONE[key])}</span>`).join('')}</a>`).join('')}
+${d.groups.map((g) => `<a class="r" role="row" href="/?account=${esc(g.pack.id)}"><span class="who" role="cell">${accDot(g.pack.id)}<span><b>${esc(g.pack.meta.displayName)}</b><small>${esc(g.acc?.status === 'paused' ? 'מושהה' : MODE_HE[g.acc?.mode || 'approve'][0])} · ${g.quota ? `${g.quota.suggested.used}/${g.quota.suggested.limit} הצעות` : ''}</small></span></span>${['waiting', 'scheduled', 'published'].map((key) => `<span role="cell">${n(g[key].length, TONE[key])}</span>`).join('')}</a>`).join('')}
 </div>`;
   const row = (p, g) => {
     const cover = p.media?.tiktok?.length ? `<img class="thumb" src="${media(p, 'tiktok', 0)}" alt="" width="36" height="64" loading="lazy" decoding="async">` : '<span class="thumb"></span>';
@@ -333,7 +393,8 @@ export function postPage(ctx, d, { problems = [], values = null } = {}) {
       if (det.problems?.length) bits.push(det.problems.slice(0, 3).join(' · '));
       if (det.reason) bits.push(det.reason);
       if (det.why) bits.push(det.why);
-      if (det.via) bits.push(det.via === 'dry' ? 'פרסום יבש: נכתב לדיסק' : `דרך ${det.via}`);
+      if (s.step === 'whatsapp') bits.push(...[WHATSAPP_HE[det.action] || det.action, det.by, det.slide ? `שקף ${det.slide}` : ''].filter(Boolean));
+      else if (det.via) bits.push(det.via === 'dry' ? 'פרסום יבש: נכתב לדיסק' : det.via === 'whatsapp' ? 'מוואטסאפ' : `דרך ${det.via}`);
       if (det.provider) bits.push(`${det.provider}, ${det.license}`);
       return `<li class="${esc(s.status)}"><b>${esc(STEP_HE[s.step] || s.step)}</b> <span class="muted small num">${esc(stamp(s.at))}${s.cost_usd && ctx.dev ? ` · $${s.cost_usd.toFixed(4)}` : ''}</span>${bits.length ? `<div class="d">${esc(bits.join(' · '))}</div>` : ''}</li>`;
     })
@@ -341,7 +402,7 @@ export function postPage(ctx, d, { problems = [], values = null } = {}) {
   const scores = post.checks?.scores || [];
   const edit = `<details class="panel edit" id="edit"${problems.length || values ? ' open' : ''}><summary><h2 class="inline">עריכת הטקסט</h2></summary>
 ${problems.length ? `<div class="problems"><b>השינוי לא נשמר, הבדיקות עצרו אותו:</b><ul>${problems.map((p) => `<li>${esc(p)}</li>`).join('')}</ul></div>` : ''}
-<p class="muted small">כל עריכה עוברת שוב את בדיקות הקול, הכללים ושער העובדות, ואז השקפים מרונדרים מחדש. מספר שלא נמצא בציטוט לא יעבור.</p>
+<p class="muted small">כל עריכה עוברת שוב את בדיקות הקול, הכללים ושער העובדות, וטקסט ששונה עובר גם בדיקת עובדות. אחר כך השקפים מרונדרים מחדש. מספר שלא נמצא בציטוט לא יעבור, ועריכה לא נספרת כהחלפה.</p>
 <form method="post" action="/post/${esc(post.id)}/edit" class="formgrid">${csrfField(ctx)}
 <fieldset><legend>שער</legend><label class="f">כותרת<input type="text" name="hook" value="${esc(v.hook)}" maxlength="90"></label><label class="f">שורה שנייה<input type="text" name="sub" value="${esc(v.sub || '')}" maxlength="120"></label></fieldset>
 ${items
@@ -375,6 +436,7 @@ ${post.status !== 'taken_down' ? `<details><summary class="muted">${icon('alert'
 
   const body = `<div class="head"><div><a class="muted small back" href="/posts">${icon('chev')}חזרה לפוסטים</a><h1 class="title">${esc(post.hook || post.topic || 'פוסט')}</h1></div><span class="sub">${statusChip(post.status)}</span></div>
 ${post.reason ? `<div class="banner ${post.status === 'blocked' || post.status === 'failed' ? 'bad' : 'info'}">${icon('alert')}<div><b>${esc(post.reason)}</b></div></div>` : ''}
+${redoBanners(d)}
 ${tiktokDraftBanners(ctx, post)}
 <div class="cols">
 <div>
@@ -385,8 +447,10 @@ ${post.media?.instagram ? `<h3 class="lbl">אינסטגרם <span>4:5</span></h3
 ${trustLine(post)}
 <div class="capwrap">${captionBlock(post)}</div>
 </section>
-${post.status === 'queued' ? `<div class="actionbar">${postButton(ctx, `/post/${post.id}/approve`, `${icon('check')}אישור`, { cls: 'btn primary' })}<a class="btn" href="#edit">${icon('edit')}עריכה</a>${postButton(ctx, `/post/${post.id}/reject`, `${icon('x')}דחייה`, { cls: 'btn ghost', fields: { reason: 'נדחה מדף הפוסט' } })}</div>` : ''}
+${post.status === 'queued' ? `<div class="actionbar">${postButton(ctx, `/post/${post.id}/approve`, `${icon('check')}אישור`, { cls: 'btn primary' })}<a class="btn" href="#edit">${icon('edit')}עריכה</a><button class="btn ghost" type="button" data-toggle="#reject-${esc(post.id)}" aria-expanded="false">${icon('x')}דחייה</button></div>
+${rejectForm(ctx, post, { left: d.quota && !post.sample ? d.quota.redos.left : null })}` : ''}
 ${post.status === 'approved' ? `<div class="actionbar">${postButton(ctx, `/post/${post.id}/publish-now`, 'לפרסם עכשיו', { cls: 'btn primary', confirm: 'לחצו שוב כדי לפרסם עכשיו' })}${postButton(ctx, `/post/${post.id}/unapprove`, 'ביטול אישור', { cls: 'btn ghost' })}</div>` : ''}
+${['queued', 'approved', 'sample'].includes(post.status) && d.photos ? lightPanel(ctx, d) : ''}
 ${['queued', 'approved', 'sample'].includes(post.status) ? edit : ''}
 </div>
 <div>
@@ -397,7 +461,8 @@ ${topicPanel(d.topic)}
 <dt>בודק הקול</dt><dd>${post.checks?.reviewer === 'claude' ? 'Claude' : 'אופליין (בלי מפתח API)'}</dd>
 ${scores.length ? `<dt>ציון הכי גבוה</dt><dd><span class="num ltr">${Math.max(...scores)}/10</span></dd>` : ''}
 ${(post.checks?.rewrites || []).length ? `<dt>שכתובים</dt><dd>${post.checks.rewrites.length}</dd>` : ''}
-<dt>עלות</dt><dd>${tok(post.cost_usd)}${ctx.dev ? ` <span class="muted small">${usd(post.cost_usd, 4)}${post.cost_estimated ? ', הערכה, בלי מפתח API' : ''}</span>` : ''}</dd>
+${post.quota_kind ? `<dt>במכסה</dt><dd>${esc(QUOTA_KIND_HE[post.quota_kind] || post.quota_kind)}</dd>` : ''}
+${ctx.operator ? `<dt>עלות</dt><dd>${usd(post.cost_usd, ctx.dev ? 4 : 2)}${ctx.dev && post.cost_estimated ? ' <span class="muted small">הערכה, בלי מפתח API</span>' : ''}</dd>` : ''}
 ${post.kind && post.kind !== 'list' ? `<dt>סוג</dt><dd>${esc(KIND_HE[post.kind] || post.kind)} · ${post.grp === 'entertaining' ? 'בידור' : 'מספרים'}</dd>` : ''}
 ${post.hook_pattern ? `<dt>תבנית השער</dt><dd><span class="ltr">${esc(post.hook_pattern)}</span></dd>` : ''}
 ${post.data?.cta?.text ? `<dt>קריאה לפעולה</dt><dd>${esc(post.data.cta.text)}</dd>` : ''}
@@ -417,7 +482,7 @@ ${takedownPanel}
 export function accountsPage(ctx, rows) {
   const body = `<div class="head"><h1>החשבון</h1><span class="end"><a class="btn sm" href="/new">${icon('plus')}חשבון חדש</a></span></div>
 <div class="accounts">${rows
-    .map(({ pack, acc, spend, cap, plan, publishers, week, style }) => {
+    .map(({ pack, acc, spend, cap, plan, publishers, week, style, quota }) => {
       const paused = acc.status === 'paused';
       const max = Math.max(1, ...week.days.map((x) => x.n));
       const h = (n) => (n === 0 ? 'h0' : `h${Math.max(1, Math.min(4, Math.ceil((n / max) * 4)))}`);
@@ -427,7 +492,8 @@ ${paused ? `<div class="paused${acc.paused_reason === 'kill' ? ' kill' : ''}">${
 <form method="post" action="/accounts/${esc(pack.id)}/mode" data-autosubmit>${csrfField(ctx)}<div class="seg" role="radiogroup" aria-label="מצב אוטונומיה">${['approve', 'digest', 'auto']
         .map((m) => `<input type="radio" name="mode" value="${m}" id="m-${esc(pack.id)}-${m}"${acc.mode === m ? ' checked' : ''}><label for="m-${esc(pack.id)}-${m}">${MODE_HE[m][0]}<small>${MODE_HE[m][1]}</small></label>`)
         .join('')}</div><noscript><button class="btn sm" type="submit">שמירה</button></noscript></form>
-<div><div class="row"><span>הנתח מהתקציב</span><b class="num">${tokenNum(spend)} / ${tokenNum(cap)} טוקנים</b></div><meter min="0" max="${cap || 1}" low="${(cap || 1) * 0.7}" high="${(cap || 1) * 0.9}" optimum="0" value="${Math.min(spend, cap || 1)}"></meter>${plan?.cut ? `<p class="small m4"><span class="chip warn">פוסט ${plan.perDay === 1 ? 'אחד' : plan.perDay} ביום במקום ${plan.planned}</span> התקציב קצר החודש, וזה החשבון שמצמצם ראשון.</p>` : ''}</div>
+${ctx.operator ? `<div><div class="row"><span>הנתח מהתקציב</span><b class="num">${usd(spend)} / ${usd(cap)}</b></div><meter min="0" max="${cap || 1}" low="${(cap || 1) * 0.7}" high="${(cap || 1) * 0.9}" optimum="0" value="${Math.min(spend, cap || 1)}"></meter>${plan?.cut ? `<p class="small m4"><span class="chip warn">פוסט ${plan.perDay === 1 ? 'אחד' : plan.perDay} ביום במקום ${plan.planned}</span> התקציב קצר החודש, וזה החשבון שמצמצם ראשון.</p>` : ''}</div>` : ''}
+${quota ? quotaRow(quota) : ''}
 <div><div class="row"><span>7 הימים האחרונים</span><b>${week.days.reduce((s, x) => s + x.n, 0)} פורסמו${week.views != null ? ` · ${k(week.views)} צפיות` : ''}</b></div>
 <div class="week" aria-label="פוסטים שפורסמו בכל יום">${week.days.map((x) => `<span title="${esc(shortDate(x.at))}: ${x.n}"><i class="${h(x.n)}"></i>${esc(weekdayNarrow(x.at))}</span>`).join('')}</div></div>
 <dl class="kv"><dt>בתור</dt><dd>${week.counts.queued || 0} ממתינים · ${week.counts.approved || 0} מאושרים</dd><dt>נחסמו השבוע</dt><dd>${week.counts.blocked || 0}</dd><dt>פרסום</dt><dd>${publishers.map((x) => `${PLATFORM_HE[x.platform] || x.platform}: ${publisherHe(x)}`).join(' · ')}</dd>${style ? `<dt>סגנון</dt><dd>${style.theme.style ? `סגנון ${esc(style.theme.style.name)}` : `<span class="ltr">${esc(style.theme.template)}/${esc(style.theme.variant || 'a')}</span>`} · נעול מ-${esc(shortDate(style.at))} · <a href="/styles?account=${esc(pack.id)}">להחליף סגנון</a></dd>` : ''}</dl>
@@ -437,6 +503,30 @@ ${style?.pending ? `<div class="paused">${icon('alert')}<div><b>הסגנון ב�
     })
     .join('')}</div>`;
   return layout({ ...ctx, title: 'חשבונות', active: 'accounts' }, body);
+}
+
+/** An account's month: "X of 40 used, Y of 10 redos", and what happens when the suggestions run out. */
+function quotaRow(q) {
+  const s = q.suggested;
+  const r = q.redos;
+  const full = s.used >= s.limit;
+  return `<div><div class="row"><span>החודש</span><b class="num">נוצלו ${s.used} מתוך ${s.limit} הצעות · ${r.used} מתוך ${r.limit} החלפות</b></div><meter min="0" max="${s.limit || 1}" low="${(s.limit || 1) * 0.75}" high="${(s.limit || 1) * 0.9}" optimum="0" value="${Math.min(s.used, s.limit || 1)}"></meter>${s.held + r.held ? `<p class="muted small m4">עוד ${s.held + r.held} בכתיבה עכשיו.</p>` : ''}${full ? '<p class="small m4"><span class="chip warn">ההצעות של החודש נוצלו</span> פוסטים חדשים ייכתבו מתחילת החודש הבא.</p>' : ''}</div>`;
+}
+
+/**
+ * The customer's plan on Settings: what a month gives (the suggestions, the redos, the small changes that are free) and
+ * what each account has used of it. Never money: what the posts cost is the operator's (budgetPanel).
+ */
+function planPanel(plans) {
+  if (!plans.length) return '';
+  const same = plans.every(({ usage: u }) => u.suggested.limit === plans[0].usage.suggested.limit && u.redos.limit === plans[0].usage.redos.limit);
+  const { suggested: s, redos: r } = plans[0].usage;
+  const gives = same ? `כל חודש מגיעות אליכם ${s.limit} הצעות לפוסטים, ו-${r.limit} החלפות לפוסטים שדחיתם.` : 'לכל חשבון יש מספר משלו של הצעות לפוסטים ושל החלפות לפוסטים שדחיתם.';
+  const rows = plans.map(({ pack, usage: u }) => `${plans.length > 1 ? `<h3 class="lbl">${accDot(pack.id)} ${esc(pack.meta.displayName)}</h3>` : ''}${quotaRow(u)}`).join('');
+  return `<section class="panel" id="plan"><header><h2>החבילה החודשית</h2><span class="end muted small">מתחדשת בתחילת כל חודש</span></header>
+<p class="muted">${gives} הצעה נספרת כשהפוסט מגיע אליכם לאישור, גם אם תדחו אותו. דחייה עם סיבה כותבת פוסט חלופי, וזו החלפה. פוסט שהבדיקות שלנו עצרו לא נספר.</p>
+<p class="muted">שינויים קטנים לא נספרים בכלל: עריכת הטקסט, תמונה אחרת מאלה שכבר נמצאו לפוסט, או שקף שמורידים.</p>
+${rows}</section>`;
 }
 
 /* ------------------------------------------------------------ results */
@@ -745,19 +835,19 @@ export function budgetPanel(ctx, d, { dev = false } = {}) {
     )
     .join('');
   return `<section class="panel" id="budget"><header><h2>תקציב חודשי</h2><span class="end"><span class="chip ${cls}">${esc(lvl)}</span></span></header>
-<div class="row spread"><span>טוקנים ב-${esc(p.month)}</span><b class="num">${tokenNum(p.spent)} / ${tokenNum(p.cap)}</b></div>
+<div class="row spread"><span>הוצאה ב-<span class="ltr">${esc(p.month)}</span></span><b class="num">${usd(p.spent)} / ${usd(p.cap, 0)}</b></div>
 <meter min="0" max="${p.cap || 1}" low="${(p.cap || 1) * 0.7}" high="${(p.cap || 1) * 0.8}" optimum="0" value="${Math.min(p.spent, p.cap || 1)}"></meter>
-<dl class="kv mt12"><dt>תחזית לסוף החודש</dt><dd>${tok(p.forecast)}</dd><dt>נשאר</dt><dd>${tok(p.left)}, בערך ${p.postsLeft} פוסטים</dd>${dev ? `<dt>בדולרים</dt><dd>${usd(p.spent)} / ${usd(p.cap, 0)}, תחזית ${usd(p.forecast)}</dd>` : ''}</dl>
+<dl class="kv mt12"><dt>תחזית לסוף החודש</dt><dd>${usd(p.forecast)}</dd><dt>נשאר</dt><dd>${usd(p.left)}, בערך ${p.postsLeft} פוסטים</dd></dl>
 <p class="muted small">כשהתקציב לא מספיק לכל החודש, החשבון החלש מפרסם פחות. ב-80% מופיעה אזהרה, וב-100% לא נכתבים פוסטים חדשים עד החודש הבא.</p>
 ${dev ? `<dl class="kv mt12"><dt>שמור לקריאות שעוד רצות</dt><dd>${usd(p.reserved, 3)}</dd><dt>לפוסט</dt><dd>${usd(p.costPerPost, 3)}</dd></dl>
 <div class="scrollx mt12"><table class="table stack"><thead><tr><th>חשבון</th><th>נתח</th><th>הוצאה</th><th>לפוסט</th><th>ביום</th><th>נשארו החודש</th><th>חוזק</th></tr></thead><tbody>${rows}</tbody></table></div>
 <p class="muted small">התקרה היא <code class="ltr">OF_BUDGET_MONTHLY_USD</code> ב-<code class="ltr">.env</code> (${capUsd}), לכל שירות בתשלום חוץ מ-Zernio. כל קריאה שומרת קודם את המחיר הגבוה ביותר שהיא יכולה לעלות, ולכן שום דבר לא עובר את התקרה.</p>` : ''}
-${ctx.operator ? `<form method="post" action="/settings/budget" class="formgrid mt12">${csrfField(ctx)}<label class="f">תקרה נמוכה יותר לחודש הזה <small>עד ${tokenNum(d.envCap)} טוקנים, ו-0 מבטל אותה</small><input type="number" name="budget" min="0" max="${Math.round(d.envCap * TOKENS_PER_USD)}" step="50" value="${esc(Math.round(lower * TOKENS_PER_USD))}"></label><button class="btn" type="submit">שמירה</button></form>` : ''}</section>`;
+${ctx.operator ? `<form method="post" action="/settings/budget" class="formgrid mt12">${csrfField(ctx)}<label class="f">תקרה נמוכה יותר לחודש הזה, בדולרים <small>עד ${capUsd}, ו-0 מבטל אותה</small><input type="number" name="budget" min="0" max="${esc(d.envCap)}" step="0.5" value="${esc(lower)}"></label><button class="btn" type="submit">שמירה</button></form>` : ''}</section>`;
 }
 
 /**
- * Settings. Everyone: notifications, the budget (a workspace sees its own accounts' part) and who is signed in. The
- * operator alone (the server's settings): when the day's posts are written, the budget's cap, and the stop for
+ * Settings. Everyone: notifications and who is signed in; a customer, the month's plan (suggestions and redos). The
+ * operator alone (the server's settings): when the day's posts are written, the month's budget and its cap, and the stop for
  * everything; and developer mode (keys, the engine, the publishers, the log), seven taps on the version line, kept
  * in a cookie on that browser (server.js). People and sign-in are accounts' (openfrequency-accounts).
  */
@@ -787,10 +877,12 @@ ${d.instagram.length ? `<section class="panel"><header><h2>אינסטגרם יש
 <form method="post" action="/push/subscribe" data-ajax="reload" data-push="${esc(d.push?.key || '')}">${csrfField(ctx)}<input type="hidden" name="endpoint" value=""><button class="btn" type="button" data-push-enable>${icon('spark')}להפעיל התראות במכשיר הזה</button></form>
 <form method="post" action="/push/unsubscribe" data-ajax="reload" data-push-off hidden>${csrfField(ctx)}<input type="hidden" name="endpoint" value=""><button class="btn ghost" type="button" data-push-disable>לכבות התראות במכשיר הזה</button></form>
 </section>
+${d.assistant ? assistantPanel(ctx, d.assistant) : ''}
 ${ctx.operator ? `<section class="panel"><header><h2>מתי נכתבים הפוסטים</h2></header><p class="muted">כל יום בשעה הזו תדר כותב את הפוסטים של היום ושולח אותם לאישור.</p><form method="post" action="/settings/generate-at" class="formgrid">${csrfField(ctx)}<label class="f">שעה<input type="time" name="at" value="${esc(s.generateAt)}" dir="ltr"></label><button class="btn" type="submit">שמירה</button></form></section>` : ''}
 </div>
 <div>
-${budgetPanel(ctx, d, { dev })}
+${ctx.operator ? budgetPanel(ctx, d, { dev }) : planPanel(d.plans)}
+${d.quotas ? quotasPanel(ctx, d.quotas) : ''}
 ${ctx.operator ? `<section class="panel"><header><h2>דמואים לחנויות</h2><a class="end" href="/demos">לרשימה</a></header><p class="muted m0">חנויות שביקשו באתר דמו של תדר, ומה מחכה לבדיקה שלכם.</p></section>` : ''}
 <section class="panel"><header><h2>החשבון שלך</h2></header><p class="muted m0">נכנסתם בתור <b class="ltr">${esc(ctx.user?.email || '')}</b>${ctx.operator ? ', ורואים את החשבונות של כל הלקוחות.' : `, בחשבון <b>${esc(ctx.workspace?.name || '')}</b>.`}</p><div class="actions p0 mt12"><a class="btn" href="${esc(ctx.links?.logout || '#')}">${icon('logout')}יציאה</a></div></section>
 ${ctx.operator ? `<section class="panel"><header><h2>עצירת חירום</h2><span class="end">${s.globalKill ? '<span class="chip bad">הכל עצור</span>' : ''}</span></header>
@@ -801,6 +893,63 @@ ${s.globalKill ? postButton(ctx, '/settings/kill', 'להפעיל הכל מחדש
 ${devPanels}
 ${dev ? '' : `<form method="post" action="/settings/dev" class="ver"${ctx.operator ? ' data-devtap' : ''}>${csrfField(ctx)}<input type="hidden" name="on" value="1"><span>תדר · גרסה ${esc(VERSION)}</span></form>`}`;
   return layout({ ...ctx, title: 'הגדרות', active: 'settings' }, body);
+}
+
+/** The customer's choices for the WhatsApp assistant: which messages reach them, and their quiet hours. */
+function assistantPanel(ctx, a) {
+  const box = (name, on, label) => `<label class="check"><input type="checkbox" name="${esc(name)}" value="1"${on ? ' checked' : ''}> ${esc(label)}</label>`;
+  return `<section class="panel" id="whatsapp"><header><h2>הודעות בוואטסאפ</h2></header>
+<p class="muted">העוזר של OpenFrequency בוואטסאפ שולח לכם רק את ההודעות שמסומנות כאן.</p>
+<form method="post" action="/settings/whatsapp" class="prefs">${csrfField(ctx)}
+<fieldset><legend>מה לשלוח</legend>${Object.entries(EVENT_HE).map(([k, he]) => box(`ev_${k}`, a.events[k], he)).join('')}</fieldset>
+<fieldset><legend>שעות שקטות</legend>${box('quiet_nights', a.quiet.nights, 'לא לשלוח בין 22:00 ל-8:00')}${box('quiet_shabbat', a.quiet.shabbat, 'לא לשלוח בשבת ובחג')}
+<p class="muted small m0">מה שקורה בשעות האלה מגיע אליכם כשהן נגמרות. תזכורת שהזמן שלה כבר עבר לא נשלחת.</p></fieldset>
+<button class="btn" type="submit">שמירה</button></form></section>`;
+}
+
+const LEDGER_COLS = [
+  ['suggestion', 'הצעות'],
+  ['redo', 'החלפות'],
+  ['retry', 'נחסמו אצלנו'],
+  ['edit', 'בדיקת עריכות'],
+];
+
+/** One month of every account: the plan used, the cost against the customer's cap, and what the money went to. */
+function ledgerTable(rows, month) {
+  const body = rows
+    .map(({ pack, usage: u, ledgers }) => {
+      const l = ledgers.find((x) => x.month === month);
+      const by = Object.fromEntries(l.rows.map((r) => [r.kind, r]));
+      const other = ['account', 'drafting', 'sample'].reduce((a, k2) => a + (by[k2]?.usd || 0), 0);
+      const now = u.month === month;
+      return `<tr><td class="title" data-k="">${accDot(pack.id)} ${esc(pack.meta.displayName)}</td>${now ? `<td class="n" data-k="הצעות">${u.suggested.used}/${u.suggested.limit}</td><td class="n" data-k="החלפות">${u.redos.used}/${u.redos.limit}</td><td class="n" data-k="עלות">${usd(l.total)} / ${usd(u.cost.cap)}${u.cost.reached ? ' <span class="chip warn">בתקרה</span>' : ''}</td>` : `<td class="n" data-k="הצעות">${by.suggestion?.posts ?? 0}</td><td class="n" data-k="החלפות">${by.redo?.posts ?? 0}</td><td class="n" data-k="עלות">${usd(l.total)}</td>`}${LEDGER_COLS.map(([k2, he]) => `<td class="n" data-k="${esc(he)}">${usd(by[k2]?.usd || 0, 3)}${by[k2]?.posts != null && k2 !== 'edit' ? ` <span class="muted small">(${by[k2].posts})</span>` : ''}</td>`).join('')}<td class="n" data-k="אחר">${usd(other, 3)}</td><td class="n" data-k="לפוסט שהגיע">${l.perDelivered == null ? '–' : usd(l.perDelivered, 3)}</td></tr>`;
+    })
+    .join('');
+  return `<div class="scrollx mt12"><table class="table stack"><thead><tr><th>חשבון</th><th>הצעות</th><th>החלפות</th><th>עלות</th>${LEDGER_COLS.map(([, he]) => `<th>${esc(he)}</th>`).join('')}<th>אחר</th><th>לפוסט שהגיע</th></tr></thead><tbody>${body}</tbody></table></div>`;
+}
+
+/**
+ * The operator's view of every customer's month (src/budget/quota.js): the plan used, the cost against the cap, the
+ * ledger by what the money went to, and the form that sets each account's plan.
+ */
+export function quotasPanel(ctx, q) {
+  const [month, ...before] = q.months;
+  const forms = q.accounts
+    .map(({ pack, usage: u }) => {
+      const set = u.plan.set;
+      const val = (on, v) => (on ? ` value="${esc(v)}"` : '');
+      return `<form method="post" action="/accounts/${esc(pack.id)}/quota" class="formgrid mt12">${csrfField(ctx)}<b>${accDot(pack.id)} ${esc(pack.meta.displayName)}</b>
+<label class="f">הצעות בחודש<input type="number" name="suggested" min="0" max="${MAX_PLAN.suggested}" step="1" placeholder="${DEFAULT_PLAN.suggested}"${val(set.suggested, u.plan.suggested)}></label>
+<label class="f">החלפות בחודש<input type="number" name="redos" min="0" max="${MAX_PLAN.redos}" step="1" placeholder="${DEFAULT_PLAN.redos}"${val(set.redos, u.plan.redos)}></label>
+<label class="f">תקרת עלות בדולרים<input type="number" name="cap" min="0" max="${MAX_PLAN.capUsd}" step="0.5" placeholder="${DEFAULT_CUSTOMER_CAP_USD}"${val(set.capUsd, u.plan.capUsd)}></label>
+<button class="btn" type="submit">שמירה</button></form>`;
+    })
+    .join('');
+  return `<section class="panel" id="quotas"><header><h2>מכסות ועלות לפי לקוח</h2><span class="end muted small ltr">${esc(month)}</span></header>
+<p class="muted small m0">הצעה היא פוסט שעבר את כל הבדיקות והגיע ללקוח, גם אם דחה אותו או שפג תוקפו. פוסט שנחסם אצלנו, וכל תיקון בתוך פוסט, על חשבוננו. בסוגריים: כמה פוסטים.</p>
+${ledgerTable(q.accounts, month)}
+${before.length ? `<details class="mt12"><summary class="muted">החודשים הקודמים</summary>${before.map((m) => `<h3 class="lbl ltr">${esc(m)}</h3>${ledgerTable(q.accounts, m)}`).join('')}</details>` : ''}
+<details class="mt12"><summary class="muted">לשנות מכסה או תקרה</summary><p class="muted small">שדה ריק חוזר לברירת המחדל: ${DEFAULT_PLAN.suggested} הצעות, ${DEFAULT_PLAN.redos} החלפות ו-$${DEFAULT_CUSTOMER_CAP_USD} בחודש. חשבון שהגיע לתקרה מושהה, ונשלחת אליך התראה. הוא חוזר לכתוב בתחילת החודש, או מיד כשהתקרה עולה מעל מה שכבר הוצא. התקרה הכללית נשארת מעל כולם.</p>${forms}</details></section>`;
 }
 
 export function morePage(ctx) {

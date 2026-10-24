@@ -9,7 +9,8 @@ import { publishPost, sendWaitingDrafts } from '../publish/index.js';
 import { watchDrafts } from '../publish/draft.js';
 import { REWRITE_AT } from '../voice/review.js';
 import { collectMetrics, learn } from '../metrics/collect.js';
-import { canRun, liftBudgetPauses, pauseAccount } from './rails.js';
+import { canRun, capPause, liftBudgetPauses, pauseAccount } from './rails.js';
+import { usage } from '../budget/quota.js';
 import { ledgerUsd, reconcileState, utcMonth } from '../budget/anthropic.js';
 import { runTrends, youtubeConfigured } from '../trends/index.js';
 import { collectSignals, scoreTopics } from '../topics/index.js';
@@ -20,6 +21,7 @@ import { currentToken, igConfig, refreshToken } from '../publish/instagram.js';
 import { fightWeekSlots, parseEvents, recapsDue, saveEvents } from '../schedule/events.js';
 import { refreshSource } from '../sources/index.js';
 import { morningFeedback, withDirectives } from '../metrics/feedback.js';
+import { assistantTick } from '../assistant/events.js';
 
 // The engine running on its own: one tick a minute.
 //
@@ -36,7 +38,10 @@ import { morningFeedback, withDirectives } from '../metrics/feedback.js';
 //      away. The planner may have cut the account to one post a day. With
 //      Claude live, the whole day's posts are drafted together through the
 //      Message Batches API at half price, in the background, while the ticks go
-//      on publishing. Nothing is generated once the month's budget is spent.
+//      on publishing. Nothing is generated once the month's budget is spent,
+//      and no more posts than the account's month has left (src/budget/quota.js):
+//      when its suggestions are used up, nothing until the next month; when the
+//      customer's own cap is spent, the account is paused and the operator told.
 //   3. modes, at each post's slot:
 //        approve  the post waits for the owner; unapproved by the end of its
 //                 day, it expires
@@ -48,6 +53,9 @@ import { morningFeedback, withDirectives } from '../metrics/feedback.js';
 //      a bot (4 or 5) waits for the owner instead.
 //   4. publish what is approved and due, inside the account's windows, outside
 //      Shabbat and the festivals
+//   4b. tell the WhatsApp assistant what happened (src/assistant/events.js): a post
+//      that waits, the slot, a post out or still not out an hour on, the month's
+//      last suggestions, Sunday's summary; held through the customer's quiet hours
 //   5. read metrics, credit them to formats at 72 hours, judge the formats
 //   6. write yesterday's summary
 //
@@ -92,7 +100,8 @@ export async function generate(ctx, plans, report) {
       report.generated.push({ account: pack.id, post: res.postId, status: res.status, reason: res.reason, cost: res.cost });
       if (res.kind === 'fact_check') pauseAccount(db, pack.id, 'fact_check', res.reason);
       if (res.kind === 'budget') pauseAccount(db, pack.id, 'budget', res.reason);
-      if (res.kind === 'fact_check' || res.kind === 'budget') stopped.add(pack.id);
+      if (res.kind === 'customer_cap') await capPause(ctx, pack, res.reason);
+      if (res.kind === 'fact_check' || res.kind === 'budget' || res.kind === 'customer_cap') stopped.add(pack.id);
     } catch (e) {
       if (e instanceof PausedError) stopped.add(pack.id);
       else report.errors.push({ account: pack.id, step: 'generate', error: e.message });
@@ -243,10 +252,25 @@ export async function tick(ctx, { t = now() } = {}) {
         report.budgetStop = true;
         continue;
       }
+      // The customer's month, before the day is marked generated: a quota or a cap the operator raises later in the
+      // day lets the account's posts be drafted the same day.
+      const month = usage(db, pack.id, t);
+      if (month.cost.reached) {
+        await capPause(ctx, pack);
+        (report.customerCap ||= []).push(pack.id);
+        continue;
+      }
+      if (month.suggested.left <= 0) {
+        (report.quotaFull ||= []).push(pack.id);
+        continue;
+      }
       if (!plans.length) savePlan(db, plan, { t });
       setSetting(db, genKey, nowIso());
       const lead = ctx.llm.kind === 'claude' && ctx.batchApi && process.env.OF_BATCH !== 'off' ? CATCH_UP_LEAD_MS : 0;
-      for (const p of withDirectives(db, pack, fightWeekPlans(db, pack, generationTargets(db, pack, { t, lead })))) plans.push({ pack, ...p });
+      // No more slots than the month has suggestions left, the earliest first; cut before the directives are handed
+      // out, so none is marked used by a slot that will not be drafted.
+      const mine = withDirectives(db, pack, fightWeekPlans(db, pack, generationTargets(db, pack, { t, lead })).slice(0, month.suggested.left));
+      for (const p of mine) plans.push({ pack, ...p });
     }
   }
   if (plans.length) {
@@ -313,6 +337,14 @@ export async function tick(ctx, { t = now() } = {}) {
     report.errors.push({ step: 'drafts', error: e.message });
   }
 
+  // ---- 4b. what the WhatsApp assistant tells the customer, once OF_ASSISTANT_SECRET is set
+  try {
+    const told = await assistantTick(ctx, { t });
+    if (told) report.assistant = told;
+  } catch (e) {
+    report.errors.push({ step: 'assistant', error: e.message });
+  }
+
   // ---- 5. metrics and learning, every few hours
   const lastM = getSetting(db, 'metrics:last');
   if (!lastM || t - Date.parse(lastM) > 6 * 3_600_000) {
@@ -369,7 +401,7 @@ export function writeSummaries(ctx, day) {
     const pub = db.all("SELECT id, hook, publish_json FROM posts WHERE account_id = ? AND status = 'published' AND published_at >= ? AND published_at < ?", pack.id, from, to);
     const blocked = db.all("SELECT reason FROM posts WHERE account_id = ? AND status = 'blocked' AND created_at >= ? AND created_at < ?", pack.id, from, to);
     const spend = db.get('SELECT COALESCE(SUM(usd),0) AS usd FROM spend WHERE account_id = ? AND at >= ? AND at < ?', pack.id, from, to).usd;
-    const text = `${pack.meta.displayName}: ${pub.length} פורסמו, ${blocked.length} נחסמו, ${Math.round(spend * 100).toLocaleString('en-US')} טוקנים`;
+    const text = `${pack.meta.displayName}: ${pub.length} פורסמו, ${blocked.length} נחסמו`;
     db.run('INSERT OR REPLACE INTO summaries (day, account_id, text, data_json, at) VALUES (?, ?, ?, ?, ?)', day, pack.id, text, JSON.stringify({ published: pub.map((p) => ({ id: p.id, hook: p.hook, via: Object.values(j(p.publish_json, {}))[0]?.via })), blocked: blocked.map((b) => b.reason), spend }), nowIso());
     lines.push(text);
   }

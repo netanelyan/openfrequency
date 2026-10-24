@@ -18,6 +18,9 @@
 //     web page, so nothing here can scrape a profile or a feed.
 //   - READS from the open web (approved sources, feed discovery, image libraries)
 //     are allowed for any https host that is not a social platform.
+//   - A service on this machine (openfrequency-toran, the WhatsApp assistant) is
+//     reached through localFetch, which refuses every host but the loopback. The
+//     assistant talks to the customer; Teder never reaches WhatsApp itself.
 //   - Zernio paths that touch an inbox, messages, comments, likes or follows are
 //     refused by name, even as reads. So is any Graph request that asks for
 //     comments, mentions, tags, hashtags, messages or another account
@@ -170,6 +173,29 @@ export async function doorFetch(input, init = {}) {
     return res;
   }
   throw new NetError(`too many redirects: ${url}`, { code: 'redirects' });
+}
+
+/** The names of this machine: the only hosts localFetch reaches. */
+export const LOOPBACK = new Set(['127.0.0.1', 'localhost', '[::1]', '::1']);
+
+/**
+ * fetch, to a service on this machine only (openfrequency-toran, the WhatsApp assistant: src/assistant/events.js).
+ * Plain http is fine on the loopback; anything that is not the loopback is refused, so this can never reach a social
+ * host or the open web. No redirects are followed.
+ */
+export async function localFetch(url, init = {}) {
+  let u;
+  try {
+    u = new URL(url);
+  } catch {
+    throw new NetError(`not a URL: ${url}`, { code: 'refused' });
+  }
+  if (!['http:', 'https:'].includes(u.protocol) || !LOOPBACK.has(u.hostname.toLowerCase())) throw new NetError(`refused ${u.protocol}//${u.hostname}: only a service on this machine`, { code: 'refused' });
+  try {
+    return await fetch(u.href, { ...init, redirect: 'error', signal: init.signal || AbortSignal.timeout(init.timeoutMs ?? 10_000) });
+  } catch (e) {
+    throw new NetError(e.name === 'TimeoutError' ? `timed out: ${u.href}` : `${e.message}: ${u.href}`, { code: 'network' });
+  }
 }
 
 /** A text body. `encoding` reads a file that is not UTF-8 (some government CSVs are windows-1255). */

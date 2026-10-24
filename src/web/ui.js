@@ -33,12 +33,6 @@ export const timeHe = (t) => (t ? F.time.format(new Date(t)) : '');
 export const stamp = (t) => (t ? F.stamp.format(new Date(t)) : '');
 export const weekdayNarrow = (t) => F.wd.format(new Date(t));
 export const usd = (n, d = 2) => `<span class="num ltr">$${(Number(n) || 0).toFixed(d)}</span>`;
-// What the owner sees is tokens, never dollars: a dollar of the month's spend is 100 tokens. Developer mode keeps
-// the dollars, which is what the services bill.
-export const TOKENS_PER_USD = 100;
-export const toTokens = (usdAmount) => Math.round((Number(usdAmount) || 0) * TOKENS_PER_USD);
-export const tokenNum = (usdAmount) => toTokens(usdAmount).toLocaleString('en-US');
-export const tok = (usdAmount) => `<span class="num">${tokenNum(usdAmount)} טוקנים</span>`;
 export const k = (n) => (n == null ? '–' : n >= 10_000 ? `${Math.round(n / 1000)}K` : n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(n));
 export const pct = (x) => (x == null ? '–' : `${Math.round(x * 100)}%`);
 
@@ -97,7 +91,8 @@ const SECTION_OF = { new: 'accounts', more: 'settings', topics: 'sources' };
 /**
  * The budget, said on every page when it matters: 80% of the month's cap spent,
  * all of it spent (nothing is written until the next month), or an account cut
- * to one post a day because the forecast did not fit.
+ * to one post a day because the forecast did not fit. The operator's alone, in
+ * dollars: a customer is promised posts (src/budget/quota.js), never money.
  */
 /** A posting rate in words: a cut can leave half a post a day. */
 export const rateText = (p) => (p === 0.5 ? 'פוסט כל יומיים' : p === 1 ? 'פוסט אחד ביום' : Number.isInteger(p) ? `${p} פוסטים ביום` : `${p * 2} פוסטים ביומיים`);
@@ -108,7 +103,7 @@ export function budgetBanner(b) {
   const pctTxt = `${Math.round((b.share || 0) * 100)}%`;
   const nm = b.nextMonth ? shortDate(`${b.nextMonth}T12:00:00Z`) : 'החודש הבא';
   if (b.level === 'stop') out.push(`<div class="banner bad">${icon('alert')}<div><b>התקציב החודשי נגמר.</b><p>פוסטים חדשים לא ייכתבו עד ${esc(nm)}. פוסטים שכבר אושרו ממשיכים לצאת.</p></div><a class="btn sm" href="/settings#budget">לתקציב</a></div>`);
-  else if (b.level === 'warn') out.push(`<div class="banner warn">${icon('alert')}<div><b>${pctTxt} מהתקציב החודשי כבר נוצלו.</b><p>התחזית לסוף החודש: ${tokenNum(b.forecast)} מתוך ${tokenNum(b.cap)} טוקנים. ב-100% פוסטים חדשים לא ייכתבו עד ${esc(nm)}.</p></div><a class="btn sm" href="/settings#budget">לתקציב</a></div>`);
+  else if (b.level === 'warn') out.push(`<div class="banner warn">${icon('alert')}<div><b>${pctTxt} מהתקציב החודשי כבר נוצלו.</b><p>התחזית לסוף החודש: ${usd(b.forecast)} מתוך ${usd(b.cap, 0)}. ב-100% פוסטים חדשים לא ייכתבו עד ${esc(nm)}.</p></div><a class="btn sm" href="/settings#budget">לתקציב</a></div>`);
   if (b.cuts?.length) {
     out.push(`<div class="banner info">${icon('clock')}<div><b>התקציב קצר החודש, אז חלק מהחשבונות מפרסמים פחות.</b>${b.cuts.map((c) => `<p>${esc(c.name)}: ${rateText(c.perDay)} במקום ${c.planned} ביום.</p>`).join('')}</div><a class="btn sm" href="/settings#budget">למה</a></div>`);
   }
@@ -159,18 +154,19 @@ export function viewAsBanner(ctx) {
   return `<div class="banner info viewas" role="status">${icon('shield')}<div><b>${text}</b></div>${end}</div>`;
 }
 
-/** The page around a body. ctx: { title, active, csrf, spend: { usd, cap }, budget, waiting, user, accounts, current } */
+/** The page around a body. ctx: { title, active, csrf, quota: { used, limit }, budget, waiting, user, accounts, current } */
 export function layout(ctx, body) {
   const section = SECTION_OF[ctx.active] || ctx.active;
   const badge = (key) => (key === 'posts' && ctx.waiting ? `<b class="badge num" aria-label="${ctx.waiting} מחכים לך">${ctx.waiting}</b>` : '');
   const nav = NAV.map(([href, label, key, ic]) => `<a href="${href}" title="${label}"${key === section ? ' aria-current="page"' : ''}>${icon(ic)}<span>${label}</span>${badge(key)}</a>`).join('');
   const tabs = NAV.map(([href, label, key, ic]) => `<a href="${href}"${key === section ? ' aria-current="page"' : ''}>${icon(ic)}<span>${label}</span>${badge(key)}</a>`).join('');
-  const s = ctx.spend || { usd: 0, cap: 0 };
-  const cap = Number(s.cap) || 0;
-  const spent = Number(s.usd) || 0;
-  // The ring fills with the month: orange from 70% of the cap, red from 90%, as the budget warnings do.
-  const used = cap ? Math.min(100, Math.round((spent / cap) * 100)) : 0;
-  const ring = `<svg class="ring${used >= 90 ? ' bad' : used >= 70 ? ' warn' : ''}" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8"/><circle class="v" cx="10" cy="10" r="8" pathLength="100" stroke-dasharray="${used} 100"/></svg>`;
+  // The month's suggestions of the accounts shown (src/budget/quota.js): the ring fills as they are used, orange from
+  // 75%, red from 90%, as an account's own meter does.
+  const q = ctx.quota || { used: 0, limit: 0 };
+  const limit = Number(q.limit) || 0;
+  const taken = Number(q.used) || 0;
+  const used = limit ? Math.min(100, Math.round((taken / limit) * 100)) : 0;
+  const ring = `<svg class="ring${used >= 90 ? ' bad' : used >= 75 ? ' warn' : ''}" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8"/><circle class="v" cx="10" cy="10" r="8" pathLength="100" stroke-dasharray="${used} 100"/></svg>`;
   // The appearance follows the system setting: the site has no switch of its own.
   return `<!doctype html>
 <html lang="he" dir="rtl"${ctx.side === 'mini' ? ' class="side-mini"' : ''}>
@@ -196,13 +192,13 @@ ${SPRITE}
   <button class="sidetoggle" type="button" data-side aria-label="${ctx.side === 'mini' ? 'להרחיב את סרגל הצד' : 'לכווץ את סרגל הצד'}" aria-expanded="${ctx.side === 'mini' ? 'false' : 'true'}" title="${ctx.side === 'mini' ? 'להרחיב' : 'לכווץ'}">${icon('sidebar')}</button>
   <nav class="nav" aria-label="ראשי">${nav}</nav>
   <div class="tools">
-    <a class="spend" href="/settings#budget" title="טוקנים החודש: ${tokenNum(spent)} מתוך ${tokenNum(cap)} (${used}%)">${ring}<span class="lbl">טוקנים</span><span class="amt num ltr"><b>${tokenNum(spent)}</b><span> / ${tokenNum(cap)}</span></span></a>
+    <a class="spend" href="/settings#plan" title="הצעות החודש: ${taken} מתוך ${limit}">${ring}<span class="lbl">הצעות</span><span class="amt num ltr"><b>${taken}</b><span> / ${limit}</span></span></a>
     ${ctx.links?.logout ? `<a class="logout" href="${esc(ctx.links.logout)}" title="יציאה">${icon('logout')}<span class="lbl">יציאה</span></a>` : ''}
   </div>
 </div></header>
 <main class="wrap" id="main">
 ${viewAsBanner(ctx)}
-${budgetBanner(ctx.budget)}
+${ctx.operator ? budgetBanner(ctx.budget) : ''}
 ${body}
 <footer class="foot">${ofMark()}<span class="ltr">OpenFrequency<sup>™</sup></span></footer>
 </main>

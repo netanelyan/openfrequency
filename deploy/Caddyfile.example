@@ -8,6 +8,9 @@
 # The approval website. Only Caddy talks to it; it listens on 127.0.0.1.
 teder.example.com {
 	encode zstd gzip
+	# The WhatsApp assistant's API is for this machine only (Teder refuses it through
+	# the proxy as well): it never leaves the box.
+	respond /internal/* 404
 	reverse_proxy 127.0.0.1:4700
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"

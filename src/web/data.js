@@ -7,7 +7,9 @@ import { settings } from '../core/store.js';
 import { j } from '../db/index.js';
 import { DEFAULT_MONTHLY_USD, monthSpend } from '../budget/ledger.js';
 import { planMonth, WARN_AT } from '../budget/plan.js';
+import { lastMonths, ledger, usage } from '../budget/quota.js';
 import { loadPost } from '../pipeline/build.js';
+import { photoChoices } from '../pipeline/light.js';
 import { israelDate, israelInstant, addDays } from '../schedule/israel.js';
 import { groupsOf, hookStats, mixOf, relative, postScore } from '../formats/rotation.js';
 import { hookPatterns, kindOf } from '../formats/kinds.js';
@@ -26,6 +28,7 @@ import path from 'node:path';
 import { PASS, topicById, topicsOf, watchList } from '../topics/index.js';
 import { youtubeConfigured } from '../trends/index.js';
 import { owns } from './workspace.js';
+import { prefsOf } from '../assistant/data.js';
 
 // What each page shows, as plain queries. Pages never touch the database
 // themselves, so what a page can see is listed here.
@@ -82,8 +85,10 @@ export function header(ctx) {
   const waiting = ctx.packs.reduce((a, p) => a + (per[p.id] || 0), 0);
   const all = (ctx.root || ctx).packs;
   const accounts = all.map((p) => ({ id: p.id, name: p.meta.displayName, handle: p.meta.handle, waiting: per[p.id] || 0 }));
+  // The month's suggestions of the accounts shown, against their plans (src/budget/quota.js): the header's number.
+  const quota = ctx.packs.map((p) => usage(ctx.db, p.id).suggested).reduce((a, x) => ({ used: a.used + x.used, limit: a.limit + x.limit }), { used: 0, limit: 0 });
   return {
-    spend: { usd: plan.spent, cap: plan.cap },
+    quota,
     budget: { level: plan.level, share: plan.cap ? plan.spent / plan.cap : 0, warnAt: plan.warnAt ?? WARN_AT, forecast: plan.forecast, cap: plan.cap, nextMonth: plan.nextMonth, cuts: plan.accounts.filter((a) => a.cut).map((a) => ({ id: a.id, name: a.name, perDay: a.perDay, planned: a.planned })) },
     waiting,
     accounts,
@@ -99,7 +104,8 @@ export function accountRows(ctx) {
     const spend = monthSpend(ctx.db, pack.id);
     const p = plan.accounts.find((a) => a.id === pack.id) || null;
     const cap = p ? p.alloc : 0;
-    return { pack, acc, spend: spend.usd, cap, plan: p, reached: p ? spend.usd >= cap - 1e-9 : false, publishers: publishersOf(ctx, pack) };
+    // The customer's month: suggestions and redos used of their plan, and their own cost cap.
+    return { pack, acc, spend: spend.usd, cap, plan: p, reached: p ? spend.usd >= cap - 1e-9 : false, publishers: publishersOf(ctx, pack), quota: usage(ctx.db, pack.id) };
   });
 }
 
@@ -305,6 +311,23 @@ export function settingsData(ctx) {
     liveSwitch: process.env.PUBLISH_MODE === 'live',
     push: { key: vapid(ctx.db).publicKey, browsers: operator ? ctx.db.get('SELECT COUNT(*) AS n FROM push_subs WHERE failed < 5').n : ctx.db.get('SELECT COUNT(*) AS n FROM push_subs WHERE failed < 5 AND workspace_id = ?', ctx.workspaceId).n },
     audit: operator ? ctx.db.all('SELECT * FROM audit ORDER BY id DESC LIMIT 40').map((a) => ({ ...a, detail: j(a.detail_json, null) })) : [],
+    quotas: operator ? quotasData(ctx) : null,
+    // The customer's month, account by account: what the plan promises and what is used of it.
+    plans: (ctx.root || ctx).packs.map((pack) => ({ pack, usage: usage(ctx.db, pack.id) })),
+    // The customer's choices for the WhatsApp assistant: a workspace's own, the operator has none.
+    assistant: operator ? null : prefsOf(ctx.db, ctx.workspaceId),
+  };
+}
+
+/**
+ * The operator's view of every customer's month: each account's plan and where it stands, and what it really cost
+ * by what the money was for (src/budget/quota.js ledger), this month and the two before it.
+ */
+export function quotasData(ctx, t = now()) {
+  const months = lastMonths(3, t);
+  return {
+    months,
+    accounts: (ctx.root || ctx).packs.map((pack) => ({ pack, usage: usage(ctx.db, pack.id, t), ledgers: months.map((m) => ledger(ctx.db, pack.id, m)) })),
   };
 }
 
@@ -323,6 +346,12 @@ export const postFull = (ctx, id) => {
     takedowns: takedowns(ctx.db, { limit: 200 }).filter((x) => x.post_id === id),
     // The topic it was drafted about, when it started from one (src/topics): its scores are shown on the post.
     topic: post.topic_id ? topicById(ctx.db, post.topic_id) : null,
+    // The photographs a slide may take instead (light edits: nothing new is searched for).
+    photos: photoChoices(ctx.db, post),
+    // The post it replaced, the one that replaced it, and the customer's month (redos left).
+    redoOf: post.redo_of ? ctx.db.get('SELECT id, hook, reason FROM posts WHERE id = ?', post.redo_of) : null,
+    replacement: post.reject?.replacement ? ctx.db.get('SELECT id, hook, status FROM posts WHERE id = ?', post.reject.replacement) : null,
+    quota: usage(ctx.db, post.account_id),
   };
 };
 

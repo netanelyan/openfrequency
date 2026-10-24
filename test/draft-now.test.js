@@ -166,8 +166,11 @@ test('approval taken back after the draft went: the owner is told to delete it i
     oldDraftsDeleted(ctx, owner, { id });
     assert.equal(loadPost(db, id).publish.oldDrafts, undefined);
 
-    assert.match(reject(ctx, owner, { id }, { reason: 'x' }).message, /מחקו אותה באפליקציה/);
+    const rejected = reject(ctx, owner, { id }, { reason: 'x' });
+    assert.match(rejected.message, /מחקו אותה באפליקציה/);
     assert.equal(loadPost(db, id).publish.oldDrafts.length, 1);
+    // A rejection writes a replacement beside the answer (src/pipeline/redo.js): it finishes before the folder goes.
+    await rejected.job;
   } finally {
     cleanup();
   }

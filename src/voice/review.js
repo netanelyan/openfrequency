@@ -118,9 +118,9 @@ export function reviewUser(pack, texts, facts = []) {
  * texts: [{ where, kind, text }]. facts: the post's facts, for factProblem.
  * Returns { reviewer, reviews: [{ botScore, tells, factProblem }] }.
  */
-export async function reviewTexts(ctx, { pack, texts, facts = [] }) {
+export async function reviewTexts(ctx, { pack, texts, facts = [], tag = 'review' }) {
   if (ctx.llm.kind !== 'claude') return { reviewer: 'heuristic', reviews: heuristicReview(texts, pack, facts) };
-  const { data } = await askJson(ctx, { task: 'review', role: 'review', system: [{ text: REVIEW_SYSTEM, cache: ctx.llm.batch ? '1h' : '5m' }], user: reviewUser(pack, texts, facts), schema: REVIEW_SCHEMA, effort: 'low', maxTokens: 4000, tag: 'review' });
+  const { data } = await askJson(ctx, { task: 'review', role: 'review', system: [{ text: REVIEW_SYSTEM, cache: ctx.llm.batch ? '1h' : '5m' }], user: reviewUser(pack, texts, facts), schema: REVIEW_SCHEMA, effort: 'low', maxTokens: 4000, tag });
   return {
     reviewer: 'claude',
     reviews: texts.map((_, i) => {

@@ -19,6 +19,8 @@ import { demoPage, demosRoutes, demoThemeCss, goneHtml, intake, offerOf, publicD
 import { loadPost } from '../pipeline/build.js';
 import { lockedStyle } from '../render/style.js';
 import { latestNotification } from '../notify/index.js';
+import { assistantApi, isAssistantPath } from '../assistant/api.js';
+import { assistantSecret, mediaLinkOk } from '../assistant/sign.js';
 
 // The website. It listens on 127.0.0.1 only; on the VPS, Caddy holds the
 // certificate and passes requests to it.
@@ -36,6 +38,10 @@ import { latestNotification } from '../notify/index.js';
 //   - every POST carries the CSRF token derived from its session, and an Origin
 //     that is ours; a read-only session (the operator viewing as a customer)
 //     changes nothing
+// Two doors need no session. /internal/assistant/* is the WhatsApp assistant's
+// API (src/assistant/api.js): this machine only, never through the proxy, every
+// request signed. /m/... is one rendered slide behind a signed link that expires,
+// handed out by that API for WhatsApp to fetch.
 // Server-rendered HTML with one small script; everything works without it.
 
 export const HOST = '127.0.0.1';
@@ -100,12 +106,26 @@ export function createHandler(ctx, { port, env = process.env, accounts = null } 
   const hosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`, ...(publicHost ? [publicHost] : [])]);
   const origins = new Set([`http://127.0.0.1:${port}`, `http://localhost:${port}`, ...(publicHost ? [`https://${publicHost}`] : [])]);
 
+  const assistant = assistantApi(ctx, { env, port });
+  /** A post's rendered slide, read only from inside the data folder; null when there is none. */
+  const slideFile = (post, platform, idx) => {
+    const file = post?.media?.[platform]?.[Number(idx)];
+    const root = path.resolve(ctx.mediaRoot || dataDir());
+    return file && path.resolve(file).startsWith(root) && existsSync(file) ? file : null;
+  };
+  const sendPostSlide = (res, file, cache) => {
+    res.writeHead(200, { 'content-type': 'image/jpeg', 'content-length': statSync(file).size, 'cache-control': cache, 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'x-robots-tag': 'noindex' });
+    return createReadStream(file).pipe(res);
+  };
+
   const ROUTES = [
     ['POST', /^\/post\/([\w-]+)\/approve$/, (c, u, m) => act.approve(c, u, { id: m[1] })],
     ['POST', /^\/posts\/approve-all$/, (c, u, m, f) => act.approveAll(c, u, {}, f)],
     ['POST', /^\/post\/([\w-]+)\/unapprove$/, (c, u, m) => act.unapprove(c, u, { id: m[1] })],
     ['POST', /^\/post\/([\w-]+)\/reject$/, (c, u, m, f) => act.reject(c, u, { id: m[1] }, f)],
     ['POST', /^\/post\/([\w-]+)\/edit$/, (c, u, m, f) => act.edit(c, u, { id: m[1] }, f)],
+    ['POST', /^\/post\/([\w-]+)\/slide\/(\d+)\/photo$/, (c, u, m, f) => act.swapPhoto(c, u, { id: m[1], idx: m[2] }, f)],
+    ['POST', /^\/post\/([\w-]+)\/slide\/(\d+)\/remove$/, (c, u, m) => act.removeSlide(c, u, { id: m[1], idx: m[2] })],
     ['POST', /^\/post\/([\w-]+)\/publish-now$/, (c, u, m) => act.publishNow(c, u, { id: m[1] })],
     ['POST', /^\/post\/([\w-]+)\/takedown$/, (c, u, m, f) => act.takedown(c, u, { id: m[1] }, f)],
     ['POST', /^\/post\/([\w-]+)\/image-ok$/, (c, u, m) => act.imageOk(c, u, { id: m[1] })],
@@ -114,6 +134,7 @@ export function createHandler(ctx, { port, env = process.env, accounts = null } 
     ['POST', /^\/accounts\/([\w-]+)\/style$/, (c, u, m) => act.applyStyle(c, u, { id: m[1] })],
     ['POST', /^\/accounts\/([\w-]+)\/kill$/, (c, u, m) => act.killAccount(c, u, { id: m[1] })],
     ['POST', /^\/accounts\/([\w-]+)\/resume$/, (c, u, m) => act.resume(c, u, { id: m[1] })],
+    ['POST', /^\/accounts\/([\w-]+)\/quota$/, (c, u, m, f) => act.setQuota(c, u, { id: m[1] }, f)],
     ['POST', /^\/settings\/kill$/, (c, u, m, f) => act.globalKill(c, u, {}, f)],
     ['POST', /^\/settings\/budget$/, (c, u, m, f) => act.setBudget(c, u, {}, f)],
     ['POST', /^\/settings\/generate-at$/, (c, u, m, f) => act.setGenerateAt(c, u, {}, f)],
@@ -131,6 +152,7 @@ export function createHandler(ctx, { port, env = process.env, accounts = null } 
     ['POST', /^\/rivals\/remove$/, (c, u, m, f) => act.removeRivalAction(c, u, {}, f)],
     ['POST', /^\/sounds\/save$/, (c, u, m, f) => act.saveSoundAction(c, u, {}, f)],
     ['POST', /^\/sounds\/remove$/, (c, u, m, f) => act.removeSoundAction(c, u, {}, f)],
+    ['POST', /^\/settings\/whatsapp$/, (c, u, m, f) => act.setAssistantPrefs(c, u, {}, f)],
     ['POST', /^\/push\/subscribe$/, (c, u, m, f) => act.subscribePush(c, u, {}, f)],
     ['POST', /^\/push\/unsubscribe$/, (c, u, m, f) => act.unsubscribePush(c, u, {}, f)],
     ['POST', /^\/post\/([\w-]+)\/old-drafts-deleted$/, (c, u, m) => act.oldDraftsDeleted(c, u, { id: m[1] })],
@@ -147,6 +169,8 @@ export function createHandler(ctx, { port, env = process.env, accounts = null } 
       if (publicHost && host === publicHost && !secure) return send(req, res, 403, 'HTTPS only', 'text/plain; charset=utf-8');
       const url = new URL(req.url, `http://${host}`);
       const p = decodeURIComponent(url.pathname);
+      // ---- the WhatsApp assistant: answers only straight from this machine, signed (src/assistant/api.js)
+      if (isAssistantPath(p)) return await assistant(req, res, url);
       const jar = cookies(req);
       const theme = ['dark', 'light'].includes(jar.of_theme) ? jar.of_theme : null;
 
@@ -161,6 +185,13 @@ export function createHandler(ctx, { port, env = process.env, accounts = null } 
         if (p === '/static/manifest.webmanifest') return send(req, res, 200, readFileSync(path.join(STATIC, 'manifest.webmanifest')), 'application/manifest+json; charset=utf-8', { 'cache-control': 'public, max-age=86400' });
         if (p === '/static/fonts/Assistant.ttf') return send(req, res, 200, readFileSync(path.join(assetsDir, 'fonts', 'Assistant.ttf')), 'font/ttf', { 'cache-control': 'public, max-age=31536000, immutable' });
         if (p === '/healthz') return send(req, res, 200, 'ok', 'text/plain; charset=utf-8');
+        // A slide behind a signed link (src/assistant/sign.js mediaLink): that slide, until the link expires, nothing else.
+        const ml = /^\/m\/([\w-]+)\/(tiktok|instagram)\/(\d+)$/.exec(p);
+        if (ml) {
+          const ok = mediaLinkOk(assistantSecret(env), { postId: ml[1], platform: ml[2], idx: ml[3], e: url.searchParams.get('e'), s: url.searchParams.get('s') });
+          const file = ok ? slideFile(loadPost(ctx.db, ml[1]), ml[2], ml[3]) : null;
+          return file ? sendPostSlide(res, file, 'private, max-age=600') : send(req, res, 404, 'no such slide', 'text/plain; charset=utf-8');
+        }
         // The service worker, from the root so its scope is the whole site.
         if (p === '/sw.js') return send(req, res, 200, readFileSync(path.join(STATIC, 'sw.js')), 'text/javascript; charset=utf-8', { 'cache-control': 'no-cache', 'service-worker-allowed': '/' });
         // A store's demo page (src/web/demos.js): public once the operator approved it, never indexed.
@@ -281,11 +312,8 @@ export function createHandler(ctx, { port, env = process.env, accounts = null } 
       const mm = /^\/media\/([\w-]+)\/(tiktok|instagram)\/(\d+)$/.exec(p);
       if (mm) {
         const post = loadPost(c.db, mm[1]);
-        const file = post && owns(c, post.account_id) ? post.media?.[mm[2]]?.[Number(mm[3])] : null;
-        const root = path.resolve(ctx.mediaRoot || dataDir());
-        if (!file || !path.resolve(file).startsWith(root) || !existsSync(file)) return send(req, res, 404, 'no such slide', 'text/plain; charset=utf-8');
-        res.writeHead(200, { 'content-type': 'image/jpeg', 'content-length': statSync(file).size, 'cache-control': 'private, max-age=86400', 'x-content-type-options': 'nosniff' });
-        return createReadStream(file).pipe(res);
+        const file = post && owns(c, post.account_id) ? slideFile(post, mm[2], mm[3]) : null;
+        return file ? sendPostSlide(res, file, 'private, max-age=86400') : send(req, res, 404, 'no such slide', 'text/plain; charset=utf-8');
       }
       // ---- a style preview (src/web/styles.js): a file its account's own manifest names, the workspace's accounts only
       const sm = /^\/styles\/img\/([\w-]+)\/([\w-]+)\/([A-D])\/(\d+)$/.exec(p);
@@ -371,6 +399,7 @@ export function createHandler(ctx, { port, env = process.env, accounts = null } 
   };
   // Every route the site answers, for the test that each one keeps to its workspace.
   handler.routes = ROUTES.map(([method, re]) => [method, re]);
+  handler.assistant = assistant;
   return handler;
 }
 

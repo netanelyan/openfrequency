@@ -5,6 +5,7 @@ import { mediaDir, packsDir } from '../core/paths.js';
 import { step, settings } from '../core/store.js';
 import { j } from '../db/index.js';
 import { BudgetError, guard, postSpend } from '../budget/ledger.js';
+import { quotaMonth, room } from '../budget/quota.js';
 import { askJson } from '../llm/index.js';
 import { NoRecording } from '../llm/recorded.js';
 import { refreshSource } from '../sources/index.js';
@@ -56,13 +57,28 @@ import { markTopic, readyTopics, topicDocs } from '../topics/index.js';
 //
 // Returns { postId, status: 'queued'|'sample'|'blocked', reason, kind }. `kind`
 // names a blocked post's failure for the safety rails: 'fact_check' pauses the
-// account in every mode, 'budget' pauses it until the money is there.
+// account in every mode, 'budget' pauses it until the money is there,
+// 'customer_cap' pauses it until the next month and tells the operator.
+//
+// THE CUSTOMER'S MONTH (src/budget/quota.js). A post that is not a sample is
+// weighed against the account's quota before anything is spent: a QuotaError, and
+// no post, when the month's suggestions (or for a redo, its redos) are used up. A
+// queued post is marked a suggestion or a redo, a blocked one a retry: ours.
 
 export class PausedError extends Error {
   constructor(message) {
     super(message);
     this.name = 'PausedError';
     this.code = 'paused';
+  }
+}
+
+/** The account's quota for the month is used up: nothing is drafted, nothing spent, until the next month. */
+export class QuotaError extends PausedError {
+  constructor(message) {
+    super(message);
+    this.name = 'QuotaError';
+    this.code = 'quota';
   }
 }
 
@@ -776,7 +792,7 @@ export function postDraft(post) {
 /** The format a stored post was made in, or the phase 1 list. */
 export const formatOfPost = (db, pack, post) => resolveFormat(db, pack, post.format_id) || { id: post.format_id, kind: post.kind || 'list' };
 
-export async function buildPost(ctx, { pack, formatKey = null, sample = false, slotAt = null, maxDocs = 6, subject = null, day = null, hookId = null, ctaText = null, docKey = null, directive = null }) {
+export async function buildPost(ctx, { pack, formatKey = null, sample = false, slotAt = null, maxDocs = 6, subject = null, day = null, hookId = null, ctaText = null, docKey = null, directive = null, redoOf = null }) {
   const { db } = ctx;
   // The morning's feedback may have planned this post (src/metrics/feedback.js): a format, a cover pattern, a call to
   // action, the document of a post that worked, and why. What the caller fixed itself wins.
@@ -806,16 +822,25 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
   const formatsToTry = formatKey ? [format] : [format, ...others.filter((f) => groupOf(f) === groupOf(format)), ...others.filter((f) => groupOf(f) !== groupOf(format))];
   // The day the post goes out: what an on-this-day post is about.
   const postDay = day || (slotAt ? israelDate(Date.parse(slotAt)) : israelDate(now()));
+  // The quota, weighed and held in one step: no await comes between the count and the drafting row that holds the
+  // place, so posts started together (a batch) each see the ones before them.
+  if (!sample) {
+    const q = room(db, pack.id, { redo: Boolean(redoOf) });
+    if (!q.ok) throw new QuotaError(q.why);
+  }
   const postId = newId('p');
   const at = nowIso();
-  db.insert('posts', { id: postId, account_id: pack.id, format_id: format.id, kind: kindName(format), grp: groupOf(format), status: 'drafting', sample: sample ? 1 : 0, slot_at: slotAt, directive_id: dv.id || null, created_at: at, updated_at: at });
-  const pctx = { ...ctx, pack, postId, sources: ctx.sourcesFor ? ctx.sourcesFor(pack) : ctx.sources, subjectText: subject?.text || null };
+  db.insert('posts', { id: postId, account_id: pack.id, format_id: format.id, kind: kindName(format), grp: groupOf(format), status: 'drafting', sample: sample ? 1 : 0, slot_at: slotAt, directive_id: dv.id || null, redo_of: redoOf, created_at: at, updated_at: at });
+  // A redo for the photographs: the ones the customer turned down are not chosen again (findImage skips them).
+  const pctx = { ...ctx, pack, postId, sources: ctx.sourcesFor ? ctx.sourcesFor(pack) : ctx.sources, subjectText: subject?.text || null, ...(dv.avoidImages?.length ? { avoidImages: new Set(dv.avoidImages) } : {}) };
   // The slide style this post is drawn in (src/render/styles): the account's locked one, or in a style test the two
   // it is trying, in turn. null for an account still on the older templates. Its texts are written and checked for it.
   const postStyle = styleForPost(db, pack, ctx.packs || []);
   const finish = (status, patch = {}) => {
     const spend = postSpend(db, postId);
-    db.update('posts', postId, { status, updated_at: nowIso(), cost_usd: spend.usd, cost_estimated: spend.estimated ? 1 : 0, ...patch });
+    // What the post was to the customer: one that reached them counts against their month, a blocked one is ours.
+    const quota = sample ? {} : { quota_kind: status === 'queued' ? (redoOf ? 'redo' : 'suggestion') : 'retry', quota_month: quotaMonth() };
+    db.update('posts', postId, { status, updated_at: nowIso(), cost_usd: spend.usd, cost_estimated: spend.estimated ? 1 : 0, ...quota, ...patch });
     return { postId, status, reason: patch.reason || null, kind: patch.kind || null, cost: spend.usd };
   };
   const block = (kind, reason, detail = null) => {
@@ -903,7 +928,8 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
         const p = outlinePrompt(pack, { ttl });
         try {
           const res = await askJson(pctx, {
-            task: 'outline', role: 'draft', system: p.system, user: outlineUser(f, refs, { avoid: subject || dv.steer?.kind === 'variation' ? [] : recent, faceless: [...new Set(faceless)], day: postDay, subject: c.subject || subject?.text, why: c.why || null, maxAgeDays: String(c.key).startsWith('bank:') ? null : pack.meta.research?.maxAgeDays || null, niche: nicheForOutline(rivals) }), schema: p.schema, effort: EFFORT.outline, maxTokens: MAX_TOKENS.outline,
+            // A variation, and a redo of the same topic, are about the post they come from: its topic is not "recent".
+            task: 'outline', role: 'draft', system: p.system, user: outlineUser(f, refs, { avoid: subject || dv.steer?.kind === 'variation' || (dv.steer?.kind === 'redo' && dv.docKey) ? [] : recent, faceless: [...new Set(faceless)], day: postDay, subject: c.subject || subject?.text, why: c.why || null, maxAgeDays: String(c.key).startsWith('bank:') ? null : pack.meta.research?.maxAgeDays || null, niche: nicheForOutline(rivals) }), schema: p.schema, effort: EFFORT.outline, maxTokens: MAX_TOKENS.outline,
             meta: { recordingsDir: pack.recordingsDir, docKey: c.key, format: f.base || f.id, attempt: 0 },
           });
           tried++;
@@ -1219,7 +1245,7 @@ export async function buildPost(ctx, { pack, formatKey = null, sample = false, s
       media_json: files, ai_label: [...photos.values()].some((p) => p.ai_generated && p.realistic) ? 1 : 0,
     });
   } catch (e) {
-    if (e instanceof BudgetError) return block('budget', e.message);
+    if (e instanceof BudgetError) return block(e.scope === 'customer' ? 'customer_cap' : 'budget', e.message);
     step(db, postId, 'error', 'failed', { error: String(e.message).slice(0, 500) });
     return { ...finish('blocked', { reason: String(e.message).slice(0, 300) }), kind: e.code === 'overflow' || e.code === 'fonts' ? 'render' : 'error' };
   }
@@ -1372,7 +1398,7 @@ export function loadPost(db, postId) {
   const facts = db
     .all('SELECT f.*, d.url AS doc_url, d.title AS doc_title, d.fetched_at AS doc_fetched_at, s.name AS source_name, s.url AS source_url, s.status AS source_status FROM facts f LEFT JOIN documents d ON d.id = f.document_id LEFT JOIN sources s ON s.id = f.source_id WHERE f.post_id = ? ORDER BY f.id', postId)
     .map((f) => ({ ...f, verified: Boolean(f.verified), whoHe: f.who_he || null }));
-  return { ...post, hashtags: j(post.hashtags_json, []), checks: j(post.checks_json, {}), media: j(post.media_json, {}), publish: j(post.publish_json, {}), data: j(post.data_json, {}), slides, facts };
+  return { ...post, hashtags: j(post.hashtags_json, []), checks: j(post.checks_json, {}), media: j(post.media_json, {}), publish: j(post.publish_json, {}), data: j(post.data_json, {}), reject: j(post.reject_json, null), slides, facts };
 }
 
 export { linesOfBody, ranksOf };

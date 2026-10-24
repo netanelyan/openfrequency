@@ -445,6 +445,8 @@ tested end to end in a clean container by `deploy/test/run.sh`.
    `OF_INTERNAL_TOKEN` (the same value as openfrequency-accounts'; sign-in is that
    service's, see [docs/workspace-move.md](docs/workspace-move.md)), `PUBLIC_HOST`, `MEDIA_PUBLIC_BASE_URL`, `OF_USER_AGENT` with a contact
    (Wikimedia rate-limits readers without one), the budget, and the keys you have.
+   For the WhatsApp assistant, `OF_ASSISTANT_SECRET` (the same value as openfrequency-toran's; see
+   [docs/assistant-api.md](docs/assistant-api.md)).
    Then once, as `openfrequency`: `npm run budget -- init`.
 4. **The service:** copy `deploy/openfrequency.service` to `/etc/systemd/system/`,
    `systemctl daemon-reload`, `systemctl enable --now openfrequency`. `/healthz` says `ok`.
@@ -483,6 +485,7 @@ src/trends      formats that work on YouTube Shorts
 src/autonomy    the runner and its rails
 src/onboarding  source discovery, the API catalogue, writing a new pack
 src/web         Teder: server, who is signed in (accounts.js), workspaces, pages, actions, one stylesheet, one script
+src/assistant   the WhatsApp assistant's signed internal API and the events Teder sends it (docs/assistant-api.md)
 assets/        the bundled fonts and the brand marks (assets/brand)
 examples/       the fictional demo pack and the blank pack
 scripts/        the commands above
