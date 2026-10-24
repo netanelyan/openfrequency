@@ -9,7 +9,7 @@ import { listen } from '../src/web/server.js';
 import { running } from '../src/web/demos.js';
 import { checkDraft, checkFact } from '../src/demos/write.js';
 import { readArticles } from '../src/demos/build.js';
-import { photosFor, storeDocument } from '../src/demos/store.js';
+import { storeDocument } from '../src/demos/store.js';
 import { INTERNAL_TOKEN, fakeAccounts, customer, operator, opened, tempHome } from './helpers.js';
 
 // A store's demo, from the website's request to the store's page (src/web/demos.js, src/demos):
@@ -34,28 +34,37 @@ let server;
 let base;
 let op;
 let cust;
+let PHOTO;
 
 const DRAFT = {
   facts: [{ id: 'f1', doc: 'w1', claim: 'לפי המסורת הסינית, התה התגלה לפני 5000 שנה', quote: QUOTE }],
   hook: 'התה התחיל בטעות',
   sub: 'הסיפור של המשקה שכולם שותים',
+  coverImage: 'tea leaves in boiling water',
   items: [
-    { title: 'עלים במים רותחים', body: 'לפי המסורת הסינית, עלים נפלו לתוך מים רותחים וכך התגלה התה.', facts: ['f1'] },
-    { title: 'לפני 5000 שנה', body: 'כך מספרת המסורת הסינית על הרגע שבו הכול התחיל.', facts: ['f1'] },
-    { title: 'מסורת שנשארה', body: 'גם היום מכינים תה מעלים ומים רותחים, בדיוק כמו בסיפור.', facts: ['f1'] },
+    { title: 'עלים במים רותחים', body: 'לפי המסורת הסינית, עלים נפלו לתוך מים רותחים וכך התגלה התה.', facts: ['f1'], image: 'tea leaves falling into a cup' },
+    { title: 'לפני 5000 שנה', body: 'כך מספרת המסורת הסינית על הרגע שבו הכול התחיל.', facts: ['f1'], image: 'ancient chinese tea garden' },
+    { title: 'מסורת שנשארה', body: 'גם היום מכינים תה מעלים ומים רותחים, בדיוק כמו בסיפור.', facts: ['f1'], image: 'teapot pouring tea' },
   ],
-  cta: { title: 'ומה מרתיחים אצלכם', body: 'קומקומים וקנקנים לתה מחכים לכם באתר', facts: [] },
+  cta: { title: 'ומה מרתיחים אצלכם', body: 'קומקומים וקנקנים לתה מחכים לכם באתר', facts: [], image: 'kettle on a kitchen counter' },
   caption: 'לפי המסורת, התה התחיל בטעות. מה אתם שותים בבוקר?',
 };
 
+// What the image search was asked: each query, and the libraries it was allowed.
+const searched = [];
 const io = {
   read: async () => STORE,
-  topic: async () => ({ niche: 'הסיפור של התה', angle: 'how tea was discovered', articles: [{ lang: 'he', title: 'תה' }], products: ['12'] }),
+  topic: async () => ({ niche: 'הסיפור של התה', angle: 'how tea was discovered', articles: [{ lang: 'he', title: 'תה' }] }),
   wiki: async (_src, api) => (api.title === 'תה' ? [ARTICLE] : []),
   fetchImage: async () => Buffer.from([0xff, 0xd8, 0xff, 0xd9]),
   write: async (_ctx, { store, docs }) => checkDraft(docs, DRAFT, { domain: store.domain }),
+  photo: async (_ctx, { pack, query }) => {
+    searched.push({ query, providers: pack.meta.imagery?.providers });
+    return { file: PHOTO, author: 'A Photographer', license: 'Pexels License', source_url: `https://www.pexels.com/photo/${encodeURIComponent(query)}` };
+  },
   render: async ({ outDir, photos }) => {
-    assert.equal(photos.size, 4, 'every photograph the store has, up to one per slide');
+    assert.equal(photos.size, 5, 'a Pexels photograph for every slide');
+    for (const p of photos.values()) assert.doesNotMatch(p.file, /shelf|cdn\.example/, 'never a product of the store');
     const out = { tiktok: [], instagram: [] };
     for (const p of ['tiktok', 'instagram']) {
       for (const n of [1, 2]) {
@@ -77,6 +86,8 @@ before(async () => {
   ctx.mediaRoot = home.home;
   mkdirSync(ctx.mediaDir, { recursive: true });
   ctx.demoIo = io;
+  PHOTO = path.join(home.home, 'pexels.jpg');
+  writeFileSync(PHOTO, Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
   fake = await fakeAccounts();
   const s = await listen(ctx, { port: 0, env: { ...process.env, SESSION_SECRET: 'd'.repeat(40), ...fake.env } });
   server = s.server;
@@ -106,7 +117,6 @@ test("the store's document, its photographs, and the slideshow's checks: a topic
   assert.match(doc.text, /הקטגוריות באתר: קומקומים, תה\./);
   assert.match(doc.text, /המחירים באתר: מ-149\.9 ₪ עד 289 ₪\./);
   assert.doesNotMatch(doc.text, /שאזל/, 'what is out of stock is not in it');
-  assert.deepEqual(photosFor(STORE.products, ['12'], 3), ['https://cdn.example.test/teapot.jpg', 'https://cdn.example.test/teapot.jpg?2', 'https://cdn.example.test/kettle.jpg'], 'the chosen product first, its other photographs, then the newest');
   const w1 = { key: 'w1', ...ARTICLE };
   assert.ok(checkFact(w1, { claim: 'התה התגלה לפני 5000 שנה', quote: QUOTE }).ok);
   assert.match(checkFact(w1, { claim: 'התה התגלה לפני 3000 שנה', quote: QUOTE }).error, /3000/, 'a number the quote does not say');
@@ -148,6 +158,9 @@ test('a request builds the demo in the background; asking again for the same sto
   assert.match(d.docs_json, /התה התגלה/);
   assert.doesNotMatch(d.media_json, /"bg"/, 'no picture behind the page');
   assert.match(d.store_json, /logo\.jpg/, "the store's logo, saved");
+  assert.deepEqual(searched.map((s) => s.query), [DRAFT.coverImage, ...DRAFT.items.map((s) => s.image), DRAFT.cta.image], "each slide's own search, in order");
+  assert.ok(searched.every((s) => JSON.stringify(s.providers) === '["pexels"]'), 'Pexels only');
+  assert.equal(JSON.parse(d.post_json).photos.length, 5, 'each photograph credited');
   const again = await (await lead({ url: 'kettles.example.co.il', whatsapp: '972529876543' })).json();
   assert.deepEqual([again.id, again.existing], [first.id, true]);
   assert.equal(demo().whatsapp, '972529876543', 'the latest number that asked');
@@ -194,6 +207,7 @@ test('the operator sees it, approves it, and the store\'s page is up: its name, 
   assert.match(page, new RegExp(`src="/s/${d.slug}/tiktok-0\\.jpg"`));
   assert.match(page, new RegExp(`src="/s/${d.slug}/instagram-1\\.jpg"`));
   assert.match(page, /מאיפה כל עובדה/);
+  assert.match(page, /התמונות מ־<a href="https:\/\/www\.pexels\.com"/);
   assert.match(page, /מצגת על <bdi>הסיפור של התה<\/bdi>/);
   assert.ok(page.includes(`<span class="logo"><img src="/s/${d.slug}/logo" alt="חנות הקומקומים"></span>`), "the store's own logo, not its initial");
   assert.equal((await get(`/s/${d.slug}/logo`)).headers.get('content-type'), 'image/jpeg');

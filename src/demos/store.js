@@ -7,7 +7,7 @@ import { titleOf } from '../sources/text.js';
 //
 // The store's document is its catalogue written out as lines: its categories, its price range, each product with
 // its price. The demo's last slide, which sends the reader to the store, may quote it word for word, so a number
-// about the store is a number the store published. Its photographs are what the slides are drawn on.
+// about the store is a number the store published. Its products' pictures move past beside the title on its page.
 
 export class DemoError extends Error {}
 
@@ -121,22 +121,6 @@ export const catalogueLines = (store) =>
     .slice(0, MAX_PRODUCTS)
     .map((p) => `${p.id} | ${String(p.title).trim()}${p.product_type ? ` | ${p.product_type}` : ''}${[].concat(p.tags || []).length ? ` | ${[].concat(p.tags).slice(0, 6).join(', ')}` : ''}`)
     .join('\n');
-
-/**
- * The photographs a demo is drawn on, `n` of them: the first photograph of each chosen product in turn, then their
- * other photographs, then the newest products', then theirs. Distinct addresses, never the same picture twice.
- */
-export function photosFor(products, ids = [], n = 5) {
-  const all = usable(products);
-  const chosen = ids.map((id) => all.find((p) => String(p.id) === String(id))).filter(Boolean);
-  const out = [];
-  const add = (src) => src && !out.includes(String(src)) && out.length < n && out.push(String(src));
-  for (const p of chosen) add(p.images[0]?.src);
-  for (const p of chosen) for (const img of p.images.slice(1)) add(img?.src);
-  for (const p of all) add(p.images[0]?.src);
-  for (const p of all) for (const img of p.images.slice(1)) add(img?.src);
-  return out;
-}
 
 /** What the store's page says was read: { products, images, categories, low, high }. */
 export function storeStats(store) {

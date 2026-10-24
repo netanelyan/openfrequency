@@ -208,7 +208,7 @@ ${shelfHtml}
 <div class="stage instagram">${strip(demo, 'instagram', base)}</div>
 <div class="cap"><b>הכיתוב</b><p>${esc(demo.post?.caption || '')}</p></div>
 </section>
-<p class="caption">את הנושא בחר תדר, ואת המצגת הוא כתב ועיצב. לא שינינו בה מילה.</p>
+<p class="caption">את הנושא בחר תדר, ואת המצגת הוא כתב ועיצב. לא שינינו בה מילה.${(demo.post?.photos || []).length ? ' התמונות מ־<a href="https://www.pexels.com" rel="noopener noreferrer">Pexels</a>.' : ''}</p>
 ${facts.length ? `<details class="glass facts"><summary>מאיפה כל עובדה</summary><ul>${facts.map((f) => `<li><b>${esc(f.claim)}</b><q>${esc(f.quote)}</q>${f.url ? `<a href="${esc(f.url)}" rel="noopener noreferrer">${esc(articleName(f.source) || f.url)}</a>` : ''}</li>`).join('')}</ul></details>` : ''}
 <section class="price" aria-labelledby="price-h"><h2 id="price-h">אם תפעילו את תדר</h2>
 <div class="glass price-card">

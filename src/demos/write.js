@@ -9,7 +9,7 @@ import { catalogueLines } from './store.js';
 // store. Two model calls:
 //
 //   chooseTopic  the store's catalogue in, a topic from its field out: the angle, the Wikipedia articles that hold
-//                its facts, the products whose photographs fit it
+//                its facts
 //   writeDemo    the articles and the store's catalogue in, the slideshow out
 //
 // Code then checks it as Teder checks every post (HARD RULE 3, src/verify/claims.js): every quote is in the document
@@ -30,8 +30,6 @@ It is NOT about a product and NOT an advert. It is about the store's field: some
 
 Its facts come from Wikipedia, so name 1 to 3 articles that hold them, each by its exact title, Hebrew Wikipedia first ("he"), English only where Hebrew has no article on it ("en"). Pick articles you are confident exist under that title.
 
-Then pick up to 5 product ids from the catalogue whose photographs fit the topic best: the slides are drawn on them.
-
 niche: the subject in two to five Hebrew words, as it reads after "מצגת על" ("הצהוב של דורטמונד", "קפה טורקי"). angle: one English sentence, what the slideshow tells and in what order.`;
 
 export const TOPIC_SCHEMA = {
@@ -40,13 +38,12 @@ export const TOPIC_SCHEMA = {
     niche: { type: 'string' },
     angle: { type: 'string' },
     articles: { type: 'array', items: { type: 'object', properties: { lang: { type: 'string', enum: ['he', 'en'] }, title: { type: 'string' } }, required: ['lang', 'title'], additionalProperties: false } },
-    products: { type: 'array', items: { type: 'string' } },
   },
-  required: ['niche', 'angle', 'articles', 'products'],
+  required: ['niche', 'angle', 'articles'],
   additionalProperties: false,
 };
 
-/** The topic for a store's demo: { niche, angle, articles: [{ lang, title }], products: [id] }. `skip`: angles taken. */
+/** The topic for a store's demo: { niche, angle, articles: [{ lang, title }] }. `skip`: angles taken. */
 export async function chooseTopic(ctx, { store, skip = [] }) {
   const { data } = await askJson({ ...ctx, pack: null, postId: null }, {
     task: 'demo-topic',
@@ -59,7 +56,7 @@ ${catalogueLines(store)}${skip.length ? `\n\nNOT THESE ANGLES, ALREADY USED:\n${
     meta: {},
   });
   const articles = (data?.articles || []).filter((a) => ['he', 'en'].includes(a?.lang) && String(a.title || '').trim()).slice(0, 3);
-  return { niche: String(data?.niche || '').trim(), angle: String(data?.angle || '').trim(), articles, products: (data?.products || []).map(String).slice(0, 5) };
+  return { niche: String(data?.niche || '').trim(), angle: String(data?.angle || '').trim(), articles };
 }
 
 // ---------------------------------------------------------------- the slideshow
@@ -74,6 +71,7 @@ THE SLIDES:
 - every number on a slide (a year, a count, a price) is in a quote that slide cites.
 - cta: the last slide, from the topic to the store: why someone who cares about this would want to see what the store has, and where (its domain). It may cite facts from the store's catalogue (key "store"); no number the catalogue does not say. title at most ${FIT.ctaTitle} characters, body at most ${FIT.ctaBody}.
 - caption: two or three short sentences, ending with a real question to the reader. No hashtags.
+- image: for the cover (coverImage), each content slide and the last slide, a search in a stock-photo library (Pexels), two to five English words: a place, an object, a moment or a mood that fits that slide ("empty stadium at night", "doctor checking pulse", "trophy on a table"). The library has no photographs of real people, so never a name; never a logo, a shirt, a jersey, a kit, a poster, a sign or text. The cover's is the strongest picture of the topic, and no two slides ask for the same picture.
 Speak as the store's account to its followers, in the plural (אתם). No exclamation marks, no emoji.
 
 ${HEBREW}`;
@@ -84,11 +82,12 @@ export const DEMO_SCHEMA = {
     facts: { type: 'array', items: { type: 'object', properties: { id: { type: 'string' }, doc: { type: 'string' }, claim: { type: 'string' }, quote: { type: 'string' } }, required: ['id', 'doc', 'claim', 'quote'], additionalProperties: false } },
     hook: { type: 'string' },
     sub: { type: 'string' },
-    items: { type: 'array', items: { type: 'object', properties: { title: { type: 'string' }, body: { type: 'string' }, facts: { type: 'array', items: { type: 'string' } } }, required: ['title', 'body', 'facts'], additionalProperties: false } },
-    cta: { type: 'object', properties: { title: { type: 'string' }, body: { type: 'string' }, facts: { type: 'array', items: { type: 'string' } } }, required: ['title', 'body', 'facts'], additionalProperties: false },
+    coverImage: { type: 'string' },
+    items: { type: 'array', items: { type: 'object', properties: { title: { type: 'string' }, body: { type: 'string' }, facts: { type: 'array', items: { type: 'string' } }, image: { type: 'string' } }, required: ['title', 'body', 'facts', 'image'], additionalProperties: false } },
+    cta: { type: 'object', properties: { title: { type: 'string' }, body: { type: 'string' }, facts: { type: 'array', items: { type: 'string' } }, image: { type: 'string' } }, required: ['title', 'body', 'facts', 'image'], additionalProperties: false },
     caption: { type: 'string' },
   },
-  required: ['facts', 'hook', 'sub', 'items', 'cta', 'caption'],
+  required: ['facts', 'hook', 'sub', 'coverImage', 'items', 'cta', 'caption'],
   additionalProperties: false,
 };
 
@@ -133,7 +132,9 @@ export function checkDraft(docs, draft, { domain }) {
   ];
   // The last slide's line in the accent colour: the store's address, written by code.
   const extra = { cta: domain };
-  const post = { hook: String(draft.hook || '').trim(), sub: String(draft.sub || '').trim(), caption: String(draft.caption || '').trim(), extra, slides, facts };
+  // Each slide's photograph search, in slide order: not text on the slide, so outside what the gate checks and hashes.
+  const images = [draft.coverImage, ...items.map((s) => s.image), draft.cta?.image].map((q) => String(q || '').trim());
+  const post = { hook: String(draft.hook || '').trim(), sub: String(draft.sub || '').trim(), caption: String(draft.caption || '').trim(), extra, slides, facts, images };
   const problems = [];
   if (items.length !== ITEMS) problems.push(`there are ${items.length} content slides, not ${ITEMS}`);
   for (const f of facts) if (!f.verified) problems.push(`fact ${f.key}: ${f.error}`);
@@ -156,6 +157,7 @@ export function checkDraft(docs, draft, { domain }) {
   if (!cta.title || !cta.body) problems.push('the last slide has no title or no line');
   long('the last slide title', cta.title, FIT.ctaTitle);
   long('the last slide body', cta.body, FIT.ctaBody);
+  if (!images[0]) problems.push('the cover has no photograph search (coverImage)');
   post.token = g.token;
   return { post, problems };
 }

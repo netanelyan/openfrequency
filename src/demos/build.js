@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { getBytes } from '../core/net.js';
 import { mediaDir } from '../core/paths.js';
@@ -8,7 +8,8 @@ import { j } from '../db/index.js';
 import { RenderError, renderPost } from '../render/render.js';
 import { themeOf } from '../render/styles/index.js';
 import { wikipediaDocs } from '../sources/index.js';
-import { DemoError, domainOf, photosFor, readStore, shelfOf, storeDocument, storeOrigin, storeStats } from './store.js';
+import { findImage, MIN_SIDE } from '../images/index.js';
+import { DemoError, domainOf, readStore, shelfOf, storeDocument, storeOrigin, storeStats } from './store.js';
 import { chooseTopic, writeDemo } from './write.js';
 
 // A store's demo, from the request to the drawn slides (src/db/schema.js, table demos):
@@ -24,7 +25,7 @@ import { chooseTopic, writeDemo } from './write.js';
 
 const ACCENT = '#9B7BFF'; // Teder's violet as it reads on a dark ground, for a store whose own colour does not
 
-// The demo's look: style A (src/render/styles), every slide on one of the store's photographs, filling it
+// The demo's look: style A (src/render/styles), every slide on a Pexels photograph of its own, filling it
 // (theme.options.fullPhoto), the text at the bottom over its fade into the dark ground, in the store's colour where it reads there
 // (resolveStyle falls back to Teder's violet). A demo is no account, so the pack is made here, with only what
 // drawing needs.
@@ -97,10 +98,10 @@ export async function readArticles(articles, { wiki = wikipediaDocs } = {}) {
 
 /**
  * Build one demo: read the store, choose a topic from its field, read Wikipedia on it, write and check the slides,
- * draw them on the store's photographs. Every failure is a status with a reason, never a throw.
- * io: { read, topic, wiki, write, fetchImage, render } (tests replace them). skip: angles already used.
+ * find each slide's photograph on Pexels, draw them. Every failure is a status with a reason, never a throw.
+ * io: { read, topic, wiki, write, fetchImage, photo, render } (tests replace them). skip: angles already used.
  */
-export async function buildDemo(ctx, id, { read = readStore, topic: choose = chooseTopic, wiki = wikipediaDocs, write = writeDemo, fetchImage = getBytes, render = renderPost, skip = [] } = {}) {
+export async function buildDemo(ctx, id, { read = readStore, topic: choose = chooseTopic, wiki = wikipediaDocs, write = writeDemo, fetchImage = getBytes, photo = findImage, render = renderPost, skip = [] } = {}) {
   const { db } = ctx;
   const demo = db.get('SELECT * FROM demos WHERE id = ?', id);
   if (!demo || demo.status === 'removed') return null;
@@ -121,20 +122,6 @@ export async function buildDemo(ctx, id, { read = readStore, topic: choose = cho
     const dir = path.join(ctx.mediaDir || mediaDir(), 'demos', String(id));
     rmSync(dir, { recursive: true, force: true });
     mkdirSync(dir, { recursive: true });
-    // The store's own photographs, at the size its CDN serves for a slide, one per slide in turn: the cover, the
-    // three content slides, the last.
-    const photos = new Map();
-    for (const [i, src] of photosFor(store.products, topic.products, 2 + 3).entries()) {
-      const file = path.join(dir, `photo-${i}.jpg`);
-      try {
-        const bytes = await fetchImage(`${src}${src.includes('?') ? '&' : '?'}width=1200`);
-        writeFileSync(file, bytes.buf || bytes);
-        photos.set(photos.size, { file });
-      } catch {
-        // a photograph that did not come: the next one takes its place
-      }
-    }
-    if (!photos.has(0)) throw new DemoError('לא הצלחנו להוריד תמונות מהחנות');
     // The products beside the title on the store's page, small: the page shows only pictures served from here.
     for (const p of shelfOf(store)) {
       const file = path.join(dir, `shelf-${storeRow.shelf.length}.jpg`);
@@ -164,6 +151,8 @@ export async function buildDemo(ctx, id, { read = readStore, topic: choose = cho
     set(db, id, { store_json: storeRow });
 
     // Written, checked, drawn. A text the style cannot fit goes back to the writer once, with the renderer's reason.
+    const pack = demoPack(demo, store);
+    const found = new Map(); // a search already made: its photograph, or null
     let before = [];
     for (let round = 0; round < 2; round++) {
       const { post, problems } = await write(ctx, { store, docs, topic, before });
@@ -171,9 +160,26 @@ export async function buildDemo(ctx, id, { read = readStore, topic: choose = cho
         set(db, id, { status: 'failed', error: `המצגת לא עברה את הבדיקות: ${problems.slice(0, 4).join(' | ')}`, post_json: post });
         return db.get('SELECT * FROM demos WHERE id = ?', id);
       }
+      // Each slide's photograph, from Pexels only, through Teder's own image search (src/images, HARD RULE 5): the
+      // licence kept, the screen passed. Never a product of the store's: the slides are about its field.
+      const photos = new Map();
+      const credits = [];
+      const why = {};
+      for (const [i, query] of (post.images || []).entries()) {
+        if (!query) continue;
+        if (!found.has(query)) found.set(query, await photo(ctx, { pack: { ...pack, id: null, meta: { ...pack.meta, imagery: { providers: ['pexels'] } } }, query, minSide: MIN_SIDE.cover, why }).catch(() => null));
+        const img = found.get(query);
+        if (!img?.file) continue;
+        const file = path.join(dir, `photo-${i}.jpg`);
+        copyFileSync(img.file, file);
+        photos.set(i, { file });
+        credits.push({ slide: i, query, author: img.author || null, license: img.license || null, url: img.source_url || null });
+      }
+      if (!photos.has(0)) throw new DemoError(`לא מצאנו ב־Pexels תמונה לשער ("${post.images?.[0] || ''}")${Object.keys(why).length ? `: ${Object.keys(why).slice(0, 2).join('; ')}` : ''}`);
+      post.photos = credits;
       try {
         const files = await render({
-          pack: demoPack(demo, store),
+          pack,
           post: { id: `demo-${id}`, hook: post.hook, sub: post.sub, caption: post.caption, token: post.token, extra: post.extra },
           slides: post.slides,
           photos,
