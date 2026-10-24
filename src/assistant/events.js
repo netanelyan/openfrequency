@@ -225,7 +225,8 @@ async function post(url, { secret, body, type }) {
 
 /**
  * Send what is due. `send(url, { secret, body, type })` replaces the network for the tests. Stops at the first send
- * that fails: the assistant is down, and the rest wait with it. Returns { sent, held, stale, expired, off, failed }.
+ * that fails: the assistant is down, and the rest wait with it. A 400 is the assistant refusing that one event, given up
+ * at once while the rest go on. Returns { sent, held, stale, expired, off, failed }.
  */
 export async function deliver(ctx, { t = now(), env = process.env, send = null, limit = 50 } = {}) {
   const { db } = ctx;
@@ -270,6 +271,15 @@ export async function deliver(ctx, { t = now(), env = process.env, send = null, 
         continue;
       }
       why = `HTTP ${r.status}`;
+      // The assistant read this event and refused it (400: a type or a shape it does not take): sending it again changes
+      // nothing, and it must not hold the rest of the queue. A signature it refused (401), a refusal of where it came
+      // from (403), a timeout, a rate limit or a server error is the assistant's state, not the event's: those wait.
+      if (r.status >= 400 && r.status < 500 && ![401, 403, 408, 429].includes(r.status)) {
+        set(row.id, { state: 'failed', attempts: row.attempts + 1, last_error: why });
+        out.failed++;
+        ctx.log?.(`[assistant] ${row.type} ${row.id}: ${why}, refused for good`);
+        continue;
+      }
     } catch (e) {
       why = String(e.message).slice(0, 300);
     }

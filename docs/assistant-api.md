@@ -218,7 +218,9 @@ One JSON body per event, signed with the direction `teder->toran`, with `X-OF-Ev
 
 `id` stays the same across retries: dedupe on it. Answer with any 2xx. Anything else, or no answer within 10 seconds,
 is tried again after 1, 5, 15, 60 and 180 minutes, then given up (`failed`). While one send fails, nothing else is
-sent that minute.
+sent that minute. A `400` is a refusal of that event (a type or a shape the assistant does not take): it is given up at
+once and the rest go on, so an assistant that does not know `account.reconnect` yet refuses it without holding the
+queue. `401`, `403`, `408` and `429` wait like a server error.
 
 | type | when | data |
 |---|---|---|

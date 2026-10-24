@@ -16,7 +16,7 @@ import { zernioAnalytics, ZernioError } from '../src/publish/zernio.js';
 import { collectMetrics } from '../src/metrics/collect.js';
 import { quotasData } from '../src/web/data.js';
 import { DIR, signature } from '../src/assistant/sign.js';
-import { detect, payloadOf } from '../src/assistant/events.js';
+import { deliver, detect, payloadOf } from '../src/assistant/events.js';
 import {
   connectLink,
   connectLinkOk,
@@ -491,4 +491,32 @@ test('the assistant gets a "tap here to connect" link per platform, that opens Z
   await refreshConnections(db, pack('alpha'), { t: TUE + 150_000 });
   assert.equal(payloadOf(ctx, row, { secret: SECRET, base: 'https://teder.test', t: TUE + 160_000 }), null);
   assert.equal(profileIdOf(db, pack('alpha')), 'prof1');
+});
+
+test("an event the assistant refuses (400: a type it does not take yet) is failed once and holds nothing behind it", async () => {
+  db.run("DELETE FROM assistant_events");
+  await ensureProfile(db, pack('alpha'));
+  connected('prof1', 'tiktok', 'tk1', 'alpha.tt');
+  connected('prof1', 'instagram', 'ig1', 'alpha.ig');
+  await refreshConnections(db, pack('alpha'), { t: TUE });
+  Z.health = { tk1: { needsReconnect: true, tokenValid: false, issues: ['Token expired'] }, ig1: { needsReconnect: true, tokenValid: false, issues: ['Token expired'] } };
+  await refreshConnections(db, pack('alpha'), { t: TUE + 60_000 });
+  assert.equal(detect(ctx, { t: TUE + 120_000 })['account.reconnect'], 2);
+  const got = [];
+  let refused = false;
+  const send = async (_url, { body, type }) => {
+    if (type !== 'account.reconnect') return { status: 200 };
+    got.push(JSON.parse(body));
+    if (refused) return { status: 200 };
+    refused = true;
+    return { status: 400 };
+  };
+  const out = await deliver(ctx, { t: TUE + 120_000, env: { OF_ASSISTANT_SECRET: SECRET, OF_TORAN_URL: 'http://127.0.0.1:1/internal/teder/events' }, send });
+  assert.equal(got.length, 2, 'the refusal did not hold the next one');
+  assert.equal(out.failed, 1);
+  const states = db.all("SELECT state, last_error FROM assistant_events WHERE type = 'account.reconnect' ORDER BY id").map((r) => [r.state, r.last_error]);
+  assert.deepEqual(states, [['failed', 'HTTP 400'], ['sent', null]]);
+  // A down assistant still holds the queue and tries again later.
+  const out2 = await deliver(ctx, { t: TUE + 180_000, env: { OF_ASSISTANT_SECRET: SECRET }, send: async () => ({ status: 503 }) });
+  assert.equal(out2.failed, 0, 'nothing left to send');
 });
