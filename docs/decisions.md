@@ -1480,7 +1480,7 @@ engine can act on, and what changed:
     recorded once (`broken_at`), and the assistant gets `account.reconnect` once per
     break, with a fresh link. An account that is on Zernio no more (disconnected there:
     the first live read found all three TikTok accounts gone from their profiles, and the
-    builders draft that afternoon refused with "accounts do not belong to this user") is
+    next TikTok draft that afternoon refused with "accounts do not belong to this user") is
     `reconnect` too, as a new connect, and posts stop going to the id Zernio refuses. A
     hand-typed account in another profile of the team is not gone.
   - **Zernio's connect link lasts 30 minutes**, so it is never stored or sent. The
