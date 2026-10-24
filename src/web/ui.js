@@ -197,6 +197,7 @@ ${SPRITE}
   <nav class="nav" aria-label="ראשי">${nav}</nav>
   <div class="tools">
     <a class="spend" href="/settings#budget" title="טוקנים החודש: ${tokenNum(spent)} מתוך ${tokenNum(cap)} (${used}%)">${ring}<span class="lbl">טוקנים</span><span class="amt num ltr"><b>${tokenNum(spent)}</b><span> / ${tokenNum(cap)}</span></span></a>
+    ${ctx.links?.logout ? `<a class="logout" href="${esc(ctx.links.logout)}" title="יציאה">${icon('logout')}<span class="lbl">יציאה</span></a>` : ''}
   </div>
 </div></header>
 <main class="wrap" id="main">
