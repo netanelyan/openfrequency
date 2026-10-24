@@ -1,12 +1,13 @@
 import { getJson, postJson } from '../core/net.js';
 import { isSet } from '../core/env.js';
 
-// Posting through Zernio, one Zernio account per platform per pack.
+// Posting through Zernio: one Zernio profile per account (a customer's), with its TikTok and Instagram connected into
+// it by the customer themselves (src/publish/connect.js).
 //
-// What it can do to an account: create a post on it. Nothing here reads an
-// inbox, comments, likes, follows or messages anyone; the network door refuses
-// those Zernio paths by name (src/core/net.js), so this file could not if it
-// tried.
+// What it can do to an account: create a post on it. Besides that it creates a profile (an empty folder on our own
+// Zernio team) and reads: the connect link, the connected accounts and their health, analytics, and the bill. Nothing
+// here reads an inbox, comments, likes, follows or messages anyone; the network door refuses those Zernio paths by
+// name (src/core/net.js), so this file could not if it tried.
 //
 // The request shape follows docs.zernio.com: images as mediaItems (Zernio
 // fetches them by URL, so slides must be served from a public https address),
@@ -201,16 +202,145 @@ export const isStrike = (e) => e instanceof ZernioError && (e.category === 'user
 /** Broken until somebody fixes the connection. */
 export const isConfigProblem = (e) => e instanceof ZernioError && (e.status === 401 || e.status === 403 || e.category === 'auth_expired' || ['not_configured', 'no_account'].includes(e.code));
 
-/** Per-post numbers from Zernio's analytics. Returns { platform: stats } or null while it is still syncing. */
+const num = (x) => (x == null || x === '' || !Number.isFinite(Number(x)) ? null : Number(x));
+
+/** One platform's numbers as the metrics table keeps them. Pure, so the tests can read it. */
+export function statsOf(platform, a = {}) {
+  return {
+    views: num(a.views ?? a.impressions),
+    reach: num(a.reach),
+    likes: num(a.likes),
+    comments: num(a.comments),
+    shares: num(a.shares),
+    saves: platform === 'tiktok' ? null : num(a.saves),
+    // Link clicks only where Zernio reports them: TikTok's are the profile's website link (websiteClicks), never a guess.
+    linkClicks: platform === 'tiktok' ? num(a.websiteClicks) : num(a.clicks ?? a.linkClicks),
+    follows: num(a.follows),
+    profileVisits: num(a.profileViews),
+  };
+}
+
+/**
+ * Per-post numbers from Zernio's analytics: { platform: stats }, or null while nothing is synced yet.
+ *
+ * GET /analytics?postId= answers one post as a flat object, its numbers per platform in platformAnalytics[], with 202
+ * while TikTok or Instagram has not been read yet (a platform still pending is left out, never stored as zeros) and
+ * 424 when the post failed everywhere. A Zernio post id and a platform's own post id (a draft the owner published) are
+ * both taken. On a legacy plan without the Analytics add-on it is 402: a config problem, said once by the collector.
+ */
 export async function zernioAnalytics(zernioId) {
-  const body = await getJson(`${BASE()}/analytics?${new URLSearchParams({ postId: zernioId })}`, { headers: auth() });
-  const posts = body?.posts || (body?.post ? [body.post] : []);
-  const out = {};
-  for (const p of posts) {
-    const a = p.analytics || {};
-    const num = (x) => (x == null ? null : Number(x));
-    // Link clicks only where Zernio reports them (TikTok's own video numbers have none): never a guess.
-    out[p.platform] = { views: num(a.views ?? a.impressions), likes: num(a.likes), comments: num(a.comments), shares: num(a.shares), saves: p.platform === 'tiktok' ? null : num(a.saves), linkClicks: num(a.clicks ?? a.linkClicks) };
+  let body;
+  try {
+    body = await getJson(`${BASE()}/analytics?${new URLSearchParams({ postId: zernioId })}`, { headers: auth() });
+  } catch (e) {
+    if (e.status === 424) return null;
+    if (e.status === 402) throw new ZernioError('Zernio answers analytics only with the Analytics add-on on this plan', { step: 'analytics', code: 'analytics_addon_required', status: 402 });
+    throw e;
   }
+  const out = {};
+  const parts = Array.isArray(body?.platformAnalytics) && body.platformAnalytics.length ? body.platformAnalytics : body?.platform && body?.analytics ? [{ platform: body.platform, analytics: body.analytics, syncStatus: body.syncStatus }] : [];
+  for (const p of parts) {
+    if (!p?.platform || !p.analytics || ['pending', 'unavailable'].includes(p.syncStatus) || p.status === 'failed') continue;
+    out[p.platform] = statsOf(p.platform, p.analytics);
+  }
+  // The list shape (an older answer, or a lookup that came back as one).
+  for (const p of body?.posts || (body?.post ? [body.post] : [])) if (p.platform && p.analytics && !out[p.platform]) out[p.platform] = statsOf(p.platform, p.analytics);
   return Object.keys(out).length ? out : null;
+}
+
+/* ------------------------------------------------------------------ one profile per customer account */
+
+// A profile is Zernio's folder for one customer: their TikTok and their Instagram are connected into it, and Zernio's
+// bill is split by it. Profiles cost nothing; each connected account does (zernio.com/pricing).
+
+const profileOf = (p) => (p?._id ? { id: String(p._id), name: String(p.name || ''), externalId: p.externalId || null } : null);
+
+/** The profile whose externalId is ours (the pack id), or null. */
+export async function findProfile(externalId) {
+  const body = await getJson(`${BASE()}/profiles?${new URLSearchParams({ externalId })}`, { headers: auth() });
+  return profileOf((body?.profiles || []).find((p) => p.externalId === externalId));
+}
+
+/**
+ * Create the profile of one account: named for it, its externalId the pack id. The Idempotency-Key is the pack id too,
+ * so a create whose answer was lost and is sent again gets the same profile; a 409 (it exists already, under that
+ * name or that externalId) is answered by finding it.
+ */
+export async function createProfile({ name, externalId }) {
+  if (!zernioConfigured()) throw new ZernioError('ZERNIO_API_KEY is not set', { step: 'config', code: 'not_configured' });
+  try {
+    const body = await postJson(`${BASE()}/profiles`, { name: String(name).slice(0, 80), externalId, description: 'OpenFrequency (Teder)' }, { headers: { ...auth(), 'idempotency-key': `of-profile-${externalId}` }, timeoutMs: 30_000 });
+    const p = profileOf(body?.profile);
+    if (!p) throw new ZernioError('Zernio created the profile but returned no id', { step: 'profile', code: 'no_id' });
+    return p;
+  } catch (e) {
+    if (e instanceof ZernioError) throw e;
+    if (e.status === 409) {
+      const found = (await findProfile(externalId)) || (e.body?.details?.existingProfileId ? { id: String(e.body.details.existingProfileId), name, externalId: null } : null);
+      if (found) return found;
+    }
+    throw new ZernioError(e.message, { step: 'profile', code: e.code, status: e.status });
+  }
+}
+
+/* ------------------------------------------------------------------ connecting TikTok and Instagram */
+
+export const CONNECT_PLATFORMS = ['tiktok', 'instagram'];
+
+/**
+ * Zernio's link to connect (or reconnect) one platform into a profile: its own welcome screen with our name, then the
+ * platform's consent screen, then back to `redirectUrl` with connected=, accountId=, username= (or error=). The link
+ * works for 30 minutes, so it is asked for at the moment someone taps, never stored or sent on.
+ */
+export async function connectUrl(platform, { profileId, redirectUrl, reconnectAccountId = null, brandName = 'OpenFrequency' }) {
+  if (!CONNECT_PLATFORMS.includes(platform)) throw new ZernioError(`not a platform to connect: ${platform}`, { step: 'connect', code: 'bad_platform' });
+  const q = new URLSearchParams({ profileId, redirect_url: redirectUrl, welcome: 'true', brandName });
+  if (reconnectAccountId) q.set('reconnectAccountId', reconnectAccountId);
+  let body;
+  try {
+    body = await getJson(`${BASE()}/connect/${platform}?${q}`, { headers: auth() });
+  } catch (e) {
+    throw new ZernioError(e.message, { step: 'connect', code: e.code, status: e.status });
+  }
+  if (!/^https:\/\//.test(String(body?.authUrl || ''))) throw new ZernioError('Zernio returned no connect link', { step: 'connect', code: 'no_url' });
+  return body.authUrl;
+}
+
+/**
+ * Each connected TikTok and Instagram account in a profile, with its health: [{ id, platform, username, status, issue }].
+ * status is 'connected', or 'reconnect' when Zernio says the token expired or was revoked, a permission is missing,
+ * or the account is inactive. The health read is the finer one; when it cannot be read, the listing's flag decides.
+ */
+export async function profileConnections(profileId) {
+  const body = await getJson(`${BASE()}/accounts?${new URLSearchParams({ profileId })}`, { headers: auth() });
+  let health = new Map();
+  try {
+    const h = await getJson(`${BASE()}/accounts/health?${new URLSearchParams({ profileId })}`, { headers: auth() });
+    health = new Map((h?.accounts || []).map((a) => [String(a.accountId), a]));
+  } catch {
+    /* the listing's own flag stands in */
+  }
+  // A profile can hold more than one account of a platform: the newest active one is the account's.
+  return (body?.accounts || [])
+    .filter((a) => CONNECT_PLATFORMS.includes(a.platform) && a.enabled !== false)
+    .map((a) => {
+      const hh = health.get(String(a._id));
+      const broken = a.isActive === false || a.needsReconnection === true || hh?.needsReconnect === true || hh?.tokenValid === false || hh?.canPost === false;
+      return { id: String(a._id), platform: a.platform, username: String(a.username || a.displayName || ''), status: broken ? 'reconnect' : 'connected', issue: broken ? String(hh?.issues?.[0] || (a.needsReconnection ? 'needs reconnection' : 'inactive')).slice(0, 200) : null };
+    });
+}
+
+/* ------------------------------------------------------------------ what Zernio bills, per profile */
+
+/**
+ * Zernio's spend in a window, split per profile, from its usage-based invoice: { supported, byProfile: { id: usd },
+ * total }. `from` and `to` are UTC dates (YYYY-MM-DD), inclusive. A legacy Stripe plan has no invoice to split:
+ * { supported: false }.
+ */
+export async function profileSpend({ from, to }) {
+  const q = new URLSearchParams({ range: 'custom', from, to, granularity: 'total', groupBy: 'profile' });
+  const body = await getJson(`${BASE()}/usage?${q}`, { headers: auth() });
+  if (body?.supported === false) return { supported: false, byProfile: {}, total: 0 };
+  const groups = body?.attribution?.groups || [];
+  return { supported: true, byProfile: Object.fromEntries(groups.filter((g) => g?.key).map((g) => [String(g.key), num(g.totalUsd) ?? 0])), total: num(body?.attribution?.totals?.totalUsd ?? body?.totals?.total) ?? 0 };
 }

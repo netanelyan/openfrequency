@@ -23,6 +23,7 @@ import { loadAll } from '../src/packs/load.js';
 import { openDb, Db, j } from '../src/db/index.js';
 import { pickSound, publishZernio, soundChart, zernioAccounts, zernioAnalytics, ZernioError } from '../src/publish/zernio.js';
 import { wantedPublisher } from '../src/publish/index.js';
+import { profileIdOf, zernioAccountId } from '../src/publish/connect.js';
 
 loadEnv();
 const args = process.argv.slice(2);
@@ -45,18 +46,24 @@ try {
 }
 for (const a of accounts) say(null, `${a.platform.padEnd(10)} ${a.id}  @${a.username}${a.active ? '' : '  (needs reconnecting)'}`);
 
-// Zernio bills per connected account: the first 2 free, then $6 a month each (zernio.com/pricing, 2026-10-13).
-const paid = Math.max(0, accounts.length - 2);
-say(null, `Zernio: ${accounts.length} connected account(s), ${paid} billed: $${paid * 6} a month (outside the monthly cap)`);
+// Zernio bills per connected account, in bands: the first 2 free, the 3rd to 10th $6 a month each, the 11th to 100th
+// $3, past that $1 (docs.zernio.com/pricing, read 2026-10-24). The real split per customer is read daily into the
+// ledger (src/publish/connect.js recordCosts); this is the list price, for a glance.
+const BANDS = [[2, 0], [10, 6], [100, 3], [Infinity, 1]];
+const monthly = (n) => BANDS.reduce((acc, [upTo, usd], i) => acc + Math.max(0, Math.min(n, upTo) - (i ? BANDS[i - 1][0] : 0)) * usd, 0);
+say(null, `Zernio: ${accounts.length} connected account(s): ${monthly(accounts.length)} a month at list price (outside the monthly cap)`);
 
 const packs = loadAll().filter((p) => !opt('pack') || p.id === opt('pack'));
+const live = existsSync(path.join(dataDir(), 'openfrequency.db')) ? openDb() : new Db(':memory:');
 let bad = 0;
 for (const pack of packs) {
   for (const platform of pack.meta.platforms) {
-    if (wantedPublisher(pack, platform) !== 'zernio') continue;
-    const id = pack.meta.zernio?.accounts?.[platform];
+    if (!['zernio', 'auto'].includes(wantedPublisher(pack, platform))) continue;
+    // What the customer connected (the database), or what was typed into pack.json before that.
+    const id = zernioAccountId(live, pack, platform);
     const a = accounts.find((x) => x.id === id);
-    if (!id) (bad++, say(false, `${pack.id}: no zernio.accounts.${platform} in pack.json`));
+    if (!id && wantedPublisher(pack, platform) === 'auto') say(null, `${pack.id}: ${platform} not connected on Zernio (it goes through Meta if a token is set)`);
+    else if (!id) (bad++, say(false, `${pack.id}: no ${platform} account connected${profileIdOf(live, pack) ? '' : ' and no Zernio profile yet'}: connect it on the account page`));
     else if (!a) (bad++, say(false, `${pack.id}: ${platform} account ${id} is not one of the connected accounts`));
     else if (a.platform !== platform) (bad++, say(false, `${pack.id}: ${id} is a ${a.platform} account, not ${platform}`));
     else if (!a.active) (bad++, say(false, `${pack.id}: ${platform} @${a.username} needs reconnecting in Zernio`));
@@ -85,8 +92,8 @@ if (!flag('send-private')) {
 const pack = packs[0];
 if (!opt('pack') || !pack) (say(false, '--send-private needs --pack <id>'), process.exit(1));
 if (!flag('confirm')) (say(false, 'this sends a real post to TikTok (privately). Add --confirm to do it.'), process.exit(1));
-const accountId = pack.meta.zernio?.accounts?.tiktok;
-if (!accountId) (say(false, `${pack.id} has no zernio.accounts.tiktok`), process.exit(1));
+const accountId = zernioAccountId(live, pack, 'tiktok');
+if (!accountId) (say(false, `${pack.id} has no TikTok account connected on Zernio`), process.exit(1));
 const base = String(process.env.MEDIA_PUBLIC_BASE_URL || '').replace(/\/$/, '');
 if (!/^https:\/\//.test(base)) (say(false, 'MEDIA_PUBLIC_BASE_URL must be the https address that serves $OF_HOME/data/public: Zernio fetches slides by URL'), process.exit(1));
 

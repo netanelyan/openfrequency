@@ -22,6 +22,7 @@ import { fightWeekSlots, parseEvents, recapsDue, saveEvents } from '../schedule/
 import { refreshSource } from '../sources/index.js';
 import { morningFeedback, withDirectives } from '../metrics/feedback.js';
 import { assistantTick } from '../assistant/events.js';
+import { zernioTick } from '../publish/connect.js';
 
 // The engine running on its own: one tick a minute.
 //
@@ -343,6 +344,17 @@ export async function tick(ctx, { t = now() } = {}) {
     if (told) report.assistant = told;
   } catch (e) {
     report.errors.push({ step: 'assistant', error: e.message });
+  }
+
+  // ---- 4c. Zernio: what each customer connected and whether it still works (hourly), what Zernio billed (daily)
+  try {
+    const z = await zernioTick(ctx, { t });
+    if (z) {
+      report.zernio = z;
+      for (const e of z.errors) report.errors.push(e);
+    }
+  } catch (e) {
+    report.errors.push({ step: 'zernio', error: e.message });
   }
 
   // ---- 5. metrics and learning, every few hours

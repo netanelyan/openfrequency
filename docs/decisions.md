@@ -1465,3 +1465,59 @@ engine can act on, and what changed:
   goes out; only the pause is gone, when drafting, redoing, publishing and at the
   TikTok fallback. A redo blocked by it is tried again like any other blocked one.
   An account paused for it before this still says so until it is resumed.
+- **Zernio publishes for every customer account, connected by the customer
+  (2026-10-24).** Before this, a pack's Zernio profile and account ids were typed into
+  `pack.json` by hand. Now each account gets its own Zernio profile the first time
+  someone asks to connect (`accounts.zernio_profile_id`, its `externalId` the pack id,
+  created with an `Idempotency-Key`, so a retry or a lost answer never makes a second
+  one). The customer connects their own TikTok and Instagram into it from the account
+  page, the onboarding page, or a link the WhatsApp assistant sends. Read from Zernio's
+  docs and OpenAPI spec (v1.350.1) the same day:
+  - **What is connected is read from Zernio, never from the browser.** The return from a
+    connect, and an hourly pass, read the profile's accounts and `accounts/health` into
+    `zernio_connections`. An expired or revoked token is `reconnect`; the same button then
+    passes `reconnectAccountId`, so the same account keeps its history. A break is
+    recorded once (`broken_at`), and the assistant gets `account.reconnect` once per
+    break, with a fresh link.
+  - **Zernio's connect link lasts 30 minutes**, so it is never stored or sent. The
+    assistant hands on a link to Teder (`/connect/<account>/<platform>`, signed with
+    `OF_ASSISTANT_SECRET`, open for 72 hours, that account and platform only), and Teder
+    asks Zernio for a fresh link at the tap. Whoever holds that link can connect an
+    account there until it expires (the owner's choice over a sign-in on the phone). The
+    account page shows which @user is connected.
+  - **The connect button answers with a page, not a redirect.** The site's CSP keeps form
+    submissions on our own origin (`form-action 'self'`), redirects included.
+  - **Instagram goes through our own Meta app when it is set up for the account, else
+    Zernio** (`publishers.instagram: "auto"`, the default for new packs). Instagram is
+    offered for connecting through Zernio only where Meta is not set up: an account
+    connected twice would be billed for nothing.
+  - **TikTok goes to the drafts by default** (`draft-now`): the owner adds a trending
+    sound in the app. "Straight to the profile" (`direct`) can be picked on the account
+    page, and it sets `tiktokPrivacy` to public, since a private direct post is one nobody
+    sees. Zernio confirms that photo drafts go to the inbox (`post_mode: MEDIA_UPLOAD`),
+    that a direct photo post cannot carry the AI label (so a post with an AI image stays a
+    draft, as before), and that TikTok drops the music track on drafts.
+  - **Zernio has no per-profile price.** Profiles are free, and each connected account is
+    billed in bands: the first 2 free, the 3rd to 10th $6 a month, the 11th to 100th $3,
+    past that $1. So a customer's cost depends on where their accounts fall in the bands.
+    The ledger keeps what Zernio itself splits per profile: `GET /v1/usage?groupBy=profile`
+    for the month, read daily into `zernio_costs`, pro-rated against the invoice, and shown
+    in the operator's ledger next to the API spend, outside the cap. A legacy Stripe plan
+    has no usage-based invoice to split, and nothing is written for it.
+  - **Per-post numbers.** Zernio answers one post as a flat object with
+    `platformAnalytics[]`. The old reader looked for `posts[]` or `post`, so it probably
+    never stored a TikTok number (unchecked: no published post in a local database). A
+    platform still syncing (202) is left out rather than written as zeros, a failed post
+    (424) has none, and a plan without the Analytics add-on (402) is said once per pass.
+    Each platform that went out through Zernio is its own Zernio post and is read on its
+    own id.
+  - **The network door gains one write** (`POST /v1/profiles`: an empty folder on our own
+    Zernio team) and the reads the connect needs (`connect/tiktok`, `connect/instagram`,
+    `accounts/health`, `profiles`, `usage`). Disconnecting an account or deleting a profile
+    stays closed. Teder takes no Zernio webhooks: the hourly read stands in, and so no new
+    door opens from the internet.
+  - **Our own TikTok app is a setting, not code yet** (`publishers.tiktok: "own-app"`, the
+    operator's choice on the account page). Nothing in this repository or its history ever
+    called TikTok directly. `src/publish/tiktok-app.js` names the interface and what
+    building it takes. Until then such an account's TikTok posts are written to disk, as
+    for any publisher without credentials.

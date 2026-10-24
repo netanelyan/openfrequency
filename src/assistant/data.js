@@ -6,13 +6,15 @@ import { captionOf, tiktokMode } from '../publish/index.js';
 import { imageCredit } from '../images/index.js';
 import { oneLine } from '../rules/overlay.js';
 import { mediaLink } from './sign.js';
+import { connectLink, connectState } from '../publish/connect.js';
+import { zernioConfigured } from '../publish/zernio.js';
 
 // What the WhatsApp assistant reads (docs/assistant-api.md), in the shapes it gets them. Every function here takes a
 // workspace's context (src/web/workspace.js) or rows already checked against one; nothing here decides who may see
 // what.
 
 /** Every event Teder sends the assistant, in the order the settings list them. */
-export const EVENT_TYPES = ['post.ready', 'post.reminder', 'post.published', 'post.unposted', 'quota.low', 'weekly.summary'];
+export const EVENT_TYPES = ['post.ready', 'post.reminder', 'post.published', 'post.unposted', 'quota.low', 'weekly.summary', 'account.reconnect'];
 
 /* ------------------------------------------------------------------ the customer's choices */
 
@@ -65,6 +67,20 @@ export function setPrefs(db, workspaceId, patch, { by = null } = {}) {
 export const shownPlatform = (post) => (post.media?.tiktok?.length ? 'tiktok' : 'instagram');
 
 export const accountOf = (pack) => ({ id: pack.id, name: pack.meta.displayName, handle: pack.meta.handle });
+
+/**
+ * Each of the account's platforms and its connection (src/publish/connect.js): { platform, state, username, issue,
+ * url }. state is connected, reconnect, none, or meta (Instagram through our own Meta app). url is the link to send the
+ * customer ("tap here to connect"), signed for 72 hours, where there is something to connect and Zernio is set up;
+ * null otherwise, and always without `link`.
+ */
+export function connectionsOf(db, pack, link = null) {
+  return pack.meta.platforms.map((platform) => {
+    const s = connectState(db, pack, platform);
+    const open = Boolean(link) && zernioConfigured() && (s.state === 'none' || s.state === 'reconnect');
+    return { ...s, url: open ? connectLink(link.secret, { base: link.base, accountId: pack.id, platform, t: link.t }) : null };
+  });
+}
 
 /** Signed links to a platform's slides. `link` is { secret, base, t }. */
 export const slideLinks = (post, platform, link) => (post.media?.[platform] || []).map((_, idx) => mediaLink(link.secret, { base: link.base, postId: post.id, platform, idx, t: link.t }));
@@ -170,5 +186,5 @@ export function accountStatus(db, pack, t = now()) {
     .all("SELECT id FROM posts WHERE account_id = ? AND sample = 0 AND status IN ('queued', 'approved') AND slot_at >= ? ORDER BY slot_at LIMIT 5", pack.id, new Date(t).toISOString())
     .map((r) => loadPost(db, r.id))
     .map((p) => ({ id: p.id, coverLine: oneLine(p.hook || ''), slotAt: p.slot_at, status: p.status }));
-  return { account: accountOf(pack), quota: quotaOf(db, pack.id, t), next, week: numbers(db, pack.id, t - 7 * 86_400_000, t) };
+  return { account: accountOf(pack), quota: quotaOf(db, pack.id, t), next, week: numbers(db, pack.id, t - 7 * 86_400_000, t), connections: connectionsOf(db, pack) };
 }

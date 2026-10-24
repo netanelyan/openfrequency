@@ -6,9 +6,10 @@ import { credit, judge, learnMix } from '../formats/rotation.js';
 import { audit } from '../core/store.js';
 
 // What a published post did, read from the platforms, and what that teaches the
-// format rotation: TikTok's numbers through Zernio's analytics, Instagram's from
-// Meta's own insights when the post went out directly (reach, views, saves,
-// shares, likes, comments).
+// format rotation: through Zernio's analytics for each platform the post went out
+// on through Zernio (TikTok, and Instagram for an account without our own Meta
+// app), and from Meta's own insights when the post went out directly (reach,
+// views, saves, shares, likes, comments).
 //
 // RECORDS NOTHING IT DID NOT GET. A post whose numbers are not synced yet is
 // left alone rather than written as zeros: a stored zero is indistinguishable
@@ -25,26 +26,33 @@ export async function collectMetrics(ctx, { t = now(), source = null, instagram 
   const { db } = ctx;
   const read = source || (zernioConfigured() ? zernioAnalytics : null);
   const readIg = instagram || ((pack, mediaId) => instagramInsights(db, pack, mediaId));
-  const out = { asked: 0, got: 0, why: read ? null : 'no Zernio key: TikTok numbers are read only through Zernio' };
+  const out = { asked: 0, got: 0, addon: null, why: read ? null : 'no Zernio key: TikTok numbers are read only through Zernio' };
   const posts = db.all("SELECT id, account_id, published_at, publish_json FROM posts WHERE status = 'published' AND published_at IS NOT NULL AND published_at >= ?", new Date(t - 30 * DAY).toISOString());
   for (const p of posts) {
     if (only && !only.includes(p.id)) continue;
     const pub = j(p.publish_json, {});
-    const zid = Object.values(pub).find((r) => r?.zernioId)?.zernioId;
+    // Each platform that went out through Zernio has its own Zernio post (a draft the owner published has TikTok's own
+    // id, which Zernio's analytics take too): { platform: id }.
+    const zids = Object.fromEntries(['tiktok', 'instagram'].filter((pl) => pub[pl]?.zernioId && !(pl === 'instagram' && pub.instagram.via === 'instagram')).map((pl) => [pl, pub[pl].zernioId]));
     const ig = pub.instagram?.via === 'instagram' && pub.instagram.mediaId ? pub.instagram.mediaId : null;
-    if (!(zid && read) && !ig) continue; // a dry-published post has no numbers to read
+    if (!(Object.keys(zids).length && read) && !ig) continue; // a dry-published post has no numbers to read
     const last = db.get('SELECT MAX(collected_at) AS at, MAX(age_hours) AS age FROM metrics WHERE post_id = ?', p.id);
     const age = (t - Date.parse(p.published_at)) / HOUR;
     // Once a day, and always once the post crosses 72 hours, which is the reading that counts.
     const due72 = age >= 72 && !(last?.age >= 72);
     if (last?.at && t - Date.parse(last.at) < freshHours * HOUR && !due72) continue;
     out.asked++;
-    let stats = {};
-    if (zid && read) {
+    const stats = {};
+    // One read per Zernio post, and from it only the platform it was that platform's post on.
+    for (const [platform, zid] of read ? Object.entries(zids) : []) {
+      if (out.addon) break;
       try {
-        stats = (await read(zid)) || {};
+        const got = await read(zid);
+        if (got?.[platform]) stats[platform] = got[platform];
       } catch (e) {
-        ctx.log?.(`metrics ${p.id}: ${e.message}`);
+        // A plan without the Analytics add-on answers every post the same: said once, and the rest are not asked.
+        if (e.code === 'analytics_addon_required') out.addon = out.why = e.message;
+        ctx.log?.(`metrics ${p.id} ${platform}: ${e.message}`);
       }
     }
     if (ig) {

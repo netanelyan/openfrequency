@@ -18,14 +18,20 @@ import { isStrike, postBody, publishZernio, trendingSound, zernioConfigured } fr
 import { assignSound } from '../pipeline/sounds.js';
 import { notify } from '../notify/index.js';
 import { instagramConfigured, isRefusal, isThrottle, isTokenProblem, publishInstagram } from './instagram.js';
+import { zernioAccountId } from './connect.js';
+import { OWN_APP, publishTikTokApp, tiktokAppConfigured } from './tiktok-app.js';
 
 // Publishing one approved post, through the rails, to each of its pack's
 // platforms, each by the publisher the pack names for it:
 //
-//   "publishers": { "tiktok": "zernio", "instagram": "instagram" }
+//   "publishers": { "tiktok": "zernio", "instagram": "auto" }
 //
-// zernio      through Zernio (TikTok; Instagram too if a pack wants it)
-// instagram   directly through Meta's Graph API (src/publish/instagram.js)
+// zernio      through Zernio, to the account the customer connected into the
+//             account's Zernio profile (src/publish/connect.js)
+// instagram   directly through Meta's Graph API, our own Meta app (src/publish/instagram.js)
+// auto        Instagram only: our own Meta app when it is set up for the account,
+//             otherwise Zernio when the customer connected Instagram there
+// own-app     TikTok only: our own TikTok app, not built yet (src/publish/tiktok-app.js)
 // dry         to disk, with the exact request a publisher would have received
 //
 // THE DRY PUBLISHER IS THE DEFAULT. A platform's post leaves only when all three
@@ -52,14 +58,25 @@ import { instagramConfigured, isRefusal, isThrottle, isTokenProblem, publishInst
 /** What the pack asks for on a platform, whether or not it can be done now. */
 export const wantedPublisher = (pack, platform) => pack.meta.publishers?.[platform] || pack.meta.publisher || 'dry';
 
-/** The publisher a platform's post will really go through now: 'zernio', 'instagram' or 'dry'. */
+/** The publisher a platform's post will really go through now: 'zernio', 'instagram', 'own-app' or 'dry'. */
 export function publisherFor(pack, platform, { db = null, env = process.env } = {}) {
   const want = wantedPublisher(pack, platform);
   if (env.PUBLISH_MODE !== 'live') return 'dry';
   if (want === 'zernio' && zernioConfigured()) return 'zernio';
   if (want === 'instagram' && platform === 'instagram' && db && instagramConfigured(db, pack, env)) return 'instagram';
+  if (want === 'auto' && platform === 'instagram' && db) {
+    if (instagramConfigured(db, pack, env)) return 'instagram';
+    if (zernioConfigured() && zernioAccountId(db, pack, 'instagram')) return 'zernio';
+  }
+  if (want === OWN_APP && platform === 'tiktok' && tiktokAppConfigured()) return OWN_APP;
   return 'dry';
 }
+
+/** The publisher a dry post's request is written for: the one the pack asks for, with auto resolved as it would be live. */
+const dryShape = (db, pack, platform) => {
+  const want = wantedPublisher(pack, platform);
+  return want === 'auto' ? (db && instagramConfigured(db, pack) ? 'instagram' : 'zernio') : want;
+};
 
 const MAX_ATTEMPTS = 3;
 
@@ -219,7 +236,7 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
       if (asDraft) {
         results[platform] = { ...(await draftRequest(db, pack, post, via, t)), flow };
       } else if (via === 'zernio') {
-        const accountId = pack.meta.zernio?.accounts?.[platform];
+        const accountId = zernioAccountId(db, pack, platform);
         results[platform] = await publishZernio({
           platform,
           accountId,
@@ -232,15 +249,17 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
         });
       } else if (via === 'instagram') {
         results[platform] = await publishInstagram(db, pack, { caption: captionFor(platform), imageUrls: publicUrls(post, platform), aiLabel: Boolean(post.ai_label), priorCreationId: results[platform]?.creationId || null });
+      } else if (via === OWN_APP) {
+        results[platform] = await publishTikTokApp({ caption: captionFor(platform), imageUrls: publicUrls(post, platform), privacy: pack.meta.zernio?.tiktokPrivacy || 'SELF_ONLY', asDraft: false });
       } else {
         const dir = path.join(outDir(), 'published', pack.id, israelDate(t), postId);
         exportPost(db, postId, dir);
         const urls = (post.media[platform] || []).map((f) => `<public url>/${path.basename(f)}`);
-        const want = wantedPublisher(pack, platform);
+        const want = dryShape(db, pack, platform);
         const body =
           want === 'instagram'
             ? { graph: 'POST /{ig-user-id}/media for each slide (is_carousel_item), then media_type=CAROUSEL with children and caption, then POST /{ig-user-id}/media_publish', userId: pack.meta.instagram?.userId || '<instagram user id>', slides: urls, caption: `${captionFor(platform)}${post.ai_label ? '\n\n<AI line>' : ''}`.slice(0, 2200) }
-            : postBody({ platform, accountId: pack.meta.zernio?.accounts?.[platform] || '<account id>', caption: captionFor(platform), imageUrls: urls, privacy: pack.meta.zernio?.tiktokPrivacy || 'SELF_ONLY', aiLabel: Boolean(post.ai_label), title: oneLine(post.hook) });
+            : postBody({ platform, accountId: zernioAccountId(db, pack, platform) || '<account id>', caption: captionFor(platform), imageUrls: urls, privacy: pack.meta.zernio?.tiktokPrivacy || 'SELF_ONLY', aiLabel: Boolean(post.ai_label), title: oneLine(post.hook) });
         writeFileSync(path.join(dir, `${want === 'instagram' ? 'instagram' : 'zernio'}-request.${platform}.json`), `${JSON.stringify(body, null, 2)}\n`);
         results[platform] = { via: 'dry', path: dir, status: 'written', wanted: want };
       }
@@ -309,14 +328,15 @@ function newFlow(db, pack, post, t) {
   return { ...(tiktokMode(pack) === 'draft-now' ? { mode: 'now' } : {}), state: 'waiting', sentAt: at, slotAt: post.slot_at || at, sound: assignSound(db, pack.id, { t }), remindedAt: null };
 }
 
-/** One TikTok draft through `via`: to Zernio, or to disk with the exact request Zernio would have received. */
+/** One TikTok draft through `via`: to Zernio (or our own app, once built), or to disk with the exact request Zernio would have received. */
 async function draftRequest(db, pack, post, via, t) {
-  const accountId = pack.meta.zernio?.accounts?.tiktok;
+  const accountId = zernioAccountId(db, pack, 'tiktok');
   const args = { platform: 'tiktok', caption: captionOf(db, post, 'tiktok'), privacy: pack.meta.zernio?.tiktokPrivacy || 'SELF_ONLY', aiLabel: Boolean(post.ai_label), title: oneLine(post.hook), asDraft: true };
   if (via === 'zernio') {
     const { zernioId, ...rest } = await publishZernio({ ...args, accountId, imageUrls: publicUrls(post, 'tiktok') });
     return { ...rest, draftId: zernioId };
   }
+  if (via === OWN_APP) return publishTikTokApp({ caption: args.caption, imageUrls: publicUrls(post, 'tiktok'), privacy: args.privacy, asDraft: true });
   const dir = path.join(outDir(), 'published', pack.id, israelDate(t), post.id);
   exportPost(db, post.id, dir);
   const urls = (post.media.tiktok || []).map((f) => `<public url>/${path.basename(f)}`);

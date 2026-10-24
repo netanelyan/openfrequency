@@ -6,8 +6,10 @@
 // place the door opens onto:
 //
 //   - WRITES (anything but GET) are allowed to exactly these endpoints: Claude's
-//     messages and batches endpoints, Zernio's create-post endpoint, Meta's two
-//     publishing endpoints for an Instagram account (create a media container,
+//     messages and batches endpoints, Zernio's create-post endpoint and its
+//     create-profile endpoint (an empty folder on our own Zernio team, one per
+//     customer account, that the customer connects their own accounts into),
+//     Meta's two publishing endpoints for an Instagram account (create a media container,
 //     publish it), deleting a post of ours after a takedown notice, and an empty
 //     Web Push to the owner's own browser through the browsers' push services
 //     (src/notify: it carries no words). Nothing else.
@@ -63,6 +65,7 @@ export const WRITE_RULES = [
   { method: 'POST', host: 'api.anthropic.com', path: /^\/v1\/messages$/, why: 'Claude: drafting, review, scoring' },
   { method: 'POST', host: 'api.anthropic.com', path: /^\/v1\/messages\/batches$/, why: "Claude: the day's drafts as one batch, at half price" },
   { method: 'POST', host: 'zernio.com', path: /^\/api\/v1\/posts$/, why: 'Zernio: create a post on our own account' },
+  { method: 'POST', host: 'zernio.com', path: /^\/api\/v1\/profiles$/, why: "Zernio: a customer account's profile, the folder its TikTok and Instagram are connected into" },
   { method: 'POST', host: 'graph.facebook.com', path: new RegExp(`^${V}\\/\\d+\\/(media|media_publish)$`), why: 'Instagram (Facebook Login): a media container on our own account, and publishing it' },
   { method: 'POST', host: 'graph.instagram.com', path: new RegExp(`^${V}\\/\\d+\\/(media|media_publish)$`), why: 'Instagram (Instagram Login): a media container on our own account, and publishing it' },
   { method: 'DELETE', host: 'graph.facebook.com', path: new RegExp(`^${V}\\/\\d+$`), why: 'Instagram (Facebook Login): deleting our own post after a takedown notice' },
@@ -76,7 +79,9 @@ export const WRITE_RULES = [
 /** Reads that are allowed even though the host is special. */
 export const READ_RULES = [
   { host: 'www.googleapis.com', path: /^\/youtube\/v3\/(search|videos)$/, why: 'YouTube Data API: Shorts and their public counts, read only' },
-  { host: 'zernio.com', path: /^\/api\/v1\/(posts\/[A-Za-z0-9_-]+|accounts|analytics)$/, why: 'Zernio: our own posts, accounts and analytics' },
+  { host: 'zernio.com', path: /^\/api\/v1\/(posts\/[A-Za-z0-9_-]+|accounts|accounts\/health|analytics|profiles)$/, why: 'Zernio: our own posts, profiles, connected accounts and their health, and analytics' },
+  { host: 'zernio.com', path: /^\/api\/v1\/connect\/(tiktok|instagram)$/, why: 'Zernio: the link a customer opens to connect their own TikTok or Instagram' },
+  { host: 'zernio.com', path: /^\/api\/v1\/usage$/, why: "Zernio: what it bills, split per customer's profile" },
   { host: 'zernio.com', path: /^\/api\/v1\/accounts\/[A-Za-z0-9_-]+\/tiktok\/commercial-music$/, why: "Zernio: TikTok's trending Commercial Music Library chart, for a post's sound" },
   { host: 'i.ytimg.com', why: 'YouTube thumbnails' },
   // A token reads only what it was granted: our own account, our own media.

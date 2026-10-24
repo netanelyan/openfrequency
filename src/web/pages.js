@@ -8,6 +8,7 @@ import { RIVALS } from '../pipeline/rivals.js';
 import { readFileSync } from 'node:fs';
 import { PARTS as TOPIC_PARTS, PASS as PASS_TOPIC } from '../topics/index.js';
 import { DEFAULT_CUSTOMER_CAP_USD, DEFAULT_PLAN, MAX_PLAN, REDO_REASONS, REJECT_REASON_HE } from '../budget/quota.js';
+import { connectPanel, tiktokModePanel } from './connect.js';
 
 const VERSION = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version;
 
@@ -83,6 +84,7 @@ const EVENT_HE = {
   'post.unposted': 'עברה שעה והפוסט עוד לא עלה',
   'quota.low': 'נשארו 8 הצעות החודש',
   'weekly.summary': 'סיכום השבוע, ביום ראשון ב-9:00',
+  'account.reconnect': 'טיקטוק או אינסטגרם צריכים חיבור מחדש',
 };
 // The checks on the Results page's block rates, by the names src/pipeline/build.js checkOf gives them.
 const CHECK_HE = {
@@ -482,7 +484,7 @@ ${takedownPanel}
 export function accountsPage(ctx, rows) {
   const body = `<div class="head"><h1>החשבון</h1><span class="end"><a class="btn sm" href="/new">${icon('plus')}חשבון חדש</a></span></div>
 <div class="accounts">${rows
-    .map(({ pack, acc, spend, cap, plan, publishers, week, style, quota }) => {
+    .map(({ pack, acc, spend, cap, plan, publishers, week, style, quota, connect }) => {
       const paused = acc.status === 'paused';
       const max = Math.max(1, ...week.days.map((x) => x.n));
       const h = (n) => (n === 0 ? 'h0' : `h${Math.max(1, Math.min(4, Math.ceil((n / max) * 4)))}`);
@@ -497,6 +499,7 @@ ${quota ? quotaRow(quota) : ''}
 <div><div class="row"><span>7 הימים האחרונים</span><b>${week.days.reduce((s, x) => s + x.n, 0)} פורסמו${week.views != null ? ` · ${k(week.views)} צפיות` : ''}</b></div>
 <div class="week" aria-label="פוסטים שפורסמו בכל יום">${week.days.map((x) => `<span title="${esc(shortDate(x.at))}: ${x.n}"><i class="${h(x.n)}"></i>${esc(weekdayNarrow(x.at))}</span>`).join('')}</div></div>
 <dl class="kv"><dt>בתור</dt><dd>${week.counts.queued || 0} ממתינים · ${week.counts.approved || 0} מאושרים</dd><dt>נחסמו השבוע</dt><dd>${week.counts.blocked || 0}</dd><dt>פרסום</dt><dd>${publishers.map((x) => `${PLATFORM_HE[x.platform] || x.platform}: ${publisherHe(x)}`).join(' · ')}</dd>${style ? `<dt>סגנון</dt><dd>${style.theme.style ? `סגנון ${esc(style.theme.style.name)}` : `<span class="ltr">${esc(style.theme.template)}/${esc(style.theme.variant || 'a')}</span>`} · נעול מ-${esc(shortDate(style.at))} · <a href="/styles?account=${esc(pack.id)}">להחליף סגנון</a></dd>` : ''}</dl>
+${connect ? `${connectPanel(ctx, connect)}${tiktokModePanel(ctx, connect)}` : ''}
 ${style?.pending ? `<div class="paused">${icon('alert')}<div><b>הסגנון בקובץ theme.json השתנה</b><div class="small">הפוסטים ממשיכים לצאת בסגנון הקודם עד שעוברים לחדש. פוסטים שכבר צוירו לא משתנים.</div></div>${postButton(ctx, `/accounts/${pack.id}/style`, 'לעבור לסגנון החדש', { cls: 'btn sm' })}</div>` : ''}
 <div class="actions p0">${!paused ? postButton(ctx, `/accounts/${pack.id}/kill`, `${icon('power')}לכבות את החשבון`, { cls: 'btn danger', confirm: 'לחצו שוב כדי לכבות' }) : ''}<a class="btn" href="/sources?account=${esc(pack.id)}">מקורות</a><a class="btn" href="/rivals?account=${esc(pack.id)}">מתחרים</a><a class="btn" href="/sounds?account=${esc(pack.id)}">סאונדים</a></div>
 </article>`;
@@ -809,11 +812,21 @@ ${Object.entries(CATALOG).map(niche).join('')}</section>`;
 
 /* ------------------------------------------------------------ settings */
 
-const VIA_HE = { zernio: 'Zernio', instagram: 'ישירות דרך Meta', dry: 'יבש (לדיסק)' };
+const VIA_HE = { zernio: 'Zernio', instagram: 'ישירות דרך Meta', dry: 'יבש (לדיסק)', auto: 'Meta, ובלעדיו Zernio', 'own-app': 'האפליקציה שלנו בטיקטוק' };
 /** One platform's publisher, and why it is dry when the pack asked for more. */
 function publisherHe({ wants, via }) {
   if (via === wants || wants === 'dry') return VIA_HE[via] || via;
-  const why = process.env.PUBLISH_MODE !== 'live' ? 'PUBLISH_MODE לא live' : wants === 'zernio' ? 'חסר ZERNIO_API_KEY' : 'חסר אסימון או instagram.userId';
+  if (wants === 'auto' && via !== 'dry') return `${VIA_HE[via]} (אוטומטי)`;
+  const why =
+    process.env.PUBLISH_MODE !== 'live'
+      ? 'PUBLISH_MODE לא live'
+      : wants === 'zernio'
+        ? 'חסר ZERNIO_API_KEY'
+        : wants === 'own-app'
+          ? 'עוד לא נבנתה'
+          : wants === 'auto'
+            ? 'אין אסימון של Meta ואין אינסטגרם מחובר ב-Zernio'
+            : 'חסר אסימון או instagram.userId';
   return `${VIA_HE[via]} (מוגדר ל${VIA_HE[wants] === 'Zernio' ? '-Zernio' : `${VIA_HE[wants]}`}, ${why})`;
 }
 
@@ -917,15 +930,16 @@ const LEDGER_COLS = [
 /** One month of every account: the plan used, the cost against the customer's cap, and what the money went to. */
 function ledgerTable(rows, month) {
   const body = rows
-    .map(({ pack, usage: u, ledgers }) => {
+    .map(({ pack, usage: u, ledgers, zernio = {} }) => {
       const l = ledgers.find((x) => x.month === month);
+      const z = zernio[month];
       const by = Object.fromEntries(l.rows.map((r) => [r.kind, r]));
       const other = ['account', 'drafting', 'sample'].reduce((a, k2) => a + (by[k2]?.usd || 0), 0);
       const now = u.month === month;
-      return `<tr><td class="title" data-k="">${accDot(pack.id)} ${esc(pack.meta.displayName)}</td>${now ? `<td class="n" data-k="הצעות">${u.suggested.used}/${u.suggested.limit}</td><td class="n" data-k="החלפות">${u.redos.used}/${u.redos.limit}</td><td class="n" data-k="עלות">${usd(l.total)} / ${usd(u.cost.cap)}${u.cost.reached ? ' <span class="chip warn">בתקרה</span>' : ''}</td>` : `<td class="n" data-k="הצעות">${by.suggestion?.posts ?? 0}</td><td class="n" data-k="החלפות">${by.redo?.posts ?? 0}</td><td class="n" data-k="עלות">${usd(l.total)}</td>`}${LEDGER_COLS.map(([k2, he]) => `<td class="n" data-k="${esc(he)}">${usd(by[k2]?.usd || 0, 3)}${by[k2]?.posts != null && k2 !== 'edit' ? ` <span class="muted small">(${by[k2].posts})</span>` : ''}</td>`).join('')}<td class="n" data-k="אחר">${usd(other, 3)}</td><td class="n" data-k="לפוסט שהגיע">${l.perDelivered == null ? '–' : usd(l.perDelivered, 3)}</td></tr>`;
+      return `<tr><td class="title" data-k="">${accDot(pack.id)} ${esc(pack.meta.displayName)}</td>${now ? `<td class="n" data-k="הצעות">${u.suggested.used}/${u.suggested.limit}</td><td class="n" data-k="החלפות">${u.redos.used}/${u.redos.limit}</td><td class="n" data-k="עלות">${usd(l.total)} / ${usd(u.cost.cap)}${u.cost.reached ? ' <span class="chip warn">בתקרה</span>' : ''}</td>` : `<td class="n" data-k="הצעות">${by.suggestion?.posts ?? 0}</td><td class="n" data-k="החלפות">${by.redo?.posts ?? 0}</td><td class="n" data-k="עלות">${usd(l.total)}</td>`}<td class="n" data-k="Zernio">${z ? usd(z.usd) : '–'}</td>${LEDGER_COLS.map(([k2, he]) => `<td class="n" data-k="${esc(he)}">${usd(by[k2]?.usd || 0, 3)}${by[k2]?.posts != null && k2 !== 'edit' ? ` <span class="muted small">(${by[k2].posts})</span>` : ''}</td>`).join('')}<td class="n" data-k="אחר">${usd(other, 3)}</td><td class="n" data-k="לפוסט שהגיע">${l.perDelivered == null ? '–' : usd(l.perDelivered, 3)}</td></tr>`;
     })
     .join('');
-  return `<div class="scrollx mt12"><table class="table stack"><thead><tr><th>חשבון</th><th>הצעות</th><th>החלפות</th><th>עלות</th>${LEDGER_COLS.map(([, he]) => `<th>${esc(he)}</th>`).join('')}<th>אחר</th><th>לפוסט שהגיע</th></tr></thead><tbody>${body}</tbody></table></div>`;
+  return `<div class="scrollx mt12"><table class="table stack"><thead><tr><th>חשבון</th><th>הצעות</th><th>החלפות</th><th>עלות</th><th>Zernio</th>${LEDGER_COLS.map(([, he]) => `<th>${esc(he)}</th>`).join('')}<th>אחר</th><th>לפוסט שהגיע</th></tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
 /**
@@ -946,7 +960,7 @@ export function quotasPanel(ctx, q) {
     })
     .join('');
   return `<section class="panel" id="quotas"><header><h2>מכסות ועלות לפי לקוח</h2><span class="end muted small ltr">${esc(month)}</span></header>
-<p class="muted small m0">הצעה היא פוסט שעבר את כל הבדיקות והגיע ללקוח, גם אם דחה אותו או שפג תוקפו. פוסט שנחסם אצלנו, וכל תיקון בתוך פוסט, על חשבוננו. בסוגריים: כמה פוסטים.</p>
+<p class="muted small m0">הצעה היא פוסט שעבר את כל הבדיקות והגיע ללקוח, גם אם דחה אותו או שפג תוקפו. פוסט שנחסם אצלנו, וכל תיקון בתוך פוסט, על חשבוננו. בסוגריים: כמה פוסטים. בעמודת Zernio: כמה Zernio גובה על הפרופיל של החשבון, לפי החשבונית שלו. זה מנוי מחוץ לתקרה, והוא מתעדכן פעם ביום.</p>
 ${ledgerTable(q.accounts, month)}
 ${before.length ? `<details class="mt12"><summary class="muted">החודשים הקודמים</summary>${before.map((m) => `<h3 class="lbl ltr">${esc(m)}</h3>${ledgerTable(q.accounts, m)}`).join('')}</details>` : ''}
 <details class="mt12"><summary class="muted">לשנות מכסה או תקרה</summary><p class="muted small">שדה ריק חוזר לברירת המחדל: ${DEFAULT_PLAN.suggested} הצעות, ${DEFAULT_PLAN.redos} החלפות ו-$${DEFAULT_CUSTOMER_CAP_USD} בחודש. חשבון שהגיע לתקרה מושהה, ונשלחת אליך התראה. הוא חוזר לכתוב בתחילת החודש, או מיד כשהתקרה עולה מעל מה שכבר הוצא. התקרה הכללית נשארת מעל כולם.</p>${forms}</details></section>`;

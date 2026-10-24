@@ -50,13 +50,14 @@ test('no engagement endpoint is named anywhere in the code', () => {
   assert.deepEqual(hits, []);
 });
 
-test("the only writes are Claude, our own post on Zernio, publishing our own post on Instagram, deleting it after a takedown, and an empty push to the owner's browser", () => {
+test("the only writes are Claude, our own post and a customer account's profile on Zernio, publishing our own post on Instagram, deleting it after a takedown, and an empty push to the owner's browser", () => {
   assert.deepEqual(
     WRITE_RULES.map((r) => `${r.method} ${r.host} ${r.path.source}`),
     [
       'POST api.anthropic.com ^\\/v1\\/messages$',
       'POST api.anthropic.com ^\\/v1\\/messages\\/batches$',
       'POST zernio.com ^\\/api\\/v1\\/posts$',
+      'POST zernio.com ^\\/api\\/v1\\/profiles$',
       'POST graph.facebook.com ^\\/v\\d+\\.\\d+\\/\\d+\\/(media|media_publish)$',
       'POST graph.instagram.com ^\\/v\\d+\\.\\d+\\/\\d+\\/(media|media_publish)$',
       'DELETE graph.facebook.com ^\\/v\\d+\\.\\d+\\/\\d+$',

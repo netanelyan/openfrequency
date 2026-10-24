@@ -63,6 +63,15 @@ Before phase 2 this project would have connected 6 accounts (TikTok and
 Instagram for three packs): $24 a month on its own. Run `npm run zernio:check`
 to see the count Zernio really bills.
 
+**Customers (2026-10-24).** Each customer account has its own Zernio profile, and
+the customer connects their TikTok, and their Instagram where our own Meta app does
+not publish it. Profiles are free. A customer adds 1 or 2 connected accounts, at the
+band the total has reached: $6 each up to 10 accounts in all, $3 from the 11th, $1
+from the 101st. So a customer with TikTok and Instagram on Zernio costs $12 a month
+early on and $6 past ten accounts. Zernio's own split of the bill per profile is read
+daily into the operator's ledger (Settings, "מכסות ועלות לפי לקוח", the Zernio column),
+next to the API spend and outside the cap.
+
 ## Per post: before and after each change
 
 ### How it was measured

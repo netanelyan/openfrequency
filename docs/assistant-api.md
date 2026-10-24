@@ -151,12 +151,37 @@ approved post's old TikTok draft stays in the app and a new one goes, as on the 
              "redos": { "used": 3, "held": 0, "limit": 10, "left": 7 } },
   "next": [{ "id": "...", "coverLine": "...", "slotAt": "...", "status": "approved" }],
   "week": { "from": "...", "to": "...", "published": 9, "views": 48210,
-            "best": { "id": "...", "coverLine": "...", "views": 15002, "publishedAt": "..." } }
+            "best": { "id": "...", "coverLine": "...", "views": 15002, "publishedAt": "..." } },
+  "connections": [{ "platform": "tiktok", "state": "connected", "username": "...", "issue": null, "checkedAt": "...", "url": null }]
 }] }
 ```
 
 `week` is the last seven days, by when posts went out. `views` adds each platform's newest reading per post, and is
-null while none was read. `next` is up to five posts with a slot still ahead.
+null while none was read. `next` is up to five posts with a slot still ahead. `connections` is each platform's
+connection, as below, without links.
+
+### `GET /customers/:ws/accounts/:id/connect`
+
+The account's TikTok and Instagram, and for each one that is not connected or stopped working, the link to send the
+customer ("tap here to connect"). Another workspace's account is `404 not_found`.
+
+```json
+{ "ok": true, "account": { "id": "plants", "name": "...", "handle": "..." }, "linksExpireAt": "...",
+  "platforms": [
+    { "platform": "tiktok", "state": "none", "username": "", "issue": null, "checkedAt": null, "url": "https://<teder>/connect/plants/tiktok?e=...&s=..." },
+    { "platform": "instagram", "state": "meta", "username": "", "issue": null, "checkedAt": null, "url": null } ] }
+```
+
+`state` is `connected`, `reconnect` (Zernio says the token expired or was revoked, or a permission is missing:
+`issue` says which, in Zernio's words), `none`, or `meta` (Instagram, published through Teder's own Meta app: nothing
+to connect). `url` is set for `none` and `reconnect` while Zernio is configured, else null.
+
+The link opens Teder, not Zernio: Zernio's own connect link works for 30 minutes, so Teder asks for a fresh one at the
+tap and sends the browser on. It opens for 72 hours, for that account and platform only, and needs no sign-in. Whoever
+holds it can connect an account there until it expires, so send it to the customer alone. Zernio's welcome screen comes
+first, then TikTok's or Instagram's consent screen, then a page of Teder's saying whether it connected. What is
+connected is read from Zernio, never from that page's address. A reconnect connects the same account again, and its
+history is kept.
 
 ### `GET /customers/:ws/posts/:id/bundle`
 
@@ -176,7 +201,7 @@ The customer's choices: which events reach them, and their quiet hours.
 
 ```json
 { "ok": true, "customer": 7,
-  "events": { "post.ready": true, "post.reminder": true, "post.published": true, "post.unposted": true, "quota.low": true, "weekly.summary": true },
+  "events": { "post.ready": true, "post.reminder": true, "post.published": true, "post.unposted": true, "quota.low": true, "weekly.summary": true, "account.reconnect": true },
   "quiet": { "nights": true, "shabbat": true } }
 ```
 
@@ -203,6 +228,7 @@ sent that minute.
 | `post.unposted` | 60 minutes after the slot it is still not out | `post`, `delivery`, `platforms`, `minutesLate` |
 | `quota.low` | 8 suggested slideshows left this month (once a month per account) | `account`, `quota` |
 | `weekly.summary` | Sunday at 09:00 Israel time, one per customer | `from`, `to`, `accounts: [{ account, week, quota }]` |
+| `account.reconnect` | Zernio says a TikTok or Instagram the customer connected stopped working (Teder reads it hourly), once per break | `account`, `platform`, `username`, `issue`, `connectUrl`, `linkExpiresAt` |
 
 `delivery` is `drafts` (the post waits in the TikTok app's drafts, with `sound` to add) or `by_hand` (it never reached
 TikTok: the customer posts it themselves, from the bundle). `platforms` says where each platform stands: `out`,
@@ -216,7 +242,7 @@ hour on unless something says they posted it.
 links are fresh, and an event that is no longer true by then is dropped: a `post.ready` for a post approved on the
 website meanwhile, or a reminder for a post that went out or is past its hour (the `post.unposted` covers it). Each
 event is also worth sending only for so long (a reminder 3 hours, unposted 14, published 24, ready 48, quota.low 7
-days, the summary 3 days). Past that it expires unsent.
+days, the summary and a reconnect 3 days). A reconnect fixed before it goes is dropped too. Past that it expires unsent.
 
 **Quiet hours.** With `quiet.nights`, nothing is sent from 22:00 to 08:00 Israel time. With `quiet.shabbat`, nothing
 from before candle lighting to after nightfall on Shabbat and on the festivals (the same windows Teder never posts in,

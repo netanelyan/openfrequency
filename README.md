@@ -154,7 +154,7 @@ the crop aimed at the face. Otherwise the slide keeps its graphic.
 
 | Rule | Where it is enforced |
 |---|---|
-| 1. Official APIs only; no likes, follows, comments, DMs or logged-in reading | `src/core/net.js` is the only `fetch`. Its write allowlist is Claude, Zernio's create-post, Meta's two publishing endpoints, deleting our own Instagram post after a takedown notice, and an empty Web Push to the owner's own browser (no words in it; never Telegram, a social host). It refuses Zernio's inbox and every Graph edge for comments, mentions, tags, messages, hashtags and other accounts by name. Tests scan the code for any other `fetch` |
+| 1. Official APIs only; no likes, follows, comments, DMs or logged-in reading | `src/core/net.js` is the only `fetch`. Its write allowlist is Claude, Zernio's create-post and create-profile (a customer account's folder on our own Zernio team), Meta's two publishing endpoints, deleting our own Instagram post after a takedown notice, and an empty Web Push to the owner's own browser (no words in it; never Telegram, a social host). It refuses Zernio's inbox and every Graph edge for comments, mentions, tags, messages, hashtags and other accounts by name. Tests scan the code for any other `fetch` |
 | 2. Each account a distinct brand | `src/packs/validate.js`: no two packs share a template, a display face, a handle, a name or a palette too close to tell apart; under the slide styles, two accounts may share a style but never a style and a close accent; a cross-promotion check on every post |
 | 3. Honest by construction | `src/verify/claims.js`: every quote verbatim in a stored document of that account's approved source, every number in its quotes, the render gate's token. `src/voice/honesty.js` refuses invented experience and fake badges or metrics |
 | 4. AI disclosure | TikTok's `video_made_with_ai` flag through Zernio; a caption line on Instagram |
@@ -313,8 +313,23 @@ post's hour the owner gets one notification to publish it (Settings turns them o
 per device; on an iPhone, from Teder added to the home screen). The engine never
 publishes to TikTok itself in this mode. `"direct"` publishes at the slot, and
 `"draft-fallback"` sends the draft at the slot and publishes it directly an hour
-later if the owner did not. `npm run zernio:check` checks the key, each account id
+later if the owner did not. The account page switches between the drafts and
+`"direct"`, which is public. `npm run zernio:check` checks the key, each account id
 and the bill, and can send one private test post.
+
+**Connecting a customer's accounts.** Each account gets its own Zernio profile the
+first time someone presses "connect" on the account page or the onboarding page, or
+opens the link the WhatsApp assistant sends (`GET /customers/:ws/accounts/:id/connect`,
+[docs/assistant-api.md](docs/assistant-api.md)). The customer logs into their own
+TikTok or Instagram on Zernio's screens. Teder reads what got connected, and whether it
+still works, from Zernio after a connect and once an hour. An expired token shows as
+"צריך לחבר מחדש", and the assistant is told once with a fresh link. Only
+`ZERNIO_API_KEY` lives in `$OF_HOME/.env`; the profile and account ids live in the
+database. What Zernio bills each profile is read daily into the operator's ledger, next
+to the API spend. `"instagram": "auto"` (new packs' default) publishes Instagram
+through our own Meta app when the account has it, and otherwise through Zernio.
+`"tiktok": "own-app"` is kept for our own TikTok app, which is not built yet
+(`src/publish/tiktok-app.js`); until it is, those posts are written to disk.
 
 **Instagram** goes directly through Meta's Graph API as a carousel, free. Two logins
 are supported:

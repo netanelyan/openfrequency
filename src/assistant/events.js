@@ -7,7 +7,8 @@ import { addDays, israelDate, israelHour, israelInstant, weekday } from '../sche
 import { restWindow } from '../schedule/shabbat.js';
 import { oneLine } from '../rules/overlay.js';
 import { assistantSecret, DIR, linkBase, signature } from './sign.js';
-import { accountOf, delivery, isOut, numbers, platformStates, postView, prefsOf, quotaOf } from './data.js';
+import { accountOf, connectionsOf, delivery, isOut, numbers, platformStates, postView, prefsOf, quotaOf } from './data.js';
+import { CONNECT_LINK_TTL_S } from '../publish/connect.js';
 
 // What Teder tells the WhatsApp assistant (openfrequency-toran), which tells the customer (docs/assistant-api.md):
 //
@@ -17,6 +18,8 @@ import { accountOf, delivery, isOut, numbers, platformStates, postView, prefsOf,
 //   post.unposted    an hour after the slot it is still not out
 //   quota.low        QUOTA_LOW suggested slideshows left this month
 //   weekly.summary   Sunday at 09:00 Israel time: the week's posts, views and best post, per account
+//   account.reconnect  Zernio says the TikTok or Instagram the customer connected stopped working (an expired or
+//                    revoked token, a missing permission): with a link to connect it again, once per break
 //
 // Every event is found from the database at each tick, never raised from inside the pipeline, so nothing that
 // writes a post has to remember to tell anyone, and an event missed while the server was down is found when it comes
@@ -47,6 +50,7 @@ export const KEEP_MS = {
   'post.unposted': 14 * HOUR,
   'quota.low': 7 * 24 * HOUR,
   'weekly.summary': 3 * 24 * HOUR,
+  'account.reconnect': 3 * 24 * HOUR,
 };
 /** Waits before each retry of a failed send; after the last one the event has failed. */
 export const RETRY_MIN = [1, 5, 15, 60, 180];
@@ -132,6 +136,10 @@ export function detect(ctx, { t = now() } = {}) {
     for (const p of posts("SELECT id FROM posts WHERE account_id = ? AND sample = 0 AND status = 'published' AND published_at >= ?", pack.id, iso(t - KEEP_MS['post.published']))) {
       if (isOut(p, pack)) keep({ ...base, type: 'post.published', key: `post.published:${p.id}`, postId: p.id });
     }
+    // A connection that broke (src/publish/connect.js records when): one message per break, with a fresh link at sending.
+    for (const r of db.all("SELECT platform, broken_at FROM zernio_connections WHERE account_id = ? AND status = 'reconnect' AND broken_at IS NOT NULL", pack.id)) {
+      keep({ ...base, type: 'account.reconnect', key: `account.reconnect:${pack.id}:${r.platform}:${r.broken_at}`, data: { platform: r.platform } });
+    }
     const u = usage(db, pack.id, t);
     if (u.suggested.used > 0 && u.suggested.left <= QUOTA_LOW) keep({ ...base, type: 'quota.low', key: `quota.low:${pack.id}:${u.month}`, data: { month: u.month } });
   }
@@ -192,6 +200,11 @@ export function payloadOf(ctx, row, link) {
       const from = Date.parse(data.from);
       const to = Date.parse(data.to);
       return { from: data.from, to: data.to, accounts: mine.map(({ pack: p }) => ({ account: accountOf(p), week: numbers(db, p.id, from, to), quota: quotaOf(db, p.id, t) })) };
+    }
+    case 'account.reconnect': {
+      const c = connectionsOf(db, pack, link).find((x) => x.platform === data.platform);
+      if (!c || c.state !== 'reconnect' || !c.url) return null;
+      return { account: accountOf(pack), platform: c.platform, username: c.username, issue: c.issue, connectUrl: c.url, linkExpiresAt: new Date(t + CONNECT_LINK_TTL_S * 1000).toISOString() };
     }
     default:
       return null;

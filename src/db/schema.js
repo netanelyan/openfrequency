@@ -632,4 +632,38 @@ export const MIGRATIONS = [
   );
   CREATE INDEX demo_opens_demo ON demo_opens(demo_id, at);
   `,
+  `
+  -- Zernio, per customer account (src/publish/connect.js): the account's own Zernio profile, made on demand, and what
+  -- the customer connected into it. pack.json's zernio.profileId and zernio.accounts (typed in by hand before this)
+  -- are read when there is no row, and copied in the first time.
+  ALTER TABLE accounts ADD COLUMN zernio_profile_id TEXT;
+
+  -- One row per account and platform once anything was connected. status: connected | reconnect (Zernio says the
+  -- token expired or was revoked, or a permission is missing: the customer connects again, the same account keeps
+  -- its history). Read from Zernio after a connect and once an hour, never from what a browser says.
+  CREATE TABLE zernio_connections (
+    account_id        TEXT NOT NULL REFERENCES accounts(id),
+    platform          TEXT NOT NULL CHECK (platform IN ('tiktok','instagram')),
+    zernio_account_id TEXT NOT NULL,
+    username          TEXT,
+    status            TEXT NOT NULL CHECK (status IN ('connected','reconnect')),
+    issue             TEXT,
+    broken_at         TEXT,                      -- when it last went from connected to reconnect: one message per break
+    connected_at      TEXT NOT NULL,
+    checked_at        TEXT NOT NULL,
+    PRIMARY KEY (account_id, platform)
+  );
+
+  -- What Zernio billed for one account's profile in one month (YYYY-MM, the month the ledger counts): its share of Zernio's
+  -- usage-based invoice, as Zernio splits it per profile, read once a day and replaced. Outside the monthly cap on
+  -- Claude and the other metered APIs (src/budget/ledger.js): it is a subscription, shown next to them.
+  CREATE TABLE zernio_costs (
+    account_id    TEXT NOT NULL,
+    month         TEXT NOT NULL,
+    profile_id    TEXT NOT NULL,
+    usd           REAL NOT NULL,
+    read_at       TEXT NOT NULL,
+    PRIMARY KEY (account_id, month)
+  );
+  `,
 ];

@@ -6,6 +6,7 @@ import { createPack } from '../onboarding/pack.js';
 import { buildPost, loadPost } from '../pipeline/build.js';
 import { ActionError } from './actions.js';
 import { postCard } from './pages.js';
+import { connectData, connectPanel } from './connect.js';
 import { accDot, csrfField, esc, icon, k, layout, postButton, stamp } from './ui.js';
 
 // The new-account flow, on the website:
@@ -126,7 +127,8 @@ function detailPage(ctx, pc, r) {
 ${good >= 5 && !reviewed && r.status !== 'live' ? postButton(pc, `/new/${r.id}/reviewed`, `${icon('check')}עברתי על הדוגמאות`, { cls: 'btn' }) : ''}
 ${reviewed ? postButton(pc, `/new/${r.id}/live`, `${icon('power')}להעלות לאוויר, במצב אישור`, { cls: 'btn primary', confirm: 'לחצו שוב כדי להעלות לאוויר' }) : ''}
 ${r.status === 'live' ? '<span class="chip ok">באוויר</span>' : ''}</div>
-<p class="muted small mt12">${good} מתוך 5 דוגמאות עברו את כל הבדיקות.</p></section>
+<p class="muted small mt12">${good} מתוך 5 דוגמאות עברו את כל הבדיקות.</p>
+${pack ? `<p class="muted mt12">כדי שהפוסטים יגיעו לטיקטוק ולאינסטגרם, מחברים כאן את החשבונות. אפשר לעשות את זה גם אחרי שהחשבון באוויר, מדף החשבון.</p>${connectPanel(pc, connectData(ctx, pack))}` : ''}</section>
 <div class="posts mt16">${samples.map((p) => postCard(pc, p, pack)).join('')}</div>`
   );
 }

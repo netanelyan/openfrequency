@@ -119,8 +119,11 @@ export async function createPack(ctx, { seed, candidates, displayName, handle, e
     topics: [seed.niche, ...(seed.topics || [])].filter(Boolean),
     audience: seed.audience || '',
     platforms: ['tiktok', 'instagram'],
-    publisher: 'dry',
-    zernio: { profileId: '', accounts: { tiktok: '', instagram: '' }, tiktokPrivacy: 'SELF_ONLY' },
+    // Through Zernio, to the accounts the customer connects (src/publish/connect.js): TikTok to its drafts, Instagram
+    // through our own Meta app when it is set up for the account, else Zernio. Nothing leaves before PUBLISH_MODE=live
+    // and a connected account.
+    publishers: { tiktok: 'zernio', instagram: 'auto' },
+    zernio: { tiktokMode: 'draft-now', tiktokPrivacy: 'SELF_ONLY' },
     schedule: { postsPerDay: 1, windows: [[12, 14], [19, 22]], slots: ['19:30'], slotsByDay: { 5: ['12:30'], 6: ['21:00'] } },
     autonomy: { mode: 'approve' },
     budget: { monthlyUsd: 15 },

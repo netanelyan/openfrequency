@@ -232,6 +232,11 @@ const casesFor = () => {
     ['/accounts/bravo/kill'],
     ['/accounts/bravo/resume'],
     ['/accounts/bravo/quota', { suggested: '1', redos: '0', cap: '0' }],
+    // Connecting B's TikTok or Instagram, reading B's connections, or setting how B's TikTok goes out: B's alone.
+    ['/accounts/bravo/connect/tiktok'],
+    ['/accounts/bravo/connect/instagram'],
+    ['/accounts/bravo/connections'],
+    ['/accounts/bravo/tiktok', { mode: 'direct' }],
     ['/accounts/loose/kill'],
     ['/settings/kill', { on: '1' }],
     ['/settings/budget', { budget: '100' }],

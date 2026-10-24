@@ -2,10 +2,41 @@ import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { styleConfigProblems } from '../render/styles/tokens.js';
 
-// The one setting of a pack the website writes: its slide style (pack.json "style"), when the owner picks one on
-// the Accounts page or a style test settles. Everything else in a pack is the owner's to edit by hand. The file is
-// read fresh, only "style" is replaced, and it is written whole (a temporary file renamed over it), so a hand edit
-// made since the engine started is kept.
+// The settings of a pack the website writes: its slide style (pack.json "style"), when the owner picks one on the
+// Accounts page or a style test settles, and how its TikTok posts go out (zernio.tiktokMode, zernio.tiktokPrivacy,
+// publishers.tiktok). Everything else in a pack is the owner's to edit by hand. The file is read fresh, only those
+// keys are replaced, and it is written whole (a temporary file renamed over it), so a hand edit made since the engine
+// started is kept.
+
+function rewrite(pack, change) {
+  const file = path.join(pack.dir, 'pack.json');
+  const raw = readFileSync(file, 'utf8');
+  const meta = JSON.parse(raw);
+  change(meta);
+  const eol = raw.includes('\r\n') ? '\r\n' : '\n';
+  writeFileSync(`${file}.tmp`, `${JSON.stringify(meta, null, 2).replace(/\n/g, eol)}${eol}`);
+  renameSync(`${file}.tmp`, file);
+  return meta;
+}
+
+/**
+ * How the pack's TikTok posts go out: { tiktokMode, tiktokPrivacy, tiktokPublisher } (each optional), checked by the
+ * caller against TIKTOK_MODES and PLATFORM_PUBLISHERS. Returns the pack's new zernio and publishers blocks.
+ */
+export function setPackPublishing(pack, { tiktokMode, tiktokPrivacy, tiktokPublisher } = {}) {
+  const meta = rewrite(pack, (m) => {
+    m.zernio = { ...(m.zernio || {}) };
+    if (tiktokMode) m.zernio.tiktokMode = tiktokMode;
+    if (tiktokPrivacy) m.zernio.tiktokPrivacy = tiktokPrivacy;
+    if (tiktokPublisher) {
+      // A pack with only the old single "publisher" keeps it for Instagram: only TikTok's choice changes.
+      m.publishers = { ...(m.publishers || (m.publisher ? Object.fromEntries((m.platforms || []).map((p) => [p, m.publisher])) : {})), tiktok: tiktokPublisher };
+    }
+  });
+  pack.meta.zernio = meta.zernio;
+  if (meta.publishers) pack.meta.publishers = meta.publishers;
+  return { zernio: meta.zernio, publishers: meta.publishers || null };
+}
 
 /** Set a pack's style (a patch of { name, accent, bg, panel, test }; null for a key removes it). Returns the new style. */
 export function setPackStyle(pack, patch) {

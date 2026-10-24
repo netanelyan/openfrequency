@@ -20,7 +20,8 @@ import { loadPost } from '../pipeline/build.js';
 import { lockedStyle } from '../render/style.js';
 import { latestNotification } from '../notify/index.js';
 import { assistantApi, isAssistantPath } from '../assistant/api.js';
-import { assistantSecret, mediaLinkOk } from '../assistant/sign.js';
+import { assistantSecret, linkBase, mediaLinkOk } from '../assistant/sign.js';
+import { connectRoutes, goPage, publicConnect } from './connect.js';
 
 // The website. It listens on 127.0.0.1 only; on the VPS, Caddy holds the
 // certificate and passes requests to it.
@@ -38,10 +39,12 @@ import { assistantSecret, mediaLinkOk } from '../assistant/sign.js';
 //   - every POST carries the CSRF token derived from its session, and an Origin
 //     that is ours; a read-only session (the operator viewing as a customer)
 //     changes nothing
-// Two doors need no session. /internal/assistant/* is the WhatsApp assistant's
+// Three doors need no session. /internal/assistant/* is the WhatsApp assistant's
 // API (src/assistant/api.js): this machine only, never through the proxy, every
 // request signed. /m/... is one rendered slide behind a signed link that expires,
-// handed out by that API for WhatsApp to fetch.
+// handed out by that API for WhatsApp to fetch. /connect/<account>/<platform> is the
+// link that API hands on to connect a TikTok or Instagram, and where Zernio sends the
+// browser back (src/web/connect.js): its signature is the permission.
 // Server-rendered HTML with one small script; everything works without it.
 
 export const HOST = '127.0.0.1';
@@ -117,6 +120,9 @@ export function createHandler(ctx, { port, env = process.env, accounts = null } 
   };
 
   const assistant = assistantApi(ctx, { env, port });
+  // The connect links: where Zernio sends the browser back, and what they are signed with (the assistant's secret,
+  // which hands them on; the session secret where there is no assistant).
+  const connectLinks = () => ({ base: linkBase({ env, port }), secret: assistantSecret(env) || secret });
   /** A post's rendered slide, read only from inside the data folder; null when there is none. */
   const slideFile = (post, platform, idx) => {
     const file = post?.media?.[platform]?.[Number(idx)];
@@ -169,6 +175,7 @@ export function createHandler(ctx, { port, env = process.env, accounts = null } 
     ...onboardingRoutes(),
     ...stylesRoutes(),
     ...demosRoutes(),
+    ...connectRoutes(connectLinks),
   ];
 
   const handler = async function handler(req, res) {
@@ -201,6 +208,16 @@ export function createHandler(ctx, { port, env = process.env, accounts = null } 
           const ok = mediaLinkOk(assistantSecret(env), { postId: ml[1], platform: ml[2], idx: ml[3], e: url.searchParams.get('e'), s: url.searchParams.get('s') });
           const file = ok ? slideFile(loadPost(ctx.db, ml[1]), ml[2], ml[3]) : null;
           return file ? sendPostSlide(res, file, 'private, max-age=600') : send(req, res, 404, 'no such slide', 'text/plain; charset=utf-8');
+        }
+        // Connecting a TikTok or Instagram from a link the assistant sent, and back from Zernio (src/web/connect.js).
+        const cn = /^\/connect\/([\w-]+)\/(tiktok|instagram)(\/done)?$/.exec(p);
+        if (cn) {
+          const [status, html, location] = await publicConnect(ctx, { account: cn[1], platform: cn[2], done: Boolean(cn[3]), query: url.searchParams, links: connectLinks() });
+          if (location) {
+            res.writeHead(302, { location, 'cache-control': 'no-store', 'referrer-policy': 'no-referrer' });
+            return res.end();
+          }
+          return send(req, res, status, html, 'text/html; charset=utf-8', { 'x-robots-tag': 'noindex', 'referrer-policy': 'no-referrer' });
         }
         // The service worker, from the root so its scope is the whole site.
         if (p === '/sw.js') return send(req, res, 200, readFileSync(path.join(STATIC, 'sw.js')), 'text/javascript; charset=utf-8', { 'cache-control': 'no-cache', 'service-worker-allowed': '/' });
@@ -301,6 +318,7 @@ export function createHandler(ctx, { port, env = process.env, accounts = null } 
             const r = await fn(c, user, m, form);
             ctx._plan = null; // a change can move the budget plan: the next page computes it afresh
             if (ajax) return json(req, res, 200, r);
+            if (r.go) return send(req, res, 200, goPage(r.go, { name: r.goName, v: V }), 'text/html; charset=utf-8', { 'referrer-policy': 'no-referrer' });
             const back = r.redirect || (req.headers.referer && new URL(req.headers.referer).host === host ? new URL(req.headers.referer).pathname + new URL(req.headers.referer).search : '/');
             return redirect(res, back, { 'set-cookie': flash(r.message) });
           } catch (e) {

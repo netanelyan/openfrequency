@@ -5,7 +5,8 @@ import { REDO_REASONS } from '../budget/quota.js';
 import * as act from '../web/actions.js';
 import { forWorkspace, owns } from '../web/workspace.js';
 import { assistantSecret, linkBase, LINK_TTL_S, verify } from './sign.js';
-import { accountStatus, bundleOf, postView, prefsOf, quotaOf, setPrefs } from './data.js';
+import { accountOf, accountStatus, bundleOf, connectionsOf, postView, prefsOf, quotaOf, setPrefs } from './data.js';
+import { CONNECT_LINK_TTL_S } from '../publish/connect.js';
 
 // The WhatsApp assistant's door into Teder (openfrequency-toran; the contract is docs/assistant-api.md).
 //
@@ -93,6 +94,7 @@ export function assistantApi(ctx, { env = process.env, port }) {
     ['POST', /^posts\/([\w-]+)\/reject$/, reject],
     ['POST', /^posts\/([\w-]+)\/edit$/, edit],
     ['GET', /^status$/, status],
+    ['GET', /^accounts\/([\w-]+)\/connect$/, connect],
     ['GET', /^settings$/, settingsGet],
     ['POST', /^settings$/, settingsSet],
   ];
@@ -158,6 +160,16 @@ export function assistantApi(ctx, { env = process.env, port }) {
   function status({ c, workspaceId }) {
     const live = c.packs.filter((p) => c.db.get('SELECT status FROM accounts WHERE id = ?', p.id)?.status !== 'onboarding');
     return { ok: true, customer: workspaceId, accounts: live.map((p) => accountStatus(c.db, p)) };
+  }
+
+  /**
+   * One account's TikTok and Instagram: what is connected, and for what is not (or stopped working), the link to send
+   * the customer. The link opens Teder, which asks Zernio for a fresh connect link at the tap; it works for 72 hours.
+   */
+  function connect({ c, params: [id], link }) {
+    const pack = c.pack(id);
+    if (!pack || !owns(c, id)) throw new ApiError(404, 'not_found', 'no such account');
+    return { ok: true, account: accountOf(pack), linksExpireAt: new Date(link.t + CONNECT_LINK_TTL_S * 1000).toISOString(), platforms: connectionsOf(c.db, pack, link) };
   }
 
   function settingsGet({ workspaceId }) {

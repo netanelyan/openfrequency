@@ -29,6 +29,8 @@ import { PASS, topicById, topicsOf, watchList } from '../topics/index.js';
 import { youtubeConfigured } from '../trends/index.js';
 import { owns } from './workspace.js';
 import { prefsOf } from '../assistant/data.js';
+import { connectData } from './connect.js';
+import { zernioCost } from '../publish/connect.js';
 
 // What each page shows, as plain queries. Pages never touch the database
 // themselves, so what a page can see is listed here.
@@ -105,7 +107,7 @@ export function accountRows(ctx) {
     const p = plan.accounts.find((a) => a.id === pack.id) || null;
     const cap = p ? p.alloc : 0;
     // The customer's month: suggestions and redos used of their plan, and their own cost cap.
-    return { pack, acc, spend: spend.usd, cap, plan: p, reached: p ? spend.usd >= cap - 1e-9 : false, publishers: publishersOf(ctx, pack), quota: usage(ctx.db, pack.id) };
+    return { pack, acc, spend: spend.usd, cap, plan: p, reached: p ? spend.usd >= cap - 1e-9 : false, publishers: publishersOf(ctx, pack), quota: usage(ctx.db, pack.id), connect: connectData(ctx, pack) };
   });
 }
 
@@ -327,7 +329,8 @@ export function quotasData(ctx, t = now()) {
   const months = lastMonths(3, t);
   return {
     months,
-    accounts: (ctx.root || ctx).packs.map((pack) => ({ pack, usage: usage(ctx.db, pack.id, t), ledgers: months.map((m) => ledger(ctx.db, pack.id, m)) })),
+    // Zernio's bill for the account's profile, next to the API spend: a subscription, outside the cap.
+    accounts: (ctx.root || ctx).packs.map((pack) => ({ pack, usage: usage(ctx.db, pack.id, t), ledgers: months.map((m) => ledger(ctx.db, pack.id, m)), zernio: Object.fromEntries(months.map((m) => [m, zernioCost(ctx.db, pack.id, m)])) })),
   };
 }
 

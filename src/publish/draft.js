@@ -14,6 +14,7 @@ import { canRun } from '../autonomy/rails.js';
 import { notify } from '../notify/index.js';
 import { externalPosts, matchDraft, postBody, publishZernio, zernioConfigured } from './zernio.js';
 import { captionOf, publicUrls, publisherFor, recheck, soundFor, tiktokMode } from './index.js';
+import { zernioAccountId } from './connect.js';
 
 const MINUTE = 60_000;
 
@@ -83,7 +84,7 @@ export async function watchDrafts(ctx, { t = now(), list = null, send = null } =
     const external = async () => {
       if (ext) return ext;
       const from = Math.min(...posts.map((p) => Date.parse(p.publish.tiktok.flow.sentAt))) - 10 * MINUTE;
-      const accountId = pack.meta.zernio?.accounts?.tiktok;
+      const accountId = zernioAccountId(db, pack, 'tiktok');
       try {
         ext = list ? await list(pack, from) : zernioConfigured() && accountId ? await externalPosts(accountId, { from }) : [];
       } catch (e) {
@@ -188,7 +189,7 @@ async function fallback(ctx, pack, post, { t, said }) {
   try {
     let r;
     if (via === 'zernio') {
-      const accountId = pack.meta.zernio?.accounts?.tiktok;
+      const accountId = zernioAccountId(db, pack, 'tiktok');
       r = await publishZernio({
         platform: 'tiktok', accountId, caption: captionOf(db, post, 'tiktok'), imageUrls: publicUrls(post, 'tiktok'), privacy: pack.meta.zernio?.tiktokPrivacy || 'SELF_ONLY',
         // Direct, label and all (HARD RULE 4): a platform that refuses the label refuses the post, never takes it unlabelled.
@@ -198,7 +199,7 @@ async function fallback(ctx, pack, post, { t, said }) {
       const dir = path.join(outDir(), 'published', pack.id, israelDate(t), post.id);
       exportPost(db, post.id, dir);
       const urls = (post.media.tiktok || []).map((f) => `<public url>/${path.basename(f)}`);
-      const body = postBody({ platform: 'tiktok', accountId: pack.meta.zernio?.accounts?.tiktok || '<account id>', caption: captionOf(db, post, 'tiktok'), imageUrls: urls, privacy: pack.meta.zernio?.tiktokPrivacy || 'SELF_ONLY', aiLabel: Boolean(post.ai_label), aiAsDraft: false, title: oneLine(post.hook) });
+      const body = postBody({ platform: 'tiktok', accountId: zernioAccountId(db, pack, 'tiktok') || '<account id>', caption: captionOf(db, post, 'tiktok'), imageUrls: urls, privacy: pack.meta.zernio?.tiktokPrivacy || 'SELF_ONLY', aiLabel: Boolean(post.ai_label), aiAsDraft: false, title: oneLine(post.hook) });
       writeFileSync(path.join(dir, 'zernio-request.tiktok.fallback.json'), `${JSON.stringify(body, null, 2)}\n`);
       r = { via: 'dry', path: dir, status: 'written' };
     }
