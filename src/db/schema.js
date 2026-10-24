@@ -519,4 +519,38 @@ export const MIGRATIONS = [
   ALTER TABLE push_subs ADD COLUMN workspace_id INTEGER;
   DROP TABLE users;
   `,
+  `
+  -- The owner line (src/owner, docs/internal-assistant.md): openfrequency-toran tells a workspace's owner on WhatsApp
+  -- what Teder has for them, and acts on their posts for them. When a message may reach them, per workspace: quiet
+  -- hours on the Israel clock, and none over Shabbat and the festivals. No row is the default (22:00 to 08:00, Shabbat on).
+  CREATE TABLE owner_line (
+    workspace_id  INTEGER PRIMARY KEY,
+    quiet_start   TEXT NOT NULL,                 -- HH:MM, Israel time
+    quiet_end     TEXT NOT NULL,
+    shabbat       INTEGER NOT NULL DEFAULT 1,
+    updated_at    TEXT NOT NULL,
+    updated_by    TEXT
+  );
+
+  -- The outbox (src/owner/events.js): every event for Toran, written where it happens and sent beside the runner,
+  -- tried again until a day has passed. once_key holds an event that happens once (a reminder per post, a quota
+  -- warning per month) to one row.
+  CREATE TABLE owner_events (
+    id            TEXT PRIMARY KEY,              -- evt_..., what Toran tells a repeat by
+    type          TEXT NOT NULL,
+    workspace_id  INTEGER NOT NULL,
+    once_key      TEXT UNIQUE,
+    data_json     TEXT NOT NULL,
+    at            TEXT NOT NULL,
+    state         TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending','sent','dropped')),
+    tries         INTEGER NOT NULL DEFAULT 0,
+    next_at       TEXT NOT NULL,
+    last_error    TEXT,
+    sent_at       TEXT
+  );
+  CREATE INDEX owner_events_due ON owner_events(state, next_at);
+
+  -- Who made an edit, by name: the dashboard's user, or the owner on WhatsApp (wa:<phone>), who has no user id here.
+  ALTER TABLE edits ADD COLUMN actor TEXT;
+  `,
 ];

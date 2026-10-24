@@ -20,6 +20,7 @@ import { currentToken, igConfig, refreshToken } from '../publish/instagram.js';
 import { fightWeekSlots, parseEvents, recapsDue, saveEvents } from '../schedule/events.js';
 import { refreshSource } from '../sources/index.js';
 import { morningFeedback, withDirectives } from '../metrics/feedback.js';
+import { ownerTick, postsReady } from '../owner/events.js';
 
 // The engine running on its own: one tick a minute.
 //
@@ -50,6 +51,9 @@ import { morningFeedback, withDirectives } from '../metrics/feedback.js';
 //      Shabbat and the festivals
 //   5. read metrics, credit them to formats at 72 hours, judge the formats
 //   6. write yesterday's summary
+//   7. the owner line (src/owner/events.js): Sunday's weekly summary and the
+//      quota warnings go to the outbox; a run that queued posts tells it so at
+//      its end (generate)
 //
 // The rails (kill switches, pauses) are checked before every generation and
 // every publish, and the reasons a post was blocked pause the account when they
@@ -83,6 +87,9 @@ export async function generate(ctx, plans, report) {
   const { db } = ctx;
   const useBatch = ctx.llm.kind === 'claude' && ctx.batchApi && process.env.OF_BATCH !== 'off';
   const stopped = new Set();
+  // The owner line hears of the posts this run queued, once it is over (the report may already hold an earlier run's).
+  const from = report.generated.length;
+  const ready = () => postsReady(ctx, report.generated.slice(from).filter((g) => g.status === 'queued').map((g) => g.post));
   const one = async (gctx, { pack, slotAt, formatKey = null, subject = null, directive = null }) => {
     if (stopped.has(pack.id)) return;
     try {
@@ -100,12 +107,14 @@ export async function generate(ctx, plans, report) {
   };
   if (!useBatch) {
     for (const p of plans) await one(ctx, p);
+    ready();
     return report;
   }
   const batcher = makeBatcher(ctx, { api: ctx.batchApi });
   ctx.batchesInFlight = batcher.owned;
   const bctx = { ...ctx, llm: batcher };
   await Promise.all(plans.map((p) => batcher.run(() => one(bctx, p))));
+  ready();
   return report;
 }
 
@@ -355,6 +364,14 @@ export async function tick(ctx, { t = now() } = {}) {
   const yesterday = addDays(today, -1);
   if (!db.get('SELECT id FROM summaries WHERE day = ? AND account_id IS NULL', yesterday) && t >= israelInstant(today, cfg.generateAt).getTime()) {
     writeSummaries(ctx, yesterday);
+  }
+
+  // ---- 7. the owner line: the weekly summary and the quota warnings, to the outbox (sent beside the runner)
+  try {
+    const owner = ownerTick(ctx, { t });
+    if (owner.length) report.owner = owner;
+  } catch (e) {
+    report.errors.push({ step: 'owner line', error: e.message });
   }
   return report;
 }

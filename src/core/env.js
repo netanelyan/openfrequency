@@ -54,4 +54,5 @@ export const KEYS = [
   { name: 'UNSPLASH_ACCESS_KEY', group: 'images', what: 'Unsplash photographs', he: 'Unsplash: תמונות ברישיון' },
   { name: 'SESSION_SECRET', group: 'website', what: "signs the forms' CSRF tokens", he: 'חתימה על הטפסים באתר' },
   { name: 'OF_INTERNAL_TOKEN', group: 'website', what: 'asks openfrequency-accounts who is signed in', he: 'הבדיקה מול שירות הכניסה מי נכנס' },
+  { name: 'OF_ASSISTANT_SECRET', group: 'website', what: 'signs what Teder and openfrequency-toran (the owner line on WhatsApp) send each other', he: 'החתימה על מה שתדר ו-Toran שולחים זה לזה, בשביל ההודעות בוואטסאפ' },
 ];

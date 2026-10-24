@@ -17,6 +17,7 @@ import { canRun, pauseAccount, publishErrorStreak } from '../autonomy/rails.js';
 import { isStrike, postBody, publishZernio, trendingSound, zernioConfigured } from './zernio.js';
 import { assignSound } from '../pipeline/sounds.js';
 import { notify } from '../notify/index.js';
+import { postEvent } from '../owner/events.js';
 import { instagramConfigured, isRefusal, isThrottle, isTokenProblem, publishInstagram } from './instagram.js';
 
 // Publishing one approved post, through the rails, to each of its pack's
@@ -206,6 +207,7 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
   delete results._attempts;
   let drafted = null;
   let failed = null;
+  let failedOn = null;
   const vias = {};
   for (const platform of pack.meta.platforms) {
     if (done(results[platform])) continue; // out already: never twice
@@ -248,6 +250,7 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
     } catch (e) {
       results[platform] = { ...(results[platform] || {}), via, error: String(e.message).slice(0, 300), code: e.code || null, creationId: e.creationId || results[platform]?.creationId || null };
       failed = e;
+      failedOn = platform;
       break; // a platform that might have half-posted is never retried blind; stop here and report
     }
     if (asDraft && mode === 'draft-fallback') drafted = flow;
@@ -300,6 +303,11 @@ export async function publishPost(ctx, postId, { t = now() } = {}) {
       ctx.log?.(`notify ${postId}: ${e.message}`);
     }
   }
+  // The owner line (src/owner/events.js): the reminder goes to the owner's WhatsApp too; a part that will not go out
+  // (a failure not tried again, a reminder too late to send) is the owner's to post by hand.
+  if (remind) postEvent(ctx, 'post.reminder', postId, 'tiktok', { t });
+  else if (tk?.flow?.missedAt === new Date(t).toISOString()) postEvent(ctx, 'post.unposted', postId, 'tiktok', { t });
+  if (failed && !retry) postEvent(ctx, 'post.unposted', postId, failedOn, { t });
   const via = [...new Set(Object.values(vias))].join('+') || 'none';
   return { postId, ok, via, results, retry, reminded: Boolean(remind) };
 }

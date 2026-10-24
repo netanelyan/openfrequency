@@ -26,6 +26,7 @@ import path from 'node:path';
 import { PASS, topicById, topicsOf, watchList } from '../topics/index.js';
 import { youtubeConfigured } from '../trends/index.js';
 import { owns } from './workspace.js';
+import { lineSettings } from '../owner/quiet.js';
 
 // What each page shows, as plain queries. Pages never touch the database
 // themselves, so what a page can see is listed here.
@@ -305,6 +306,8 @@ export function settingsData(ctx) {
     liveSwitch: process.env.PUBLISH_MODE === 'live',
     push: { key: vapid(ctx.db).publicKey, browsers: operator ? ctx.db.get('SELECT COUNT(*) AS n FROM push_subs WHERE failed < 5').n : ctx.db.get('SELECT COUNT(*) AS n FROM push_subs WHERE failed < 5 AND workspace_id = ?', ctx.workspaceId).n },
     audit: operator ? ctx.db.all('SELECT * FROM audit ORDER BY id DESC LIMIT 40').map((a) => ({ ...a, detail: j(a.detail_json, null) })) : [],
+    // When the owner line may write to the workspace's owner (src/owner/quiet.js): a workspace's own, none for the operator.
+    ownerLine: operator ? null : lineSettings(ctx.db, ctx.workspaceId),
   };
 }
 

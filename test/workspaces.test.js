@@ -142,6 +142,7 @@ function snapshotB() {
     edits: db.all("SELECT * FROM edits WHERE account_id = 'bravo' ORDER BY id"),
     push: db.all('SELECT * FROM push_subs WHERE workspace_id = 2 ORDER BY id'),
     onboarding: db.all('SELECT * FROM onboarding WHERE workspace_id = 2 ORDER BY id'),
+    ownerLine: db.all('SELECT * FROM owner_line WHERE workspace_id = 2'),
     settings: db.all('SELECT key, value_json FROM settings ORDER BY key'),
     facts: existsSync(factsDir) ? readdirSync(factsDir).map((f) => [f, readFileSync(path.join(factsDir, f), 'utf8')]) : [],
   });
@@ -224,6 +225,8 @@ const casesFor = () => {
     ['/settings/kill', { on: '1' }],
     ['/settings/budget', { budget: '100' }],
     ['/settings/generate-at', { at: '05:00' }],
+    // The owner line's quiet hours are each workspace's own: A sets A's, never B's.
+    ['/settings/owner-line', { start: '21:00', end: '07:00', shabbat: '1' }, { ownOk: true }],
     ['/settings/dev', { on: '1' }],
     ['/account/switch', { to: 'bravo' }],
     [`/sources/${B.source}/approve`],

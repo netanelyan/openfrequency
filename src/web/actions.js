@@ -23,6 +23,7 @@ import { israelDate } from '../schedule/israel.js';
 import { DEFAULT_MONTHLY_USD } from '../budget/ledger.js';
 import { addBankTopic, removeTopic, setWatchList } from '../topics/index.js';
 import { owns } from './workspace.js';
+import { saveLineSettings } from '../owner/quiet.js';
 
 // What each button does. Every action is a function (ctx, user, params, form)
 // that returns { ok, message, redirect } or throws an ActionError with a message
@@ -211,7 +212,7 @@ export async function edit(ctx, user, { id }, form) {
       note(i, 'body', s.body, draft.slides[i].body);
       ctx.db.run('UPDATE slides SET title = ?, body = ? WHERE post_id = ? AND idx = ?', draft.slides[i].title, draft.slides[i].body, id, i);
     });
-    for (const c of changes) ctx.db.insert('edits', { post_id: id, account_id: post.account_id, ...c, user_id: user.id, at: nowIso() });
+    for (const c of changes) ctx.db.insert('edits', { post_id: id, account_id: post.account_id, ...c, user_id: user.id, actor: user.name, at: nowIso() });
     ctx.db.update('posts', id, { hook: draft.hook, sub: draft.sub, caption: draft.caption, caption_ig: draft.captionIg, data_json: { ...post.data, captionShort: draft.captionShort }, media_json: files, checks_json: { ...post.checks, token: gate.token, edited: true, style: look.hash }, updated_at: nowIso() });
     step(ctx.db, id, 'edit', 'ok', { by: user.name, changes: changes.length });
     audit(ctx.db, { actor: user.name, action: 'edit', accountId: post.account_id, postId: id, detail: { changes: changes.length } });
@@ -272,6 +273,18 @@ export function setBudget(ctx, user, _p, form) {
   setSetting(ctx.db, 'globalBudgetUsd', n);
   audit(ctx.db, { actor: user.name, action: 'global_budget', detail: { usd: n || hard } });
   return { ok: true, message: n ? `התקרה לחודש הזה: ${t.toLocaleString('en-US')} טוקנים.` : `התקרה חזרה ל-${max.toLocaleString('en-US')} טוקנים.` };
+}
+
+/**
+ * When the owner line (src/owner) may write to the workspace's owner on WhatsApp: the quiet hours and Shabbat. A
+ * workspace's own setting, so the operator outside view-as has none to change.
+ */
+export function setOwnerLine(ctx, user, _p, form) {
+  if (ctx.workspaceId == null) throw new ActionError('את זה קובע כל לקוח בחשבון שלו', 403);
+  const saved = saveLineSettings(ctx.db, ctx.workspaceId, { start: String(form.start || ''), end: String(form.end || ''), shabbat: form.shabbat === '1' }, user.name);
+  if (saved.problems) throw new ActionError('צריך שעה כמו 22:00');
+  audit(ctx.db, { actor: user.name, action: 'owner_line', detail: { workspace: ctx.workspaceId, ...saved } });
+  return { ok: true, message: 'נשמר.' };
 }
 
 export function setGenerateAt(ctx, user, _p, form) {

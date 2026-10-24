@@ -18,6 +18,7 @@ import { previewFile, stylesRoutes } from './styles.js';
 import { loadPost } from '../pipeline/build.js';
 import { lockedStyle } from '../render/style.js';
 import { latestNotification } from '../notify/index.js';
+import { isMediaPath, readMediaPath } from '../owner/sign.js';
 
 // The website. It listens on 127.0.0.1 only; on the VPS, Caddy holds the
 // certificate and passes requests to it.
@@ -27,7 +28,8 @@ import { latestNotification } from '../notify/index.js';
 //   - a request under the public name came over HTTPS, which only the proxy on
 //     this machine can say
 //   - every page, image and button needs a session that openfrequency-accounts
-//     vouches for (src/web/accounts.js), except the static files; without one the
+//     vouches for (src/web/accounts.js), except the static files and a slide
+//     behind a signed link (/m/<token>.jpg, src/owner/sign.js); without one the
 //     browser goes to accounts' login with where it was going. A page may use an
 //     answer up to a minute old; every POST asks afresh
 //   - the session's workspace decides what exists (src/web/workspace.js): another
@@ -116,6 +118,7 @@ export function createHandler(ctx, { port, env = process.env, accounts = null } 
     ['POST', /^\/settings\/kill$/, (c, u, m, f) => act.globalKill(c, u, {}, f)],
     ['POST', /^\/settings\/budget$/, (c, u, m, f) => act.setBudget(c, u, {}, f)],
     ['POST', /^\/settings\/generate-at$/, (c, u, m, f) => act.setGenerateAt(c, u, {}, f)],
+    ['POST', /^\/settings\/owner-line$/, (c, u, m, f) => act.setOwnerLine(c, u, {}, f)],
     ['POST', /^\/sources\/(\d+)\/approve$/, (c, u, m, f) => act.sourceStatus(c, u, { id: m[1] }, f, 'approved')],
     ['POST', /^\/sources\/(\d+)\/remove$/, (c, u, m, f) => act.sourceStatus(c, u, { id: m[1] }, f, 'removed')],
     ['POST', /^\/sources\/add$/, (c, u, m, f) => act.addSource(c, u, {}, f)],
@@ -159,6 +162,17 @@ export function createHandler(ctx, { port, env = process.env, accounts = null } 
         if (p === '/static/manifest.webmanifest') return send(req, res, 200, readFileSync(path.join(STATIC, 'manifest.webmanifest')), 'application/manifest+json; charset=utf-8', { 'cache-control': 'public, max-age=86400' });
         if (p === '/static/fonts/Assistant.ttf') return send(req, res, 200, readFileSync(path.join(assetsDir, 'fonts', 'Assistant.ttf')), 'font/ttf', { 'cache-control': 'public, max-age=31536000, immutable' });
         if (p === '/healthz') return send(req, res, 200, 'ok', 'text/plain; charset=utf-8');
+        // A slide behind a signed link: the owner line hands these to WhatsApp, which fetches them from Meta's servers
+        // without a session. That one slide of that one post, until the link expires, and nothing else.
+        if (isMediaPath(p)) {
+          const link = readMediaPath(p, { env });
+          const post = link.postId ? loadPost(ctx.db, link.postId) : null;
+          const file = post?.media?.[link.platform]?.[link.idx];
+          const root = path.resolve(ctx.mediaRoot || dataDir());
+          if (!file || !path.resolve(file).startsWith(root) || !existsSync(file)) return send(req, res, link.error === 'expired' ? 410 : 404, link.error === 'expired' ? 'link expired' : 'no such slide', 'text/plain; charset=utf-8');
+          res.writeHead(200, { 'content-type': 'image/jpeg', 'content-length': statSync(file).size, 'cache-control': 'public, max-age=300', 'x-content-type-options': 'nosniff', 'x-robots-tag': 'noindex, nofollow' });
+          return createReadStream(file).pipe(res);
+        }
         // The service worker, from the root so its scope is the whole site.
         if (p === '/sw.js') return send(req, res, 200, readFileSync(path.join(STATIC, 'sw.js')), 'text/javascript; charset=utf-8', { 'cache-control': 'no-cache', 'service-worker-allowed': '/' });
       }

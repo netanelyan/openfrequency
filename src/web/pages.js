@@ -49,7 +49,7 @@ const PLATFORM_HE = { tiktok: 'טיקטוק', instagram: 'אינסטגרם' };
 const AUDIT_HE = {
   login: 'כניסה', approve: 'אישור פוסט', unapprove: 'ביטול אישור', reject: 'דחיית פוסט', edit: 'עריכה', publish_now: 'פרסום ידני', published: 'פורסם', publish_failed: 'פרסום נכשל',
   auto_approved: 'אושר אוטומטית', dev_mode: 'מצב מפתח נפתח', topic_added: 'נושא נוסף לבנק', topic_removed: 'נושא הוסר', watch_saved: 'רשימת מעקב נשמרה', mode: 'שינוי מצב', pause: 'השהיה', resume: 'חידוש', global_kill_on: 'כיבוי כללי', global_kill_off: 'הפעלה מחדש', global_budget: 'תקציב כללי',
-  takedown: 'הודעת הסרה', takedown_deleted: 'נמחק ידנית אחרי הודעה', image_ok: 'תמונה נבדקה בעין', mix_changed: 'יחס בידור ומספרים זז',
+  owner_line: 'הודעות בוואטסאפ', takedown: 'הודעת הסרה', takedown_deleted: 'נמחק ידנית אחרי הודעה', image_ok: 'תמונה נבדקה בעין', mix_changed: 'יחס בידור ומספרים זז',
   generate_at: 'שעת ייצור', source_approved: 'מקור אושר', source_removed: 'מקור הוסר', source_added: 'מקור נוסף', user_added: 'משתמש נוסף',
   publish_retry: 'פרסום יחזור על עצמו', fact_added: 'עובדה נוספה', fact_confirmed: 'עובדה נבדקה שוב', fact_removed: 'עובדה הוסרה', rival_added: 'מתחרה נוסף', rival_updated: 'מתחרה עודכן', rival_removed: 'מתחרה הוסר', format_dropped: 'פורמט נשר', format_promoted: 'פורמט הוכח', format_returned: 'פורמט חזר', onboarding: 'חשבון חדש', went_live: 'חשבון עלה לאוויר',
 };
@@ -756,6 +756,22 @@ ${ctx.operator ? `<form method="post" action="/settings/budget" class="formgrid 
 }
 
 /**
+ * When the owner line (src/owner) may write to the workspace's owner on WhatsApp: quiet hours on the Israel clock,
+ * and Shabbat and the festivals. The workspace's own; a read-only session sees it and its save is refused (server.js).
+ */
+function ownerLinePanel(ctx, line) {
+  const q = line.quietHours;
+  return `<section class="panel" id="whatsapp"><header><h2>הודעות בוואטסאפ</h2></header>
+<p class="muted">כשיש פוסט לאישור או שהגיעה השעה לפרסם, תדר כותב לכם בוואטסאפ. כאן בוחרים מתי הוא לא כותב.</p>
+<form method="post" action="/settings/owner-line" class="formgrid">${csrfField(ctx)}
+<label class="f">לא לכתוב משעה<input type="time" name="start" value="${esc(q.start)}" dir="ltr" required></label>
+<label class="f">עד שעה<input type="time" name="end" value="${esc(q.end)}" dir="ltr" required></label>
+<label class="chip ghost"><input type="checkbox" name="shabbat" value="1"${line.shabbat ? ' checked' : ''}> לא לכתוב בשבת ובחגים</label>
+<p class="muted small m0">אם שתי השעות זהות, אין שעות שקטות.</p>
+<button class="btn" type="submit">שמירה</button></form></section>`;
+}
+
+/**
  * Settings. Everyone: notifications, the budget (a workspace sees its own accounts' part) and who is signed in. The
  * operator alone (the server's settings): when the day's posts are written, the budget's cap, and the stop for
  * everything; and developer mode (keys, the engine, the publishers, the log), seven taps on the version line, kept
@@ -787,6 +803,7 @@ ${d.instagram.length ? `<section class="panel"><header><h2>אינסטגרם יש
 <form method="post" action="/push/subscribe" data-ajax="reload" data-push="${esc(d.push?.key || '')}">${csrfField(ctx)}<input type="hidden" name="endpoint" value=""><button class="btn" type="button" data-push-enable>${icon('spark')}להפעיל התראות במכשיר הזה</button></form>
 <form method="post" action="/push/unsubscribe" data-ajax="reload" data-push-off hidden>${csrfField(ctx)}<input type="hidden" name="endpoint" value=""><button class="btn ghost" type="button" data-push-disable>לכבות התראות במכשיר הזה</button></form>
 </section>
+${d.ownerLine ? ownerLinePanel(ctx, d.ownerLine) : ''}
 ${ctx.operator ? `<section class="panel"><header><h2>מתי נכתבים הפוסטים</h2></header><p class="muted">כל יום בשעה הזו תדר כותב את הפוסטים של היום ושולח אותם לאישור.</p><form method="post" action="/settings/generate-at" class="formgrid">${csrfField(ctx)}<label class="f">שעה<input type="time" name="at" value="${esc(s.generateAt)}" dir="ltr"></label><button class="btn" type="submit">שמירה</button></form></section>` : ''}
 </div>
 <div>

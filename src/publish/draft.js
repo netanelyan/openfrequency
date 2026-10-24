@@ -12,6 +12,7 @@ import { exportPost } from '../pipeline/export.js';
 import { waitingImages } from '../images/index.js';
 import { canRun, pauseAccount } from '../autonomy/rails.js';
 import { notify } from '../notify/index.js';
+import { postEvent } from '../owner/events.js';
 import { externalPosts, matchDraft, postBody, publishZernio, zernioConfigured } from './zernio.js';
 import { captionOf, publicUrls, publisherFor, recheck, soundFor, tiktokMode } from './index.js';
 
@@ -152,6 +153,7 @@ export async function watchDrafts(ctx, { t = now(), list = null, send = null } =
         save(db, post.id, results);
         const s = flow.sound;
         await said('reminder', `${pack.meta.displayName}: הטיוטה עוד מחכה`, `${head}${s ? `\nסאונד: ${s.name} · ${s.artist}` : ''}\nבעוד ${FALLBACK_MIN - REMIND_MIN} דקות הפוסט יעלה אוטומטית.`);
+        postEvent(ctx, 'post.reminder', post.id, 'tiktok', { t });
         out.push({ post: post.id, state: 'reminded' });
       }
     }
@@ -217,6 +219,7 @@ async function fallback(ctx, pack, post, { t, said }) {
     save(db, post.id, results);
     step(db, post.id, 'tiktok', 'failed', { flow: 'failed', error: flow.error });
     await said('fallback_failed', `${pack.meta.displayName}: הפרסום האוטומטי נכשל`, `${oneLine(post.hook)}\nהטיוטה עדיין בתיבה: פרסמו אותה בעצמכם. (${flow.error})`);
+    postEvent(ctx, 'post.unposted', post.id, 'tiktok', { t });
     return { state: 'failed' };
   }
 }
