@@ -330,6 +330,12 @@ export async function profileConnections(profileId) {
     });
 }
 
+/** The ids of every account on our Zernio team, in any profile, over-limit ones too. */
+export async function teamAccountIds() {
+  const body = await getJson(`${BASE()}/accounts?${new URLSearchParams({ includeOverLimit: 'true' })}`, { headers: auth() });
+  return new Set((body?.accounts || []).map((a) => String(a._id)));
+}
+
 /* ------------------------------------------------------------------ what Zernio bills, per profile */
 
 /**

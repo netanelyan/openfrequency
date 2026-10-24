@@ -5,7 +5,7 @@ import { setPackPublishing } from '../packs/write.js';
 import { tiktokMode, wantedPublisher } from '../publish/index.js';
 import { OWN_APP } from '../publish/tiktok-app.js';
 import { zernioConfigured } from '../publish/zernio.js';
-import { connectLink, connectLinkOk, connectState, doneLink, doneLinkOk, refreshConnections, startConnect, zernioCost } from '../publish/connect.js';
+import { GONE, connectLink, connectLinkOk, connectState, doneLink, doneLinkOk, refreshConnections, startConnect, zernioCost } from '../publish/connect.js';
 import { ActionError } from './actions.js';
 import { csrfField, esc, icon, postButton, tederMark, usd } from './ui.js';
 
@@ -53,7 +53,7 @@ export function connectPanel(ctx, d) {
             : s.state === 'reconnect'
               ? postButton(ctx, action, `לחבר מחדש את ${name}`, { cls: 'btn sm primary' })
               : postButton(ctx, action, 'לחבר חשבון אחר', { cls: 'btn sm ghost' });
-      return `<li><b>${esc(name)}</b> <span class="chip ${cls}">${esc(he)}</span>${s.username ? ` <span class="ltr muted">@${esc(s.username)}</span>` : ''}${s.state === 'reconnect' && s.issue ? `<div class="muted small ltr">${esc(s.issue)}</div>` : ''}${button ? `<div class="actions p0 m6">${button}</div>` : ''}</li>`;
+      return `<li><b>${esc(name)}</b> <span class="chip ${cls}">${esc(he)}</span>${s.username ? ` <span class="ltr muted">@${esc(s.username)}</span>` : ''}${s.state === 'reconnect' && s.issue ? (s.issue === GONE ? `<div class="muted small">החשבון כבר לא מחובר ל-Zernio, ופוסטים לא מגיעים ל${esc(name)} עד שמחברים אותו שוב.</div>` : `<div class="muted small ltr">${esc(s.issue)}</div>`) : ''}${button ? `<div class="actions p0 m6">${button}</div>` : ''}</li>`;
     })
     .join('');
   const note = d.configured

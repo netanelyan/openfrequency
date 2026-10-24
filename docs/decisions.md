@@ -1478,7 +1478,11 @@ engine can act on, and what changed:
     `zernio_connections`. An expired or revoked token is `reconnect`; the same button then
     passes `reconnectAccountId`, so the same account keeps its history. A break is
     recorded once (`broken_at`), and the assistant gets `account.reconnect` once per
-    break, with a fresh link.
+    break, with a fresh link. An account that is on Zernio no more (disconnected there:
+    the first live read found all three TikTok accounts gone from their profiles, and the
+    builders draft that afternoon refused with "accounts do not belong to this user") is
+    `reconnect` too, as a new connect, and posts stop going to the id Zernio refuses. A
+    hand-typed account in another profile of the team is not gone.
   - **Zernio's connect link lasts 30 minutes**, so it is never stored or sent. The
     assistant hands on a link to Teder (`/connect/<account>/<platform>`, signed with
     `OF_ASSISTANT_SECRET`, open for 72 hours, that account and platform only), and Teder

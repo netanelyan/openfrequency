@@ -24,6 +24,7 @@ import {
   doneLink,
   doneLinkOk,
   ensureProfile,
+  GONE,
   profileIdOf,
   recordCosts,
   refreshConnections,
@@ -72,7 +73,7 @@ function fakeZernio() {
     if (method === 'GET' && p === '/profiles') return reply(200, { profiles: st.profiles.filter((x) => !q.externalId || x.externalId === q.externalId) });
     const cm = /^\/connect\/(tiktok|instagram)$/.exec(p);
     if (method === 'GET' && cm) return reply(200, { authUrl: `https://zernio.com/connect/welcome/${cm[1]}?state=s${++st.n}`, state: 'x' });
-    if (method === 'GET' && p === '/accounts') return reply(200, { accounts: st.accounts.filter((a) => a.profileId === q.profileId) });
+    if (method === 'GET' && p === '/accounts') return reply(200, { accounts: st.accounts.filter((a) => !q.profileId || a.profileId === q.profileId) });
     if (method === 'GET' && p === '/accounts/health') return reply(200, { accounts: st.accounts.filter((a) => a.profileId === q.profileId).map((a) => ({ accountId: a._id, platform: a.platform, ...(st.health[a._id] || { tokenValid: true, needsReconnect: false, canPost: true, issues: [] }) })) });
     if (method === 'POST' && p === '/posts') {
       const id = `zp${++st.n}`;
@@ -188,6 +189,15 @@ test('one profile per account, made once: named for it, its externalId the pack 
   assert.equal(await ensureProfile(db, pack('bravo')), 'handprof', "pack.json's profile, typed in by hand");
   assert.equal(db.get("SELECT zernio_profile_id AS p FROM accounts WHERE id = 'bravo'").p, 'handprof', 'and copied in');
   assert.equal(zernioAccountId(db, pack('bravo'), 'tiktok'), 'handtk', "pack.json's account until Zernio was read");
+  // Zernio read: a hand-typed account in another profile of the team is still there; one nowhere on the team is gone.
+  connected('Default', 'tiktok', 'handtk', 'bravo.tt');
+  assert.deepEqual(await refreshConnections(db, pack('bravo')), []);
+  assert.equal(zernioAccountId(db, pack('bravo'), 'tiktok'), 'handtk');
+  Z.accounts = [];
+  assert.deepEqual((await refreshConnections(db, pack('bravo'))).map((c) => [c.platform, c.to]), [['tiktok', 'reconnect']]);
+  assert.equal(connectState(db, pack('bravo'), 'tiktok').issue, GONE);
+  assert.equal(zernioAccountId(db, pack('bravo'), 'tiktok'), null);
+  assert.deepEqual(await refreshConnections(db, pack('bravo')), [], 'the same break, once');
 });
 
 test('connecting: a fresh link each time, what is connected read from Zernio, a broken token marked once, reconnected to the same account', async () => {
@@ -221,10 +231,19 @@ test('connecting: a fresh link each time, what is connected read from Zernio, a 
   await startConnect(db, p, 'tiktok', { doneUrl: 'https://teder.test/done' });
   assert.equal(Z.calls.filter((c) => c.path === '/connect/tiktok').at(-1).q.reconnectAccountId, 'tk1', 'the same account, its history kept');
 
-  // Disconnected in Zernio: nothing is connected any more.
+  // Disconnected in Zernio (as production found all three TikTok accounts on 2026-10-24): it needs connecting again,
+  // the break is recorded, and nothing more is sent to an id Zernio refuses.
   Z.accounts = Z.accounts.filter((a) => a._id !== 'tk1');
-  await refreshConnections(db, p);
-  assert.equal(connectState(db, p, 'tiktok').state, 'none');
+  await refreshConnections(db, p, { t: TUE + 7_200_000 });
+  const gone = connectState(db, p, 'tiktok');
+  assert.deepEqual([gone.state, gone.issue], ['reconnect', GONE]);
+  assert.equal(zernioAccountId(db, p, 'tiktok'), null);
+  await startConnect(db, p, 'tiktok', { doneUrl: 'https://teder.test/done' });
+  assert.equal(Z.calls.filter((c) => c.path === '/connect/tiktok').at(-1).q.reconnectAccountId, undefined, 'nothing left to reconnect: a new connect');
+  connected('prof1', 'tiktok', 'tk2', 'alpha.tt');
+  await refreshConnections(db, p, { t: TUE + 7_300_000 });
+  assert.deepEqual([connectState(db, p, 'tiktok').state, zernioAccountId(db, p, 'tiktok')], ['connected', 'tk2']);
+  assert.equal(db.get("SELECT broken_at FROM zernio_connections WHERE account_id = 'alpha'").broken_at, null);
 });
 
 test('Instagram is connected through Zernio only where our own Meta app does not publish it', async () => {

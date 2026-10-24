@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { HOUR, monthKey, now, nowIso } from '../core/clock.js';
 import { audit, getSetting, setSetting } from '../core/store.js';
-import { CONNECT_PLATFORMS, connectUrl, createProfile, profileConnections, profileSpend, zernioConfigured } from './zernio.js';
+import { CONNECT_PLATFORMS, connectUrl, createProfile, profileConnections, profileSpend, teamAccountIds, zernioConfigured } from './zernio.js';
 import { instagramConfigured } from './instagram.js';
 
 // A customer connects their own TikTok and Instagram to Teder through Zernio:
@@ -66,8 +66,20 @@ export function connectionOf(db, pack, platform) {
   return id ? { id, username: '', status: 'connected', issue: null, checkedAt: null, brokenAt: null, from: 'pack' } : null;
 }
 
-/** The Zernio account id a post on this platform goes to, or null. One that needs reconnecting is still tried: Zernio's health can be wrong, and a refusal is handled like any other. */
-export const zernioAccountId = (db, pack, platform) => connectionOf(db, pack, platform)?.id || null;
+/**
+ * The issue of an account that is no longer on Zernio at all (disconnected there, or removed): it needs connecting
+ * again, as a new account, since there is nothing left to reconnect.
+ */
+export const GONE = 'not connected on Zernio any more';
+
+/**
+ * The Zernio account id a post on this platform goes to, or null. One that needs reconnecting is still tried (Zernio's
+ * health can be wrong, and a refusal is handled like any other); one that is gone from Zernio is not.
+ */
+export function zernioAccountId(db, pack, platform) {
+  const c = connectionOf(db, pack, platform);
+  return c && c.issue !== GONE ? c.id : null;
+}
 
 /** Instagram through Zernio is offered only where our own Meta app does not already publish it. */
 export const instagramViaMeta = (db, pack, env = process.env) => instagramConfigured(db, pack, env);
@@ -89,7 +101,11 @@ export function connectState(db, pack, platform, env = process.env) {
  * Read the profile's accounts from Zernio and keep them. `prefer` ({ platform: zernioAccountId }) is the account Zernio
  * named on the return from a connect: it wins if, and only if, it is in the profile. Otherwise the account already
  * kept stays, else the first connected one (Zernio lists the newest first). Returns what changed:
- * [{ platform, from, to, username }]; a platform whose account is gone from the profile is removed.
+ * [{ platform, from, to, username }].
+ *
+ * An account that was connected (or typed into pack.json) and is on Zernio no more is "reconnect" with issue GONE: the
+ * break is recorded once, the customer is told, and posts stop going to an id Zernio refuses. A hand-typed account
+ * that lives in another profile of the team (Default, say) is not gone, and is kept.
  */
 export async function refreshConnections(db, pack, { t = now(), prefer = {} } = {}) {
   const profileId = profileIdOf(db, pack);
@@ -97,16 +113,25 @@ export async function refreshConnections(db, pack, { t = now(), prefer = {} } = 
   const list = await profileConnections(profileId);
   const at = new Date(t).toISOString();
   const changes = [];
+  let team = null;
   for (const platform of CONNECT_PLATFORMS) {
     const mine = list.filter((a) => a.platform === platform);
     const had = connectionOf(db, pack, platform);
     const pick = mine.find((a) => a.id === prefer[platform]) || mine.find((a) => a.id === had?.id) || mine.find((a) => a.status === 'connected') || mine[0] || null;
     const row = db.get('SELECT * FROM zernio_connections WHERE account_id = ? AND platform = ?', pack.id, platform);
     if (!pick) {
-      if (row) {
-        db.run('DELETE FROM zernio_connections WHERE account_id = ? AND platform = ?', pack.id, platform);
-        changes.push({ platform, from: row.status, to: 'none', username: row.username || '' });
+      if (!had) continue;
+      if (row?.issue === GONE) {
+        db.run('UPDATE zernio_connections SET checked_at = ? WHERE account_id = ? AND platform = ?', at, pack.id, platform);
+        continue;
       }
+      if (had.from === 'pack') {
+        team ??= await teamAccountIds();
+        if (team.has(had.id)) continue; // in another profile of ours: still there
+      }
+      if (row) db.run('UPDATE zernio_connections SET status = ?, issue = ?, checked_at = ?, broken_at = ? WHERE account_id = ? AND platform = ?', 'reconnect', GONE, at, at, pack.id, platform);
+      else db.insert('zernio_connections', { account_id: pack.id, platform, zernio_account_id: had.id, username: '', status: 'reconnect', issue: GONE, checked_at: at, broken_at: at, connected_at: at });
+      changes.push({ platform, from: had.status, to: 'reconnect', username: had.username || '' });
       continue;
     }
     const broke = pick.status === 'reconnect' && row?.status !== 'reconnect';
@@ -132,7 +157,8 @@ export async function startConnect(db, pack, platform, { doneUrl, actor = 'engin
   if (!connectablePlatforms(db, pack, env).includes(platform)) throw Object.assign(new Error(platform === 'instagram' && instagramViaMeta(db, pack, env) ? 'Instagram is connected through our own Meta app' : `${platform} is not one of this account's platforms`), { code: 'not_connectable' });
   const profileId = await ensureProfile(db, pack, { actor });
   const c = connectionOf(db, pack, platform);
-  const url = await connectUrl(platform, { profileId, redirectUrl: doneUrl, reconnectAccountId: c?.status === 'reconnect' && c.from === 'zernio' ? c.id : null });
+  // An account gone from Zernio has nothing left to reconnect: whatever the customer logs into is connected as new.
+  const url = await connectUrl(platform, { profileId, redirectUrl: doneUrl, reconnectAccountId: c?.status === 'reconnect' && c.from === 'zernio' && c.issue !== GONE ? c.id : null });
   audit(db, { actor, action: 'zernio_connect', accountId: pack.id, detail: { platform, reconnect: c?.status === 'reconnect' } });
   return url;
 }
